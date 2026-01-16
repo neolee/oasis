@@ -1,0 +1,56 @@
+name:                oasis
+version:             0.1.0.0
+github:              "neolee/oasis"
+license:             MIT
+author:              "Neo Lee"
+maintainer:          "neo.lee@gmail.com"
+copyright:           "2026 Neo Lee"
+
+extra-source-files:
+- README.md
+
+description:         A unified LLM abstraction layer in Haskell.
+
+dependencies:
+- base >= 4.7 && < 5
+- relude
+- aeson
+- toml-parser >= 2.0.0.0
+- text
+- bytestring
+- http-conduit
+- http-client-tls
+- conduit
+- unordered-containers
+- containers
+- transformers
+- mtl
+- directory
+- filepath
+
+default-extensions:
+- NoImplicitPrelude
+- OverloadedStrings
+- DeriveGeneric
+- DuplicateRecordFields
+- NamedFieldPuns
+- RecordWildCards
+- LambdaCase
+- FlexibleContexts
+- TypeApplications
+- DeriveAnyClass
+- DerivingVia
+
+library:
+  source-dirs: src
+
+executables:
+  oasis-cli:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - oasis

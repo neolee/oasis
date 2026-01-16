@@ -1,0 +1,98 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.38.1.
+--
+-- see: https://github.com/sol/hpack
+
+name:           oasis
+version:        0.1.0.0
+description:    A unified LLM abstraction layer in Haskell.
+homepage:       https://github.com/neolee/oasis#readme
+bug-reports:    https://github.com/neolee/oasis/issues
+author:         Neo Lee
+maintainer:     neo.lee@gmail.com
+copyright:      2026 Neo Lee
+license:        MIT
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/neolee/oasis
+
+library
+  exposed-modules:
+      Oasis.Config
+      Oasis.Types
+  other-modules:
+      Paths_oasis
+  hs-source-dirs:
+      src
+  default-extensions:
+      NoImplicitPrelude
+      OverloadedStrings
+      DeriveGeneric
+      DuplicateRecordFields
+      NamedFieldPuns
+      RecordWildCards
+      LambdaCase
+      FlexibleContexts
+      TypeApplications
+      DeriveAnyClass
+      DerivingVia
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , conduit
+    , containers
+    , directory
+    , filepath
+    , http-client-tls
+    , http-conduit
+    , mtl
+    , relude
+    , text
+    , toml-parser >=2.0.0.0
+    , transformers
+    , unordered-containers
+  default-language: Haskell2010
+
+executable oasis-cli
+  main-is: Main.hs
+  other-modules:
+      Paths_oasis
+  hs-source-dirs:
+      app
+  default-extensions:
+      NoImplicitPrelude
+      OverloadedStrings
+      DeriveGeneric
+      DuplicateRecordFields
+      NamedFieldPuns
+      RecordWildCards
+      LambdaCase
+      FlexibleContexts
+      TypeApplications
+      DeriveAnyClass
+      DerivingVia
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , conduit
+    , containers
+    , directory
+    , filepath
+    , http-client-tls
+    , http-conduit
+    , mtl
+    , oasis
+    , relude
+    , text
+    , toml-parser >=2.0.0.0
+    , transformers
+    , unordered-containers
+  default-language: Haskell2010

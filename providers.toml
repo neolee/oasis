@@ -1,0 +1,101 @@
+description = "Large Language Model As A Service Providers"
+
+[providers]
+
+[providers.deepseek]
+description = "DeepSeek Official"
+api_key_name = "DEEPSEEK_API_KEY"
+base_url = "https://api.deepseek.com"
+beta_base_url = "https://api.deepseek.com/beta"
+chat_model_id = "deepseek-chat"
+coder_model_id = "deepseek-chat"
+reasoner_model_id = "deepseek-reasoner"
+
+[providers.aliyun_deepseek]
+description = "DeepSeek on Aliyun"
+api_key_name = "ALIYUN_API_KEY"
+base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+beta_base_url = ""
+chat_model_id = "deepseek-v3"
+coder_model_id = "deepseek-v3"
+reasoner_model_id = "deepseek-r1"
+
+[providers.aliyun_qwen]
+description = "Qwen Official"
+api_key_name = "ALIYUN_API_KEY"
+base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+beta_base_url = ""
+chat_model_id = "qwen-plus-latest"
+coder_model_id = "qwen3-coder-plus"
+reasoner_model_id = "qwen-plus-latest"
+
+[providers.moonshot]
+description = "Moonshot Official"
+api_key_name = "MOONSHOT_API_KEY"
+base_url = "https://api.moonshot.cn/v1"
+beta_base_url = ""
+chat_model_id = "kimi-k2-turbo-preview"
+coder_model_id = "kimi-k2-thinking"
+reasoner_model_id = "kimi-k2-thinking"
+
+[providers.zhipu]
+description = "Zhipu Official"
+api_key_name = "ZHIPU_API_KEY"
+base_url = "https://open.bigmodel.cn/api/paas/v4/"
+beta_base_url = ""
+chat_model_id = "glm-4.6"
+coder_model_id = "glm-4.6"
+reasoner_model_id = "glm-4.6"
+
+[providers.openrouter]
+description = "OpenRouter"
+api_key_name = "OPENROUTER_API_KEY"
+base_url = "https://openrouter.ai/api/v1"
+beta_base_url = ""
+chat_model_id = "google/gemini-2.5-flash"
+coder_model_id = "google/gemini-3-pro-preview"
+reasoner_model_id = "google/gemini-3-pro-preview"
+
+[providers.ecnu]
+description = "ECNU"
+api_key_name = "ECNU_API_KEY"
+base_url = "https://chat.ecnu.edu.cn/open/api/v1"
+beta_base_url = ""
+chat_model_id = "ecnu-max"
+coder_model_id = ""
+reasoner_model_id = "ecnu-reasoner"
+default_model_type = "reasoner"
+
+[providers.local]
+description = "Local"
+api_key_name = "LOCAL_API_KEY"
+base_url = "http://localhost:5810/v1"
+beta_base_url = ""
+chat_model_id = "qwen3"
+coder_model_id = "qwen3-coder"
+reasoner_model_id = "qwen3-thinking"
+
+[providers.lmstudio]
+description = "LM Studio"
+api_key_name = "LM_STUDIO_API_KEY"
+base_url = "http://127.0.0.1:1234/v1"
+beta_base_url = ""
+chat_model_id = "qwen3-30b-a3b-instruct-2507"
+coder_model_id = "qwen3-coder-30b-a3b-instruct"
+reasoner_model_id = "qwen3-30b-a3b-thinking-2507"
+
+[providers.ollama]
+description = "Ollama"
+api_key_name = "OLLAMA_API_KEY"
+base_url = "http://localhost:11434/v1"
+beta_base_url = ""
+chat_model_id = "qwen3"
+coder_model_id = ""
+reasoner_model_id = ""
+
+[defaults]
+provider = "aliyun_qwen"
+model_type = "chat"
+
+[aliases]
+qwen = "aliyun_qwen"

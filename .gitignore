@@ -13,8 +13,10 @@ build/
 dist/
 wheels/
 *.egg-info
-
 .venv
+
+.stack-work/
+dist-newstyle/
 
 **/target
 **/out

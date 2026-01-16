@@ -37,6 +37,17 @@ To leverage Haskell's powerful type system for building a reliable, unified LLM 
 3.  **Context Middleware**: Design the `Model` abstraction to support interceptors that can monitor or modify the message context (history) before it reaches the provider.
 4.  **Verifiable Iterations**: Each development step must produce a human-verifiable result (e.g., a CLI output or a passing test suite).
 
+## Build & Verification (Every Iteration)
+
+Each iteration must pass the following baseline checks before moving forward:
+
+1. **Build**
+    - `stack build`
+
+2. **Phase 1 Verification (Config Resolution)**
+    - `stack exec oasis-cli -- deepseek`
+    - Expected: prints the resolved `Provider` and API key presence status.
+
 ## Implementation Phases
 
 ### Phase 1: Infrastructure & MAL (Verifiable: Config Printing)
