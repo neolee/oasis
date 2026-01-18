@@ -23,10 +23,13 @@ source-repository head
 
 library
   exposed-modules:
+      Oasis.Chat.History
+      Oasis.Chat.Log
+      Oasis.Chat.Prompt
       Oasis.Client.OpenAI
       Oasis.Config
+      Oasis.Runner.Basic
       Oasis.Runner.Chat
-      Oasis.Runner.History
       Oasis.Runner.Interactive
       Oasis.Types
   other-modules:

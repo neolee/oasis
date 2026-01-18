@@ -1,6 +1,6 @@
 module Oasis.Runner.Chat
-  ( runSingleTurn
-  , runSingleTurnStream
+  ( ChatOptions(..)
+  , runChat
   , handleStreamChunkContentOnly
   , selectModelId
   ) where
@@ -10,6 +10,10 @@ import Oasis.Types
 import Oasis.Client.OpenAI
 import qualified Data.Text as T
 
+data ChatOptions = ChatOptions
+  { streaming :: Bool
+  } deriving (Show, Eq)
+
 selectModelId :: Provider -> Text
 selectModelId Provider{..} =
   case fmap T.toLower default_model_type of
@@ -17,17 +21,16 @@ selectModelId Provider{..} =
     Just "coder"    | not (T.null coder_model_id)    -> coder_model_id
     _                                             -> chat_model_id
 
-runSingleTurn :: Provider -> Text -> Text -> IO (Either Text ChatCompletionResponse)
-runSingleTurn provider apiKey prompt = do
+runChat :: Provider -> Text -> ChatOptions -> [Message] -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either Text (Maybe ChatCompletionResponse))
+runChat provider apiKey ChatOptions{streaming} messages onChunk = do
   let modelId = selectModelId provider
-      messages = [Message "user" prompt]
-  sendChatCompletion provider apiKey modelId messages
-
-runSingleTurnStream :: Provider -> Text -> Text -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either Text ())
-runSingleTurnStream provider apiKey prompt onChunk = do
-  let modelId = selectModelId provider
-      messages = [Message "user" prompt]
-  streamChatCompletion provider apiKey modelId messages onChunk
+  if streaming
+    then do
+      result <- streamChatCompletion provider apiKey modelId messages onChunk
+      pure (fmap (const Nothing) result)
+    else do
+      result <- sendChatCompletion provider apiKey modelId messages
+      pure (fmap Just result)
 
 handleStreamChunkContentOnly :: (Text -> IO ()) -> ChatCompletionStreamChunk -> IO ()
 handleStreamChunkContentOnly onToken ChatCompletionStreamChunk{choices = streamChoices} =

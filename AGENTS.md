@@ -70,6 +70,26 @@ The `Oasis.Client.OpenAI` module should expose a layered, reusable interface:
 - **Stream as data**: streaming APIs should emit structured chunks/deltas, allowing callers to decide how to render or store them.
 - **Composable handlers**: callers can route tokens to stdout, UI widgets, logs, or buffers without modifying the client.
 
+## Layered Architecture (L1-L4)
+
+**L1: Protocol (OpenAI-compatible core)**
+- `Oasis.Client.OpenAI` for request/response/SSE parsing.
+- `Oasis.Types` for protocol-level types.
+- `Oasis.Config` for provider config parsing and defaults.
+
+**L2: Session & Prompt Engineering**
+- `Oasis.Chat.History` for editable conversation history.
+- `Oasis.Chat.Prompt` for prompt composition/templating (future).
+- `Oasis.Chat.Log` for session logging (future).
+
+**L3: Runners (LLM capability modules)**
+- `Oasis.Runner.Chat` (multi-turn + streaming toggle).
+- `Oasis.Runner.Basic` (single-turn, non-streaming; full JSON input/output for low-level verification).
+- `Oasis.Runner.Structured`, `Oasis.Runner.ToolCalling` (future).
+
+**L4: CLI Entry**
+- Menu + selection + rendering only; no protocol or session logic.
+
 ## Build & Verification (Every Iteration)
 
 Each iteration must pass the following baseline checks before moving forward:

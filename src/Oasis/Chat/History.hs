@@ -1,4 +1,4 @@
-module Oasis.Runner.History
+module Oasis.Chat.History
   ( History
   , emptyHistory
   , getMessages

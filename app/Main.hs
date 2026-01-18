@@ -50,10 +50,11 @@ main = do
                 else case prompt of
                   Nothing -> pure ()
                   Just q -> do
+                    let messages = [Message "user" q]
                     if useStream
                       then do
                         putTextLn "--- Running single-turn streaming chat ---"
-                        result <- runSingleTurnStream p key q (handleStreamChunkContentOnly putText)
+                        result <- runChat p key (ChatOptions True) messages (handleStreamChunkContentOnly putText)
                         case result of
                           Left err -> do
                             putTextLn $ "Request failed: " <> err
@@ -61,9 +62,10 @@ main = do
                           Right _ -> putTextLn ""
                       else do
                         putTextLn "--- Running single-turn chat ---"
-                        result <- runSingleTurn p key q
+                        result <- runChat p key (ChatOptions False) messages (const (pure ()))
                         case result of
                           Left err -> do
                             putTextLn $ "Request failed: " <> err
                             exitFailure
-                          Right resp -> BL8.putStrLn (encode resp)
+                          Right (Just resp) -> BL8.putStrLn (encode resp)
+                          Right Nothing -> putTextLn "No response returned."

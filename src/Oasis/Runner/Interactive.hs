@@ -6,7 +6,7 @@ module Oasis.Runner.Interactive
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
-import Oasis.Runner.History
+import Oasis.Chat.History
 import Oasis.Runner.Chat (selectModelId)
 import qualified Data.Text as T
 import qualified System.IO as SIO
