@@ -9,6 +9,10 @@ module Oasis.Client.OpenAI
   , StreamChoice(..)
   , StreamDelta(..)
   , defaultChatRequest
+  , EmbeddingRequest(..)
+  , EmbeddingResponse(..)
+  , EmbeddingData(..)
+  , EmbeddingUsage(..)
   , ErrorDetail(..)
   , ErrorResponse(..)
   , ClientError(..)
@@ -18,6 +22,9 @@ module Oasis.Client.OpenAI
   , streamChatCompletionWithRequest
   , buildChatUrl
   , buildModelsUrl
+  , buildEmbeddingsUrl
+  , sendEmbeddings
+  , sendEmbeddingsRaw
   , sendModelsRaw
   , renderClientError
   ) where
@@ -90,6 +97,25 @@ sendModelsRaw provider apiKey = do
   manager <- newTlsManager
   let url = buildModelsUrl (base_url provider)
   req <- buildRequest url "GET" (RequestBodyBS BS.empty) (modelsHeaders apiKey)
+  executeRequest req manager
+
+sendEmbeddings :: Provider -> Text -> EmbeddingRequest -> IO (Either ClientError EmbeddingResponse)
+sendEmbeddings provider apiKey reqBody = do
+  resp <- sendEmbeddingsRaw provider apiKey reqBody
+  case resp of
+    Left err -> pure (Left err)
+    Right body ->
+      case eitherDecode body of
+        Left err ->
+          let raw = TE.decodeUtf8Lenient (BL.toStrict body)
+          in pure $ Left (ClientError 0 "DecodeError" Nothing Nothing ("Failed to decode response: " <> toText err <> "\nRaw: " <> raw))
+        Right val -> pure $ Right val
+
+sendEmbeddingsRaw :: Provider -> Text -> EmbeddingRequest -> IO (Either ClientError BL.ByteString)
+sendEmbeddingsRaw provider apiKey reqBody = do
+  manager <- newTlsManager
+  let url = buildEmbeddingsUrl (base_url provider)
+  req <- buildRequest url "POST" (RequestBodyLBS (encode reqBody)) (jsonHeaders apiKey)
   executeRequest req manager
 
 renderClientError :: ClientError -> Text

@@ -9,6 +9,10 @@ module Oasis.Client.OpenAI.Types
   , StreamChoice(..)
   , StreamDelta(..)
   , defaultChatRequest
+  , EmbeddingRequest(..)
+  , EmbeddingResponse(..)
+  , EmbeddingData(..)
+  , EmbeddingUsage(..)
   , ErrorDetail(..)
   , ErrorResponse(..)
   , ClientError(..)
@@ -148,6 +152,56 @@ instance FromJSON ChatCompletionStreamChunk where
 
 instance ToJSON ChatCompletionStreamChunk where
   toJSON = genericToJSON defaultOptions { omitNothingFields = True }
+
+data EmbeddingRequest = EmbeddingRequest
+  { model :: Text
+  , input :: Value
+  , encoding_format :: Maybe Text
+  , dimensions :: Maybe Int
+  , user :: Maybe Text
+  } deriving (Show, Eq, Generic)
+
+instance ToJSON EmbeddingRequest where
+  toJSON = genericToJSON defaultOptions { omitNothingFields = True }
+
+instance FromJSON EmbeddingRequest where
+  parseJSON = genericParseJSON defaultOptions
+
+data EmbeddingData = EmbeddingData
+  { index :: Int
+  , embedding :: [Double]
+  , object :: Maybe Text
+  } deriving (Show, Eq, Generic)
+
+instance FromJSON EmbeddingData where
+  parseJSON = genericParseJSON defaultOptions
+
+instance ToJSON EmbeddingData where
+  toJSON = genericToJSON defaultOptions { omitNothingFields = True }
+
+data EmbeddingUsage = EmbeddingUsage
+  { prompt_tokens :: Maybe Int
+  , total_tokens :: Maybe Int
+  } deriving (Show, Eq, Generic)
+
+instance FromJSON EmbeddingUsage where
+  parseJSON = genericParseJSON defaultOptions
+
+instance ToJSON EmbeddingUsage where
+  toJSON = genericToJSON defaultOptions { omitNothingFields = True }
+
+data EmbeddingResponse = EmbeddingResponse
+  { object :: Maybe Text
+  , data_ :: [EmbeddingData]
+  , model :: Maybe Text
+  , usage :: Maybe EmbeddingUsage
+  } deriving (Show, Eq, Generic)
+
+instance FromJSON EmbeddingResponse where
+  parseJSON = genericParseJSON defaultOptions { fieldLabelModifier = dropTrailingUnderscore }
+
+instance ToJSON EmbeddingResponse where
+  toJSON = genericToJSON defaultOptions { fieldLabelModifier = dropTrailingUnderscore, omitNothingFields = True }
 
 data ErrorDetail = ErrorDetail
   { message :: Text

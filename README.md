@@ -39,6 +39,7 @@ Runner args:
 - `structured-json [--extra-args <json>]`: Structured output (JSON object).
 - `structured-schema [--extra-args <json>]`: Structured output (JSON schema).
 - `tool-calling [--extra-args <json>]`: Tool calling demo.
+- `embeddings [--extra-args <json>] <text...>`: Generate embeddings for input text.
 
 ### Extra Args (Model Parameters)
 
@@ -71,4 +72,14 @@ stack exec oasis-cli -- qwen - basic --raw '[{"role":"user","content":[{"type":"
 
 ```
 oasis-cli qwen - basic --raw '[{"role":"user","content":[{"type":"text","text":"第一段。"},{"type":"text","text":"第二段。"}]}]'
+```
+
+Example (embeddings runner):
+
+```
+oasis-cli qwen text-embedding-v3 embeddings "Hello embeddings"
+```
+
+```
+oasis-cli local snowflake embeddings "Hello embeddings"
 ```

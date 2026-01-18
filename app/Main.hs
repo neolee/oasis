@@ -7,6 +7,7 @@ import Oasis.Runner.Basic
 import Oasis.Runner.Chat
 import Oasis.Runner.GetModels
 import Oasis.Runner.StructuredOutput
+import Oasis.Runner.Embeddings
 import Oasis.Runner.ToolCalling
 import Oasis.Runner.Common (resolveModelId, parseChatParams)
 import qualified Data.Text as T
@@ -46,11 +47,12 @@ main = do
                 Just (p, key) -> dispatchRunner alias p key modelOverride runnerName runnerArgs
     _ -> do
       putTextLn "Usage: oasis-cli <provider> <model|default|-> <runner> [runner args...]"
-      putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling"
+      putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling, embeddings"
       putTextLn "Chat runner args: [--no-stream] [--hide-thinking] [--extra-args <json>] [initial prompt...]"
       putTextLn "Basic runner args: [--extra-args <json>] [--raw <json>] <prompt...>"
       putTextLn "Structured runner args: [--extra-args <json>]"
       putTextLn "Tool calling runner args: [--extra-args <json>]"
+      putTextLn "Embeddings runner args: [--extra-args <json>] <text...>"
       exitFailure
 
 normalizeModel :: Text -> Maybe Text
@@ -271,6 +273,36 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               putTextLn $ "Request failed: " <> err
               exitFailure
             Right _ -> pure ()
+    "embeddings" -> do
+      case extractExtraArgs runnerArgs of
+        Left err -> do
+          putTextLn err
+          exitFailure
+        Right (extraArgsText, restArgs) -> do
+          params <- case parseEmbeddingParams extraArgsText of
+            Left err -> do
+              putTextLn err
+              exitFailure
+            Right p -> pure p
+          let inputText = T.unwords (map toText restArgs)
+          if T.null (T.strip inputText)
+            then do
+              putTextLn "Embeddings runner requires input text."
+              exitFailure
+            else do
+              putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+              result <- runEmbeddings provider apiKey modelOverride params inputText
+              case result of
+                Left err -> do
+                  putTextLn $ "Request failed: " <> err
+                  exitFailure
+                Right EmbeddingResult{requestJson, responseJson, response} -> do
+                  putTextLn "--- Request JSON ---"
+                  putTextLn requestJson
+                  putTextLn "--- Response JSON ---"
+                  putTextLn responseJson
+                  when (isNothing response) $
+                    putTextLn "Warning: response JSON could not be decoded."
     _ -> do
       putTextLn $ "Unknown runner: " <> runnerName
       putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling"
