@@ -32,6 +32,7 @@ library
       Oasis.Runner.Chat
       Oasis.Runner.Common
       Oasis.Runner.Embeddings
+      Oasis.Runner.HooksDemo
       Oasis.Runner.GetModels
       Oasis.Runner.StructuredOutput
       Oasis.Runner.ToolCalling
@@ -59,6 +60,7 @@ library
       aeson
     , base >=4.7 && <5
     , bytestring
+    , case-insensitive
     , conduit
     , containers
     , directory
@@ -100,6 +102,7 @@ executable oasis-cli
       aeson
     , base >=4.7 && <5
     , bytestring
+    , case-insensitive
     , conduit
     , containers
     , directory

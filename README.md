@@ -30,7 +30,7 @@ Positional arguments:
 - `model|default|-`:
 	- `default` or `-` means “do not override,” use the provider’s configured default model.
 	- Any other value is used as the explicit model ID.
-- `runner`: `basic` or `chat`.
+- `runner`: `basic`, `chat`, `models`, `structured-json`, `structured-schema`, `tool-calling`, `embeddings`, `hooks-demo`.
 
 Runner args:
 
@@ -40,6 +40,7 @@ Runner args:
 - `structured-schema [--extra-args <json>]`: Structured output (JSON schema).
 - `tool-calling [--extra-args <json>]`: Tool calling demo.
 - `embeddings [--extra-args <json>] <text...>`: Generate embeddings for input text.
+- `hooks-demo [--extra-args <json>] <prompt...>`: Demonstrates request/response/error hooks.
 
 ### Extra Args (Model Parameters)
 
@@ -82,4 +83,10 @@ oasis-cli qwen text-embedding-v3 embeddings "Hello embeddings"
 
 ```
 oasis-cli local snowflake embeddings "Hello embeddings"
+```
+
+Example (hooks demo runner):
+
+```
+oasis-cli qwen - hooks-demo "Hello hooks"
 ```

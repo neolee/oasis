@@ -18,6 +18,7 @@ dependencies:
 - toml-parser >= 2.0.0.0
 - text
 - bytestring
+- case-insensitive
 - http-client
 - http-conduit
 - http-client-tls
@@ -57,6 +58,7 @@ library:
   - Oasis.Runner.Chat
   - Oasis.Runner.Common
   - Oasis.Runner.Embeddings
+  - Oasis.Runner.HooksDemo
   - Oasis.Runner.GetModels
   - Oasis.Runner.StructuredOutput
   - Oasis.Runner.ToolCalling
