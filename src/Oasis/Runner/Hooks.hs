@@ -1,5 +1,5 @@
-module Oasis.Runner.HooksDemo
-  ( runHooksDemo
+module Oasis.Runner.Hooks
+  ( runHooks
   ) where
 
 import Relude
@@ -15,8 +15,8 @@ import Network.HTTP.Client (Request(..))
 import Network.HTTP.Types.Header (HeaderName, hAuthorization)
 import Network.HTTP.Types.Status (Status, statusCode)
 
-runHooksDemo :: Provider -> Text -> Maybe Text -> ChatParams -> Text -> IO (Either Text ())
-runHooksDemo provider apiKey modelOverride params prompt = do
+runHooks :: Provider -> Text -> Maybe Text -> ChatParams -> Text -> IO (Either Text ())
+runHooks provider apiKey modelOverride params prompt = do
   let modelId = resolveModelId provider modelOverride
       messages = buildUserMessages prompt
       reqBase = defaultChatRequest modelId messages

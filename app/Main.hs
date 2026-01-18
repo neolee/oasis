@@ -8,7 +8,7 @@ import Oasis.Runner.Chat
 import Oasis.Runner.GetModels
 import Oasis.Runner.StructuredOutput
 import Oasis.Runner.Embeddings
-import Oasis.Runner.HooksDemo
+import Oasis.Runner.Hooks
 import Oasis.Runner.Responses
 import Oasis.Runner.ToolCalling
 import Oasis.Runner.Common (resolveModelId, parseChatParams)
@@ -49,13 +49,13 @@ main = do
                 Just (p, key) -> dispatchRunner alias p key modelOverride runnerName runnerArgs
     _ -> do
       putTextLn "Usage: oasis-cli <provider> <model|default|-> <runner> [runner args...]"
-      putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling, embeddings, hooks-demo, responses"
+      putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling, embeddings, hooks, responses"
       putTextLn "Chat runner args: [--no-stream] [--hide-thinking] [--extra-args <json>] [initial prompt...]"
       putTextLn "Basic runner args: [--extra-args <json>] [--raw <json>] <prompt...>"
       putTextLn "Structured runner args: [--extra-args <json>]"
       putTextLn "Tool calling runner args: [--extra-args <json>]"
       putTextLn "Embeddings runner args: [--extra-args <json>] <text...>"
-      putTextLn "Hooks demo runner args: [--extra-args <json>] <prompt...>"
+      putTextLn "Hooks runner args: [--extra-args <json>] <prompt...>"
       putTextLn "Responses runner args: [--extra-args <json>] <input...>"
       exitFailure
 
@@ -307,7 +307,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                   putTextLn responseJson
                   when (isNothing response) $
                     putTextLn "Warning: response JSON could not be decoded."
-    "hooks-demo" -> do
+    "hooks" -> do
       case extractExtraArgs runnerArgs of
         Left err -> do
           putTextLn err
@@ -321,11 +321,11 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
           let prompt = T.unwords (map toText restArgs)
           if T.null (T.strip prompt)
             then do
-              putTextLn "Hooks demo runner requires a prompt."
+              putTextLn "Hooks runner requires a prompt."
               exitFailure
             else do
               putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-              result <- runHooksDemo provider apiKey modelOverride params prompt
+              result <- runHooks provider apiKey modelOverride params prompt
               case result of
                 Left err -> do
                   putTextLn $ "Request failed: " <> err
@@ -363,5 +363,5 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                     putTextLn "Warning: response JSON could not be decoded."
     _ -> do
       putTextLn $ "Unknown runner: " <> runnerName
-      putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling"
+      putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling, embeddings, hooks, responses"
       exitFailure

@@ -30,7 +30,7 @@ Positional arguments:
 - `model|default|-`:
 	- `default` or `-` means “do not override,” use the provider’s configured default model.
 	- Any other value is used as the explicit model ID.
-- `runner`: `basic`, `chat`, `models`, `structured-json`, `structured-schema`, `tool-calling`, `embeddings`, `hooks-demo`, `responses`.
+- `runner`: `basic`, `chat`, `models`, `structured-json`, `structured-schema`, `tool-calling`, `embeddings`, `hooks`, `responses`.
 
 Runner args:
 
@@ -38,9 +38,9 @@ Runner args:
 - `chat [--no-stream] [--hide-thinking] [--extra-args <json>] [initial prompt...]`: Multi-turn chat. Defaults to streaming and showing thinking.
 - `structured-json [--extra-args <json>]`: Structured output (JSON object).
 - `structured-schema [--extra-args <json>]`: Structured output (JSON schema).
-- `tool-calling [--extra-args <json>]`: Tool calling demo.
+- `tool-calling [--extra-args <json>]`: Tool calling.
 - `embeddings [--extra-args <json>] <text...>`: Generate embeddings for input text.
-- `hooks-demo [--extra-args <json>] <prompt...>`: Demonstrates request/response/error hooks.
+- `hooks [--extra-args <json>] <prompt...>`: Request/response/error hooks.
 - `responses [--extra-args <json>] <input...>`: Calls the Responses API with plain text input.
 
 ### Extra Args (Model Parameters)
@@ -59,6 +59,8 @@ Use `--extra-args` to pass OpenAI-compatible request parameters as JSON. Field n
 - `service_tier`
 - `reasoning_effort`
 - `stream_options` (object)
+
+### Examples
 
 Example (basic runner with extra args, prints request JSON):
 
@@ -86,10 +88,10 @@ oasis-cli qwen text-embedding-v3 embeddings "Hello embeddings"
 oasis-cli local snowflake embeddings "Hello embeddings"
 ```
 
-Example (hooks demo runner):
+Example (hooks runner):
 
 ```
-oasis-cli qwen - hooks-demo "Hello hooks"
+oasis-cli qwen - hooks "Hello hooks"
 ```
 
 Example (responses runner):

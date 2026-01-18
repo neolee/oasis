@@ -58,7 +58,7 @@ library:
   - Oasis.Runner.Chat
   - Oasis.Runner.Common
   - Oasis.Runner.Embeddings
-  - Oasis.Runner.HooksDemo
+  - Oasis.Runner.Hooks
   - Oasis.Runner.Responses
   - Oasis.Runner.GetModels
   - Oasis.Runner.StructuredOutput
