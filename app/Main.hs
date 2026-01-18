@@ -41,6 +41,7 @@ main = do
             Just (p, key) -> do
               putTextLn "--- Resolved Provider ---"
               print p
+              putTextLn $ "Using model: " <> selectModelId p
               if key /= ""
                 then putTextLn "API Key: Found (hidden)"
                 else putTextLn "API Key: NOT FOUND (Check environment variables)"
