@@ -23,7 +23,9 @@ source-repository head
 
 library
   exposed-modules:
+      Oasis.Client.OpenAI
       Oasis.Config
+      Oasis.Runner.Chat
       Oasis.Types
   other-modules:
       Paths_oasis
@@ -49,8 +51,10 @@ library
     , containers
     , directory
     , filepath
+    , http-client
     , http-client-tls
     , http-conduit
+    , http-types
     , mtl
     , relude
     , text
@@ -86,8 +90,10 @@ executable oasis-cli
     , containers
     , directory
     , filepath
+    , http-client
     , http-client-tls
     , http-conduit
+    , http-types
     , mtl
     , oasis
     , relude

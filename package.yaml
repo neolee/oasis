@@ -18,8 +18,10 @@ dependencies:
 - toml-parser >= 2.0.0.0
 - text
 - bytestring
+- http-client
 - http-conduit
 - http-client-tls
+- http-types
 - conduit
 - unordered-containers
 - containers
