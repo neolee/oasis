@@ -29,6 +29,7 @@ dependencies:
 - mtl
 - directory
 - filepath
+- time
 
 default-extensions:
 - NoImplicitPrelude
@@ -56,6 +57,7 @@ library:
   - Oasis.Runner.Common
   - Oasis.Runner.GetModels
   - Oasis.Runner.StructuredOutput
+  - Oasis.Runner.ToolCalling
   - Oasis.Types
 
 executables:

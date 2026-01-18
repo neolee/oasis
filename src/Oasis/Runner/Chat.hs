@@ -47,14 +47,14 @@ runChat provider apiKey modelOverride opts initialPrompt = do
               Right (_, newHistory) -> loop modelId newHistory
 
     chatOnce modelId history line = do
-      let history' = appendMessage (Message "user" line) history
+      let history' = appendMessage (Message "user" line Nothing Nothing) history
           msgs = getMessages history'
       result <- if streaming opts
         then streamOnce modelId msgs
         else nonStreamOnce modelId msgs
       case result of
         Left err -> pure (Left err)
-        Right answer -> pure (Right (answer, appendMessage (Message "assistant" answer) history'))
+        Right answer -> pure (Right (answer, appendMessage (Message "assistant" answer Nothing Nothing) history'))
 
     nonStreamOnce modelId msgs = do
       resp <- sendChatCompletion provider apiKey modelId msgs
@@ -101,9 +101,9 @@ handleCommand history line =
       let contentText = T.unwords rest
       pure (setSystemMessage contentText history)
     ("/insert":idxText:roleText:rest) ->
-      applyHistoryEdit history (insertMessage (parseIndex idxText) (Message roleText (T.unwords rest)) history)
+      applyHistoryEdit history (insertMessage (parseIndex idxText) (Message roleText (T.unwords rest) Nothing Nothing) history)
     ("/update":idxText:roleText:rest) ->
-      applyHistoryEdit history (updateMessage (parseIndex idxText) (Message roleText (T.unwords rest)) history)
+      applyHistoryEdit history (updateMessage (parseIndex idxText) (Message roleText (T.unwords rest) Nothing Nothing) history)
     ("/delete":idxText:_) ->
       applyHistoryEdit history (deleteMessage (parseIndex idxText) history)
     _ -> do

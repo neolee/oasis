@@ -60,7 +60,7 @@ data StructuredMode
 runStructuredOutput :: Provider -> Text -> Maybe Text -> StructuredMode -> IO (Either Text ())
 runStructuredOutput provider apiKey modelOverride mode = do
   let modelId = resolveModelId provider modelOverride
-      messages = [Message "system" systemMessage, Message "user" questionText]
+      messages = [Message "system" systemMessage Nothing Nothing, Message "user" questionText Nothing Nothing]
       responseFormat = case mode of
         JSONObject -> jsonObjectFormat
         JSONSchema -> jsonSchemaFormat
@@ -70,6 +70,9 @@ runStructuredOutput provider apiKey modelOverride mode = do
         , temperature = Nothing
         , stream = True
         , response_format = Just responseFormat
+        , tools = Nothing
+        , tool_choice = Nothing
+        , parallel_tool_calls = Nothing
         }
   accumRef <- newIORef ""
   result <- streamChatCompletionWithRequest provider apiKey reqBody (handleChunk accumRef)

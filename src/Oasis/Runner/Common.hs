@@ -25,4 +25,4 @@ resolveModelId provider = \case
   _ -> selectModelId provider
 
 buildUserMessages :: Text -> [Message]
-buildUserMessages prompt = [Message "user" prompt]
+buildUserMessages prompt = [Message "user" prompt Nothing Nothing]

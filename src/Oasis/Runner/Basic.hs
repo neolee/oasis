@@ -27,6 +27,9 @@ runBasic provider apiKey modelOverride prompt = do
         , temperature = Nothing
         , stream = False
         , response_format = Nothing
+        , tools = Nothing
+        , tool_choice = Nothing
+        , parallel_tool_calls = Nothing
         }
       reqJsonText = TE.decodeUtf8Lenient (BL.toStrict (encode reqBody))
   resp <- sendChatCompletionRaw provider apiKey reqBody

@@ -55,5 +55,5 @@ deleteMessage idx (History msgs)
 setSystemMessage :: Text -> History -> History
 setSystemMessage contentText (History msgs) =
   case msgs of
-    (Message { role = "system" }:rest) -> History (Message "system" contentText : rest)
-    _ -> History (Message "system" contentText : msgs)
+    (Message { role = "system" }:rest) -> History (Message "system" contentText Nothing Nothing : rest)
+    _ -> History (Message "system" contentText Nothing Nothing : msgs)

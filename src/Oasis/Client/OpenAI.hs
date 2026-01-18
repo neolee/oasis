@@ -36,6 +36,9 @@ data ChatCompletionRequest = ChatCompletionRequest
   , temperature :: Maybe Double
   , stream      :: Bool
   , response_format :: Maybe Value
+  , tools       :: Maybe [Tool]
+  , tool_choice :: Maybe Value
+  , parallel_tool_calls :: Maybe Bool
   } deriving (Show, Eq, Generic)
 
 instance ToJSON ChatCompletionRequest where
@@ -154,6 +157,9 @@ sendChatCompletion provider apiKey modelId msgs = do
         , temperature = Nothing
         , stream = False
         , response_format = Nothing
+        , tools = Nothing
+        , tool_choice = Nothing
+        , parallel_tool_calls = Nothing
         }
   resp <- sendChatCompletionRaw provider apiKey reqBody
   case resp of
@@ -190,7 +196,10 @@ streamChatCompletion provider apiKey modelId msgs onChunk = do
         , temperature = Nothing
         , stream = True
         , response_format = Nothing
-        }
+      , tools = Nothing
+      , tool_choice = Nothing
+      , parallel_tool_calls = Nothing
+      }
   streamChatCompletionWithRequest provider apiKey reqBody onChunk
 
 streamChatCompletionWithRequest :: Provider -> Text -> ChatCompletionRequest -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either Text ())
