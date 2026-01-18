@@ -115,8 +115,8 @@ handleChunk opts accumRef ChatCompletionStreamChunk{choices = streamChoices} =
   forM_ streamChoices $ \c ->
     forM_ (delta c) $ \d ->
       case d of
-        StreamDelta{reasoning = deltaReasoning, thinking = deltaThinking, content = deltaContent} -> do
-          let reasoningText = deltaReasoning <|> deltaThinking
+        StreamDelta{reasoning = deltaReasoning, thinking = deltaThinking, reasoning_content = deltaReasoningContent, content = deltaContent} -> do
+          let reasoningText = deltaReasoning <|> deltaThinking <|> deltaReasoningContent
           case reasoningText of
             Just r -> emitThinking opts accumRef r
             Nothing ->

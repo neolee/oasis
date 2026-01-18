@@ -82,6 +82,7 @@ data StreamDelta = StreamDelta
   { role    :: Maybe Text
   , reasoning :: Maybe Text
   , thinking :: Maybe Text
+  , reasoning_content :: Maybe Text
   , content :: Maybe Text
   } deriving (Show, Eq, Generic)
 
