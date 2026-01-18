@@ -63,6 +63,7 @@ library:
   - Oasis.Types
   other-modules:
   - Oasis.Client.OpenAI.Http
+  - Oasis.Client.OpenAI.Stream
   - Oasis.Client.OpenAI.Types
 
 executables:

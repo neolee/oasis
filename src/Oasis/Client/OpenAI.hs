@@ -25,12 +25,11 @@ import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI.Types
 import Oasis.Client.OpenAI.Http
+import Oasis.Client.OpenAI.Stream
 import Data.Aeson
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Lazy as BL
-import Data.Char (isSpace)
 import Network.HTTP.Client
 import Network.HTTP.Types.Status (statusCode)
 
@@ -114,50 +113,16 @@ streamChatCompletionWithRequest provider apiKey reqBody onChunk = do
         pure (Left (clientErrorFromResponse status (responseHeaders resp) body))
       else do
         let reader = responseBody resp
-        streamLoop reader BS.empty
+        streamSseData reader handlePayload
   where
-    streamLoop reader buffer = do
-      chunk <- brRead reader
-      if BS.null chunk
-        then pure (Right ())
-        else do
-          let combined = buffer <> chunk
-              (lines, rest) = splitLines combined
-          result <- processLines lines
-          case result of
-            Left err -> pure (Left err)
-            Right done ->
-              if done
-                then pure (Right ())
-                else streamLoop reader rest
-
-    splitLines bs
-      | BS.null bs = ([], BS.empty)
-      | BS8.last bs == '\n' = (BS8.split '\n' bs, BS.empty)
-      | otherwise =
-          let parts = BS8.split '\n' bs
-          in case reverse parts of
-               [] -> ([], BS.empty)
-               (lastPart:revInit) -> (reverse revInit, lastPart)
-
-    processLines [] = pure (Right False)
-    processLines (l:ls) = do
-      let line = BS8.dropWhile isSpace l
-      if BS8.null line
-        then processLines ls
-        else if BS8.isPrefixOf "data:" line
-          then do
-            let payload = BS8.dropWhile isSpace (BS8.drop 5 line)
-            if payload == "[DONE]"
-              then pure (Right True)
-              else case eitherDecode (BL.fromStrict payload) of
-                Left err ->
-                  let raw = TE.decodeUtf8Lenient payload
-                  in pure $ Left (ClientError 0 "StreamDecodeError" Nothing Nothing ("Failed to decode stream chunk: " <> toText err <> "\nRaw: " <> raw))
-                Right chunk -> do
-                  onChunk chunk
-                  processLines ls
-          else processLines ls
+    handlePayload payload =
+      case eitherDecode (BL.fromStrict payload) of
+        Left err ->
+          let raw = TE.decodeUtf8Lenient payload
+          in pure $ Left (ClientError 0 "StreamDecodeError" Nothing Nothing ("Failed to decode stream chunk: " <> toText err <> "\nRaw: " <> raw))
+        Right chunk -> do
+          onChunk chunk
+          pure (Right ())
 
 sendModelsRaw :: Provider -> Text -> IO (Either ClientError BL.ByteString)
 sendModelsRaw provider apiKey = do
