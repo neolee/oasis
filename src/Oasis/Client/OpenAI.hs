@@ -25,8 +25,14 @@ module Oasis.Client.OpenAI
   , buildEmbeddingsUrl
   , sendEmbeddings
   , sendEmbeddingsRaw
+  , sendEmbeddingsRawWithHooks
   , sendModelsRaw
+  , sendModelsRawWithHooks
+  , sendChatCompletionRawWithHooks
   , renderClientError
+  , ClientHooks(..)
+  , emptyClientHooks
+  , streamChatCompletionWithRequestWithHooks
   ) where
 
 import Relude
@@ -57,10 +63,14 @@ sendChatCompletion provider apiKey modelId msgs = do
 
 sendChatCompletionRaw :: Provider -> Text -> ChatCompletionRequest -> IO (Either ClientError BL.ByteString)
 sendChatCompletionRaw provider apiKey reqBody = do
+  sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody
+
+sendChatCompletionRawWithHooks :: ClientHooks -> Provider -> Text -> ChatCompletionRequest -> IO (Either ClientError BL.ByteString)
+sendChatCompletionRawWithHooks hooks provider apiKey reqBody = do
   manager <- newTlsManager
   let url = buildChatUrl (base_url provider)
   req <- buildRequest url "POST" (RequestBodyLBS (encode reqBody)) (jsonHeaders apiKey)
-  executeRequest req manager
+  executeRequestWithHooks hooks req manager
 
 streamChatCompletion :: Provider -> Text -> Text -> [Message] -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either ClientError ())
 streamChatCompletion provider apiKey modelId msgs onChunk = do
@@ -69,17 +79,26 @@ streamChatCompletion provider apiKey modelId msgs onChunk = do
 
 streamChatCompletionWithRequest :: Provider -> Text -> ChatCompletionRequest -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either ClientError ())
 streamChatCompletionWithRequest provider apiKey reqBody onChunk = do
+  streamChatCompletionWithRequestWithHooks emptyClientHooks provider apiKey reqBody onChunk
+
+streamChatCompletionWithRequestWithHooks :: ClientHooks -> Provider -> Text -> ChatCompletionRequest -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either ClientError ())
+streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody onChunk = do
   manager <- newTlsManager
   let url = buildChatUrl (base_url provider)
   req <- buildRequest url "POST" (RequestBodyLBS (encode reqBody)) (sseHeaders apiKey)
+  forM_ (onRequest hooks) ($ req)
   withResponse req manager $ \resp -> do
     let status = responseStatus resp
+        headers = responseHeaders resp
     if statusCode status < 200 || statusCode status >= 300
       then do
         chunks <- brConsume (responseBody resp)
         let body = BL.fromChunks chunks
-        pure (Left (clientErrorFromResponse status (responseHeaders resp) body))
+            err = clientErrorFromResponse status headers body
+        forM_ (onError hooks) ($ err)
+        pure (Left err)
       else do
+        forM_ (onResponse hooks) (\f -> f status headers BL.empty)
         let reader = responseBody resp
         streamSseData reader handlePayload
   where
@@ -94,10 +113,14 @@ streamChatCompletionWithRequest provider apiKey reqBody onChunk = do
 
 sendModelsRaw :: Provider -> Text -> IO (Either ClientError BL.ByteString)
 sendModelsRaw provider apiKey = do
+  sendModelsRawWithHooks emptyClientHooks provider apiKey
+
+sendModelsRawWithHooks :: ClientHooks -> Provider -> Text -> IO (Either ClientError BL.ByteString)
+sendModelsRawWithHooks hooks provider apiKey = do
   manager <- newTlsManager
   let url = buildModelsUrl (base_url provider)
   req <- buildRequest url "GET" (RequestBodyBS BS.empty) (modelsHeaders apiKey)
-  executeRequest req manager
+  executeRequestWithHooks hooks req manager
 
 sendEmbeddings :: Provider -> Text -> EmbeddingRequest -> IO (Either ClientError EmbeddingResponse)
 sendEmbeddings provider apiKey reqBody = do
@@ -113,10 +136,14 @@ sendEmbeddings provider apiKey reqBody = do
 
 sendEmbeddingsRaw :: Provider -> Text -> EmbeddingRequest -> IO (Either ClientError BL.ByteString)
 sendEmbeddingsRaw provider apiKey reqBody = do
+  sendEmbeddingsRawWithHooks emptyClientHooks provider apiKey reqBody
+
+sendEmbeddingsRawWithHooks :: ClientHooks -> Provider -> Text -> EmbeddingRequest -> IO (Either ClientError BL.ByteString)
+sendEmbeddingsRawWithHooks hooks provider apiKey reqBody = do
   manager <- newTlsManager
   let url = buildEmbeddingsUrl (base_url provider)
   req <- buildRequest url "POST" (RequestBodyLBS (encode reqBody)) (jsonHeaders apiKey)
-  executeRequest req manager
+  executeRequestWithHooks hooks req manager
 
 renderClientError :: ClientError -> Text
 renderClientError ClientError{status, statusText, requestId, errorResponse, rawBody} =

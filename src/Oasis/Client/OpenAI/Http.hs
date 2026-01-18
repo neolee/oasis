@@ -8,7 +8,10 @@ module Oasis.Client.OpenAI.Http
   , newTlsManager
   , buildRequest
   , executeRequest
+  , executeRequestWithHooks
   , clientErrorFromResponse
+  , ClientHooks(..)
+  , emptyClientHooks
   , jsonHeaders
   , sseHeaders
   , modelsHeaders
@@ -27,6 +30,15 @@ import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Types.Header (HeaderName, ResponseHeaders, hAccept, hAuthorization, hContentType)
 import Network.HTTP.Types.Method (Method)
 import Network.HTTP.Types.Status (Status, statusCode, statusMessage)
+
+data ClientHooks = ClientHooks
+  { onRequest  :: Maybe (Request -> IO ())
+  , onResponse :: Maybe (Status -> ResponseHeaders -> BL.ByteString -> IO ())
+  , onError    :: Maybe (ClientError -> IO ())
+  }
+
+emptyClientHooks :: ClientHooks
+emptyClientHooks = ClientHooks Nothing Nothing Nothing
 
 buildChatUrl :: Text -> Text
 buildChatUrl baseUrl =
@@ -80,11 +92,23 @@ buildRequest url method reqBody headers = do
 
 executeRequest :: Request -> Manager -> IO (Either ClientError BL.ByteString)
 executeRequest req manager = do
+  executeRequestWithHooks emptyClientHooks req manager
+
+executeRequestWithHooks :: ClientHooks -> Request -> Manager -> IO (Either ClientError BL.ByteString)
+executeRequestWithHooks hooks req manager = do
+  forM_ (onRequest hooks) ($ req)
   resp <- httpLbs req manager
   let status = responseStatus resp
+      headers = responseHeaders resp
+      body = responseBody resp
   if isSuccessStatus status
-    then pure (Right (responseBody resp))
-    else pure (Left (clientErrorFromResponse status (responseHeaders resp) (responseBody resp)))
+    then do
+      forM_ (onResponse hooks) (\f -> f status headers body)
+      pure (Right body)
+    else do
+      let err = clientErrorFromResponse status headers body
+      forM_ (onError hooks) ($ err)
+      pure (Left err)
 
 clientErrorFromResponse :: Status -> ResponseHeaders -> BL.ByteString -> ClientError
 clientErrorFromResponse status headers body =
