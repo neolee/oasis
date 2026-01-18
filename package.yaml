@@ -1,10 +1,12 @@
 name:                oasis
-version:             0.1.0.0
+version:             1.0.0.0
 github:              "neolee/oasis"
 license:             MIT
 author:              "Neo Lee"
 maintainer:          "neo.lee@gmail.com"
 copyright:           "2026 Neo Lee"
+
+language:            GHC2024
 
 extra-source-files:
 - README.md

@@ -17,10 +17,12 @@ import Oasis.Types
 import Oasis.Client.OpenAI (ChatCompletionRequest(..), ChatCompletionResponse(..), ChatChoice(..), ClientError, sendChatCompletionRaw)
 import Oasis.Chat.Message (userMessage)
 import Data.Aeson (FromJSON(..), ToJSON(..), (.:?), (.=), withObject)
+import Data.Aeson.Types (Parser)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Key as Key
 
 selectModelId :: Provider -> Text
 selectModelId Provider{..} =
@@ -58,7 +60,8 @@ data ChatParams = ChatParams
 
 instance FromJSON ChatParams where
   parseJSON = withObject "ChatParams" $ \o -> do
-    let get name alt = o .:? name <|> o .:? alt
+    let get :: FromJSON a => Text -> Text -> Parser (Maybe a)
+        get name alt = o .:? Key.fromText name <|> o .:? Key.fromText alt
     paramTemperature <- get "temperature" "temperature"
     paramTopP <- get "top_p" "topP"
     paramMaxCompletionTokens <- get "max_completion_tokens" "maxCompletionTokens"

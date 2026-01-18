@@ -3,17 +3,10 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/topics/lock_files
 
-packages:
-- completed:
-    hackage: toml-parser-2.0.0.0@sha256:1b3bb8661684c4c917a2cd4530c5c813656c64a657528bcc723bf6919bcafd08,3979
-    pantry-tree:
-      sha256: 864a560f705a82f76e3190013d63b8d725bc92ab82d3ed6d88741c588e555264
-      size: 2304
-  original:
-    hackage: toml-parser-2.0.0.0
+packages: []
 snapshots:
 - completed:
-    sha256: 08bd13ce621b41a8f5e51456b38d5b46d7783ce114a50ab604d6bbab0d002146
-    size: 720271
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/22/43.yaml
-  original: lts-22.43
+    sha256: 72cdd5851794184138551f43f0897c28f1a5acdda303b266aa9e910461103b3c
+    size: 726784
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/24/28.yaml
+  original: lts-24.28

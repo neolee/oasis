@@ -21,7 +21,7 @@ To leverage Haskell's powerful type system for building a reliable, unified LLM 
 
 ## Technical Specifications
 
--   **GHC Version**: 9.6.7
+-   **GHC Version**: 9.10.3
 -   **Build Tool**: Stack 3.7.1 (Standard for this project)
 -   **Prelude**: `relude` (Modern, safe alternative to base Prelude)
 -   **Configuration**: `toml-parser`

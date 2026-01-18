@@ -12,8 +12,10 @@ import Oasis.Client.OpenAI
 import Oasis.Runner.Common (resolveModelId, parseExtraArgs)
 import Oasis.Runner.Result (RunnerResult(..), encodeRequestJson, buildRunnerResult)
 import Data.Aeson (FromJSON(..), ToJSON(..), (.:?), (.=), withObject)
+import Data.Aeson.Types (Parser)
 import qualified Data.Text as T
 import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Key as Key
 
 type EmbeddingResult = RunnerResult EmbeddingResponse
 
@@ -25,7 +27,8 @@ data EmbeddingParams = EmbeddingParams
 
 instance FromJSON EmbeddingParams where
   parseJSON = withObject "EmbeddingParams" $ \o -> do
-    let get name alt = o .:? name <|> o .:? alt
+    let get :: FromJSON a => Text -> Text -> Parser (Maybe a)
+        get name alt = o .:? Key.fromText name <|> o .:? Key.fromText alt
     paramEncodingFormat <- get "encoding_format" "encodingFormat"
     paramDimensions <- get "dimensions" "dimensions"
     paramUser <- get "user" "user"

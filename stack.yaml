@@ -1,7 +1,5 @@
-resolver: lts-22.43
-compiler: ghc-9.6.7
+resolver: lts-24.28
+compiler: ghc-9.10.3
 system-ghc: true
 packages:
 - .
-extra-deps:
-- toml-parser-2.0.0.0

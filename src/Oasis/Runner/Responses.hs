@@ -12,8 +12,10 @@ import Oasis.Client.OpenAI
 import Oasis.Runner.Common (resolveModelId, parseExtraArgs)
 import Oasis.Runner.Result (RunnerResult(..), encodeRequestJson, buildRunnerResult)
 import Data.Aeson (FromJSON(..), ToJSON(..), (.:?), (.=), withObject)
+import Data.Aeson.Types (Parser)
 import qualified Data.Text as T
 import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Key as Key
 
 type ResponsesResult = RunnerResult ResponsesResponse
 
@@ -27,7 +29,8 @@ data ResponsesParams = ResponsesParams
 
 instance FromJSON ResponsesParams where
   parseJSON = withObject "ResponsesParams" $ \o -> do
-    let get name alt = o .:? name <|> o .:? alt
+    let get :: FromJSON a => Text -> Text -> Parser (Maybe a)
+        get name alt = o .:? Key.fromText name <|> o .:? Key.fromText alt
     paramTemperature <- get "temperature" "temperature"
     paramTopP <- get "top_p" "topP"
     paramMaxOutputTokens <- get "max_output_tokens" "maxOutputTokens"
