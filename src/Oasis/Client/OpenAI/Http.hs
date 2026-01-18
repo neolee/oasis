@@ -42,48 +42,27 @@ emptyClientHooks :: ClientHooks
 emptyClientHooks = ClientHooks Nothing Nothing Nothing
 
 buildChatUrl :: Text -> Text
-buildChatUrl baseUrl =
-  let trimmed = T.dropWhileEnd (== '/') baseUrl
-      lower   = T.toLower trimmed
-      versionSuffixes = ["/v1", "/v2", "/v3", "/v4", "/v5"]
-      hasVersionSuffix = any (`T.isSuffixOf` lower) versionSuffixes
-      pathSuffix = if hasVersionSuffix
-                     then "/chat/completions"
-                     else "/v1/chat/completions"
-  in trimmed <> pathSuffix
+buildChatUrl baseUrl = buildEndpointUrl baseUrl "/chat/completions"
 
 buildModelsUrl :: Text -> Text
-buildModelsUrl baseUrl =
-  let trimmed = T.dropWhileEnd (== '/') baseUrl
-      lower   = T.toLower trimmed
-      versionSuffixes = ["/v1", "/v2", "/v3", "/v4", "/v5"]
-      hasVersionSuffix = any (`T.isSuffixOf` lower) versionSuffixes
-      pathSuffix = if hasVersionSuffix
-                     then "/models"
-                     else "/v1/models"
-  in trimmed <> pathSuffix
+buildModelsUrl baseUrl = buildEndpointUrl baseUrl "/models"
 
 buildEmbeddingsUrl :: Text -> Text
-buildEmbeddingsUrl baseUrl =
-  let trimmed = T.dropWhileEnd (== '/') baseUrl
-      lower   = T.toLower trimmed
-      versionSuffixes = ["/v1", "/v2", "/v3", "/v4", "/v5"]
-      hasVersionSuffix = any (`T.isSuffixOf` lower) versionSuffixes
-      pathSuffix = if hasVersionSuffix
-                     then "/embeddings"
-                     else "/v1/embeddings"
-  in trimmed <> pathSuffix
+buildEmbeddingsUrl baseUrl = buildEndpointUrl baseUrl "/embeddings"
 
 buildResponsesUrl :: Text -> Text
-buildResponsesUrl baseUrl =
+buildResponsesUrl baseUrl = buildEndpointUrl baseUrl "/responses"
+
+buildEndpointUrl :: Text -> Text -> Text
+buildEndpointUrl baseUrl pathSuffix =
   let trimmed = T.dropWhileEnd (== '/') baseUrl
       lower   = T.toLower trimmed
       versionSuffixes = ["/v1", "/v2", "/v3", "/v4", "/v5"]
       hasVersionSuffix = any (`T.isSuffixOf` lower) versionSuffixes
-      pathSuffix = if hasVersionSuffix
-                     then "/responses"
-                     else "/v1/responses"
-  in trimmed <> pathSuffix
+      finalSuffix = if hasVersionSuffix
+                      then pathSuffix
+                      else "/v1" <> pathSuffix
+  in trimmed <> finalSuffix
 
 authHeader :: Text -> [(HeaderName, BS8.ByteString)]
 authHeader apiKey

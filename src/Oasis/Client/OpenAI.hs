@@ -29,15 +29,21 @@ module Oasis.Client.OpenAI
   , sendEmbeddings
   , sendEmbeddingsRaw
   , sendEmbeddingsRawWithHooks
+  , sendEmbeddingsRawWithManager
   , sendResponses
   , sendResponsesRaw
+  , sendResponsesRawWithHooks
+  , sendResponsesRawWithManager
   , sendModelsRaw
   , sendModelsRawWithHooks
+  , sendModelsRawWithManager
   , sendChatCompletionRawWithHooks
+  , sendChatCompletionRawWithManager
   , renderClientError
   , ClientHooks(..)
   , emptyClientHooks
   , streamChatCompletionWithRequestWithHooks
+  , streamChatCompletionWithRequestWithManager
   ) where
 
 import Relude
@@ -54,17 +60,11 @@ import Network.HTTP.Types.Status (statusCode)
 
 sendChatCompletion :: Provider -> Text -> Text -> [Message] -> IO (Either ClientError ChatCompletionResponse)
 sendChatCompletion provider apiKey modelId msgs = do
-  let url = buildChatUrl (base_url provider)
-      reqBody = defaultChatRequest modelId msgs
+  let reqBody = defaultChatRequest modelId msgs
   resp <- sendChatCompletionRaw provider apiKey reqBody
   case resp of
     Left err -> pure (Left err)
-    Right body ->
-      case eitherDecode body of
-        Left err ->
-          let raw = TE.decodeUtf8Lenient (BL.toStrict body)
-          in pure $ Left (ClientError 0 "DecodeError" Nothing Nothing ("Failed to decode response: " <> toText err <> "\nRaw: " <> raw))
-        Right val -> pure $ Right val
+    Right body -> pure (decodeOrError body)
 
 sendChatCompletionRaw :: Provider -> Text -> ChatCompletionRequest -> IO (Either ClientError BL.ByteString)
 sendChatCompletionRaw provider apiKey reqBody = do
@@ -73,6 +73,10 @@ sendChatCompletionRaw provider apiKey reqBody = do
 sendChatCompletionRawWithHooks :: ClientHooks -> Provider -> Text -> ChatCompletionRequest -> IO (Either ClientError BL.ByteString)
 sendChatCompletionRawWithHooks hooks provider apiKey reqBody = do
   manager <- newTlsManager
+  sendChatCompletionRawWithManager manager hooks provider apiKey reqBody
+
+sendChatCompletionRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> ChatCompletionRequest -> IO (Either ClientError BL.ByteString)
+sendChatCompletionRawWithManager manager hooks provider apiKey reqBody = do
   let url = buildChatUrl (base_url provider)
   req <- buildRequest url "POST" (RequestBodyLBS (encode reqBody)) (jsonHeaders apiKey)
   executeRequestWithHooks hooks req manager
@@ -90,6 +94,10 @@ streamChatCompletionWithRequest provider apiKey reqBody onChunk = do
 streamChatCompletionWithRequestWithHooks :: ClientHooks -> Provider -> Text -> ChatCompletionRequest -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either ClientError ())
 streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody onChunk = do
   manager <- newTlsManager
+  streamChatCompletionWithRequestWithManager manager hooks provider apiKey reqBody onChunk
+
+streamChatCompletionWithRequestWithManager :: Manager -> ClientHooks -> Provider -> Text -> ChatCompletionRequest -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either ClientError ())
+streamChatCompletionWithRequestWithManager manager hooks provider apiKey reqBody onChunk = do
   let url = buildChatUrl (base_url provider)
   req <- buildRequest url "POST" (RequestBodyLBS (encode reqBody)) (sseHeaders apiKey)
   forM_ (onRequest hooks) ($ req)
@@ -124,6 +132,10 @@ sendModelsRaw provider apiKey = do
 sendModelsRawWithHooks :: ClientHooks -> Provider -> Text -> IO (Either ClientError BL.ByteString)
 sendModelsRawWithHooks hooks provider apiKey = do
   manager <- newTlsManager
+  sendModelsRawWithManager manager hooks provider apiKey
+
+sendModelsRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> IO (Either ClientError BL.ByteString)
+sendModelsRawWithManager manager hooks provider apiKey = do
   let url = buildModelsUrl (base_url provider)
   req <- buildRequest url "GET" (RequestBodyBS BS.empty) (modelsHeaders apiKey)
   executeRequestWithHooks hooks req manager
@@ -133,12 +145,7 @@ sendEmbeddings provider apiKey reqBody = do
   resp <- sendEmbeddingsRaw provider apiKey reqBody
   case resp of
     Left err -> pure (Left err)
-    Right body ->
-      case eitherDecode body of
-        Left err ->
-          let raw = TE.decodeUtf8Lenient (BL.toStrict body)
-          in pure $ Left (ClientError 0 "DecodeError" Nothing Nothing ("Failed to decode response: " <> toText err <> "\nRaw: " <> raw))
-        Right val -> pure $ Right val
+    Right body -> pure (decodeOrError body)
 
 sendEmbeddingsRaw :: Provider -> Text -> EmbeddingRequest -> IO (Either ClientError BL.ByteString)
 sendEmbeddingsRaw provider apiKey reqBody = do
@@ -147,6 +154,10 @@ sendEmbeddingsRaw provider apiKey reqBody = do
 sendEmbeddingsRawWithHooks :: ClientHooks -> Provider -> Text -> EmbeddingRequest -> IO (Either ClientError BL.ByteString)
 sendEmbeddingsRawWithHooks hooks provider apiKey reqBody = do
   manager <- newTlsManager
+  sendEmbeddingsRawWithManager manager hooks provider apiKey reqBody
+
+sendEmbeddingsRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> EmbeddingRequest -> IO (Either ClientError BL.ByteString)
+sendEmbeddingsRawWithManager manager hooks provider apiKey reqBody = do
   let url = buildEmbeddingsUrl (base_url provider)
   req <- buildRequest url "POST" (RequestBodyLBS (encode reqBody)) (jsonHeaders apiKey)
   executeRequestWithHooks hooks req manager
@@ -156,19 +167,30 @@ sendResponses provider apiKey reqBody = do
   resp <- sendResponsesRaw provider apiKey reqBody
   case resp of
     Left err -> pure (Left err)
-    Right body ->
-      case eitherDecode body of
-        Left err ->
-          let raw = TE.decodeUtf8Lenient (BL.toStrict body)
-          in pure $ Left (ClientError 0 "DecodeError" Nothing Nothing ("Failed to decode response: " <> toText err <> "\nRaw: " <> raw))
-        Right val -> pure $ Right val
+    Right body -> pure (decodeOrError body)
 
 sendResponsesRaw :: Provider -> Text -> ResponsesRequest -> IO (Either ClientError BL.ByteString)
 sendResponsesRaw provider apiKey reqBody = do
+  sendResponsesRawWithHooks emptyClientHooks provider apiKey reqBody
+
+sendResponsesRawWithHooks :: ClientHooks -> Provider -> Text -> ResponsesRequest -> IO (Either ClientError BL.ByteString)
+sendResponsesRawWithHooks hooks provider apiKey reqBody = do
   manager <- newTlsManager
+  sendResponsesRawWithManager manager hooks provider apiKey reqBody
+
+sendResponsesRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> ResponsesRequest -> IO (Either ClientError BL.ByteString)
+sendResponsesRawWithManager manager hooks provider apiKey reqBody = do
   let url = buildResponsesUrl (base_url provider)
   req <- buildRequest url "POST" (RequestBodyLBS (encode reqBody)) (jsonHeaders apiKey)
-  executeRequest req manager
+  executeRequestWithHooks hooks req manager
+
+decodeOrError :: FromJSON a => BL.ByteString -> Either ClientError a
+decodeOrError body =
+  case eitherDecode body of
+    Left err ->
+      let raw = TE.decodeUtf8Lenient (BL.toStrict body)
+      in Left (ClientError 0 "DecodeError" Nothing Nothing ("Failed to decode response: " <> toText err <> "\nRaw: " <> raw))
+    Right val -> Right val
 
 renderClientError :: ClientError -> Text
 renderClientError ClientError{status, statusText, requestId, errorResponse, rawBody} =
