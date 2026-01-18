@@ -37,6 +37,7 @@ library
       Oasis.Service.Amap
       Oasis.Types
   other-modules:
+      Oasis.Client.OpenAI.Types
       Paths_oasis
   hs-source-dirs:
       src
