@@ -1,7 +1,10 @@
 {-# LANGUAGE StrictData #-}
 
 module Oasis.Client.OpenAI.Stream
-  ( streamSseData
+  ( SseEvent(..)
+  , sseEventData
+  , streamSseEvents
+  , streamSseData
   ) where
 
 import Relude
@@ -18,8 +21,14 @@ data SseEvent = SseEvent
   , dataLines :: [BS.ByteString]
   }
 
-streamSseData :: BodyReader -> (BS.ByteString -> IO (Either ClientError ())) -> IO (Either ClientError ())
-streamSseData reader onData = loop BS.empty emptyEvent
+sseEventData :: SseEvent -> Maybe BS.ByteString
+sseEventData SseEvent{dataLines} =
+  case dataLines of
+    [] -> Nothing
+    lines' -> Just (BS8.intercalate "\n" lines')
+
+streamSseEvents :: BodyReader -> (SseEvent -> IO (Either ClientError ())) -> IO (Either ClientError ())
+streamSseEvents reader onEvent = loop BS.empty emptyEvent
   where
     emptyEvent = SseEvent Nothing Nothing []
 
@@ -86,20 +95,26 @@ streamSseData reader onData = loop BS.empty emptyEvent
       | otherwise = event
 
     dispatchEvent event =
-      case dataLines event of
-        [] -> pure (Right False)
-        lines' ->
-          let payload = BS8.intercalate "\n" lines'
-          in if payload == "[DONE]"
-               then pure (Right True)
-               else do
-                 result <- onData payload
-                 case result of
-                   Left err -> pure (Left err)
-                   Right _ -> pure (Right False)
+      case sseEventData event of
+        Nothing -> pure (Right False)
+        Just payload ->
+          if payload == "[DONE]"
+            then pure (Right True)
+            else do
+              result <- onEvent event
+              case result of
+                Left err -> pure (Left err)
+                Right _ -> pure (Right False)
 
     flushEvent event = do
       result <- dispatchEvent event
       case result of
         Left err -> pure (Left err)
         Right _ -> pure (Right ())
+
+streamSseData :: BodyReader -> (BS.ByteString -> IO (Either ClientError ())) -> IO (Either ClientError ())
+streamSseData reader onData =
+  streamSseEvents reader $ \event ->
+    case sseEventData event of
+      Nothing -> pure (Right ())
+      Just payload -> onData payload

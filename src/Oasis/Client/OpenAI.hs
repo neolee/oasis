@@ -114,16 +114,19 @@ streamChatCompletionWithRequestWithManager manager hooks provider apiKey reqBody
       else do
         forM_ (onResponse hooks) (\f -> f status headers BL.empty)
         let reader = responseBody resp
-        streamSseData reader handlePayload
+        streamSseEvents reader handleEvent
   where
-    handlePayload payload =
-      case eitherDecode (BL.fromStrict payload) of
-        Left err ->
-          let raw = TE.decodeUtf8Lenient payload
-          in pure $ Left (ClientError 0 "StreamDecodeError" Nothing Nothing ("Failed to decode stream chunk: " <> toText err <> "\nRaw: " <> raw))
-        Right chunk -> do
-          onChunk chunk
-          pure (Right ())
+    handleEvent event =
+      case sseEventData event of
+        Nothing -> pure (Right ())
+        Just payload ->
+          case eitherDecode (BL.fromStrict payload) of
+            Left err ->
+              let raw = TE.decodeUtf8Lenient payload
+              in pure $ Left (ClientError 0 "StreamDecodeError" Nothing Nothing ("Failed to decode stream chunk: " <> toText err <> "\nRaw: " <> raw))
+            Right chunk -> do
+              onChunk chunk
+              pure (Right ())
 
 sendModelsRaw :: Provider -> Text -> IO (Either ClientError BL.ByteString)
 sendModelsRaw provider apiKey = do
