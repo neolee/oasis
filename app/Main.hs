@@ -5,6 +5,7 @@ import Oasis.Config
 import Oasis.Types
 import Oasis.Runner.Basic
 import Oasis.Runner.Chat
+import Oasis.Runner.GetModels
 import Oasis.Runner.Common (resolveModelId)
 import qualified Data.Text as T
 import qualified Data.List as L
@@ -40,7 +41,7 @@ main = do
                 Just (p, key) -> dispatchRunner alias p key modelOverride runnerName runnerArgs
     _ -> do
       putTextLn "Usage: oasis-cli <provider> <model|default|-> <runner> [runner args...]"
-      putTextLn "Runners: basic, chat"
+      putTextLn "Runners: basic, chat, models"
       putTextLn "Chat runner args: [--no-stream] [--hide-thinking] [initial prompt...]"
       putTextLn "Basic runner args: <prompt...>"
       exitFailure
@@ -92,7 +93,24 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
           putTextLn $ "Request failed: " <> err
           exitFailure
         Right _ -> pure ()
+    "models" -> do
+      putTextLn $ "Loading config for alias: " <> alias
+      putTextLn "--- Resolved Provider ---"
+      print provider
+      if apiKey /= ""
+        then putTextLn "API Key: Found (hidden)"
+        else putTextLn "API Key: NOT FOUND (Check environment variables)"
+      result <- runGetModels provider apiKey
+      case result of
+        Left err -> do
+          putTextLn $ "Request failed: " <> err
+          exitFailure
+        Right GetModelsResult{responseJson, response} -> do
+          putTextLn "--- Response JSON ---"
+          putTextLn responseJson
+          when (isNothing response) $
+            putTextLn "Warning: response JSON could not be decoded."
     _ -> do
       putTextLn $ "Unknown runner: " <> runnerName
-      putTextLn "Runners: basic, chat"
+      putTextLn "Runners: basic, chat, models"
       exitFailure

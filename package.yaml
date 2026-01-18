@@ -54,6 +54,7 @@ library:
   - Oasis.Runner.Basic
   - Oasis.Runner.Chat
   - Oasis.Runner.Common
+  - Oasis.Runner.GetModels
   - Oasis.Types
 
 executables:

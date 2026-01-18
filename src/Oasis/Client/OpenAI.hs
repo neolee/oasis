@@ -12,6 +12,8 @@ module Oasis.Client.OpenAI
   , sendChatCompletionRaw
   , streamChatCompletion
   , buildChatUrl
+  , buildModelsUrl
+  , sendModelsRaw
   ) where
 
 import Relude
@@ -130,6 +132,17 @@ buildChatUrl baseUrl =
                      else "/v1/chat/completions"
   in trimmed <> pathSuffix
 
+buildModelsUrl :: Text -> Text
+buildModelsUrl baseUrl =
+  let trimmed = T.dropWhileEnd (== '/') baseUrl
+      lower   = T.toLower trimmed
+      versionSuffixes = ["/v1", "/v2", "/v3", "/v4", "/v5"]
+      hasVersionSuffix = any (`T.isSuffixOf` lower) versionSuffixes
+      pathSuffix = if hasVersionSuffix
+                     then "/models"
+                     else "/v1/models"
+  in trimmed <> pathSuffix
+
 sendChatCompletion :: Provider -> Text -> Text -> [Message] -> IO (Either Text ChatCompletionResponse)
 sendChatCompletion provider apiKey modelId msgs = do
   let url = buildChatUrl (base_url provider)
@@ -237,3 +250,18 @@ authHeader :: Text -> [(HeaderName, BS8.ByteString)]
 authHeader apiKey
   | T.null apiKey = []
   | otherwise    = [(hAuthorization, "Bearer " <> TE.encodeUtf8 apiKey)]
+
+sendModelsRaw :: Provider -> Text -> IO (Either Text BL.ByteString)
+sendModelsRaw provider apiKey = do
+  manager <- newManager tlsManagerSettings
+  let url = buildModelsUrl (base_url provider)
+  initReq <- parseRequest (toString url)
+  let headers =
+        [ (hAccept, "application/json")
+        ] <> authHeader apiKey
+      req = initReq
+        { method = "GET"
+        , requestHeaders = headers
+        }
+  resp <- httpLbs req manager
+  pure (Right (responseBody resp))
