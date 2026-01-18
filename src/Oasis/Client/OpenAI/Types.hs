@@ -8,6 +8,7 @@ module Oasis.Client.OpenAI.Types
   , ChatCompletionStreamChunk(..)
   , StreamChoice(..)
   , StreamDelta(..)
+  , defaultChatRequest
   , ErrorDetail(..)
   , ErrorResponse(..)
   , ClientError(..)
@@ -44,6 +45,30 @@ instance ToJSON ChatCompletionRequest where
 
 instance FromJSON ChatCompletionRequest where
   parseJSON = genericParseJSON defaultOptions
+
+defaultChatRequest :: Text -> [Message] -> ChatCompletionRequest
+defaultChatRequest modelId msgs =
+  ChatCompletionRequest
+    { model = modelId
+    , messages = msgs
+    , temperature = Nothing
+    , top_p = Nothing
+    , max_completion_tokens = Nothing
+    , stop = Nothing
+    , presence_penalty = Nothing
+    , frequency_penalty = Nothing
+    , seed = Nothing
+    , logit_bias = Nothing
+    , user = Nothing
+    , service_tier = Nothing
+    , reasoning_effort = Nothing
+    , stream_options = Nothing
+    , stream = False
+    , response_format = Nothing
+    , tools = Nothing
+    , tool_choice = Nothing
+    , parallel_tool_calls = Nothing
+    }
 
 data ChatCompletionResponse = ChatCompletionResponse
   { id      :: Maybe Text

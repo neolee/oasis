@@ -30,25 +30,8 @@ runToolCalling provider apiKey modelOverride params = do
         [ Message "system" systemMessage Nothing Nothing
         , Message "user" "上海天气" Nothing Nothing
         ]
-      reqBase = ChatCompletionRequest
-        { model = modelId
-        , messages = messages0
-        , temperature = Nothing
-        , top_p = Nothing
-        , max_completion_tokens = Nothing
-        , stop = Nothing
-        , presence_penalty = Nothing
-        , frequency_penalty = Nothing
-        , seed = Nothing
-        , logit_bias = Nothing
-        , user = Nothing
-        , service_tier = Nothing
-        , reasoning_effort = Nothing
-        , stream_options = Nothing
-        , stream = False
-        , response_format = Nothing
-        , tools = Just tools
-        , tool_choice = Nothing
+      reqBase = (defaultChatRequest modelId messages0)
+        { tools = Just tools
         , parallel_tool_calls = Just True
         }
       reqBody = applyChatParams params reqBase
@@ -72,26 +55,8 @@ runToolCalling provider apiKey modelOverride params = do
               result <- executeToolCall toolCall
               let toolMsg = Message "tool" result (Just (OT.id toolCall)) Nothing
                   messages1 = messages0 <> [assistantMessage, toolMsg]
-                  reqBase2 = ChatCompletionRequest
-                    { model = modelId
-                    , messages = messages1
-                    , temperature = Nothing
-                    , top_p = Nothing
-                    , max_completion_tokens = Nothing
-                    , stop = Nothing
-                    , presence_penalty = Nothing
-                    , frequency_penalty = Nothing
-                    , seed = Nothing
-                    , logit_bias = Nothing
-                    , user = Nothing
-                    , service_tier = Nothing
-                    , reasoning_effort = Nothing
-                    , stream_options = Nothing
-                    , stream = False
-                    , response_format = Nothing
-                    , tools = Just tools
-                    , tool_choice = Nothing
-                    , parallel_tool_calls = Nothing
+                  reqBase2 = (defaultChatRequest modelId messages1)
+                    { tools = Just tools
                     }
                   reqBody2 = applyChatParams params reqBase2
               secondResp <- sendChatCompletionRaw provider apiKey reqBody2

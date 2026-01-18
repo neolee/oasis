@@ -60,27 +60,7 @@ runChat provider apiKey modelOverride params opts initialPrompt = do
         Right answer -> pure (Right (answer, appendMessage (Message "assistant" answer Nothing Nothing) history'))
 
     nonStreamOnce modelId msgs = do
-      let reqBase = ChatCompletionRequest
-            { model = modelId
-            , messages = msgs
-            , temperature = Nothing
-            , top_p = Nothing
-            , max_completion_tokens = Nothing
-            , stop = Nothing
-            , presence_penalty = Nothing
-            , frequency_penalty = Nothing
-            , seed = Nothing
-            , logit_bias = Nothing
-            , user = Nothing
-            , service_tier = Nothing
-            , reasoning_effort = Nothing
-            , stream_options = Nothing
-            , stream = False
-            , response_format = Nothing
-            , tools = Nothing
-            , tool_choice = Nothing
-            , parallel_tool_calls = Nothing
-            }
+      let reqBase = defaultChatRequest modelId msgs
           reqBody = applyChatParams params reqBase
       raw <- sendChatCompletionRaw provider apiKey reqBody
       case raw of
@@ -100,27 +80,7 @@ runChat provider apiKey modelOverride params opts initialPrompt = do
 
     streamOnce modelId msgs = do
       let initAccum = StreamAccum InAnswer "" "" False False
-          reqBase = ChatCompletionRequest
-            { model = modelId
-            , messages = msgs
-            , temperature = Nothing
-            , top_p = Nothing
-            , max_completion_tokens = Nothing
-            , stop = Nothing
-            , presence_penalty = Nothing
-            , frequency_penalty = Nothing
-            , seed = Nothing
-            , logit_bias = Nothing
-            , user = Nothing
-            , service_tier = Nothing
-            , reasoning_effort = Nothing
-            , stream_options = Nothing
-            , stream = True
-            , response_format = Nothing
-            , tools = Nothing
-            , tool_choice = Nothing
-            , parallel_tool_calls = Nothing
-            }
+          reqBase = (defaultChatRequest modelId msgs) { stream = True }
           reqBody = applyChatParams params reqBase
       accumRef <- newIORef initAccum
       result <- streamChatCompletionWithRequest provider apiKey reqBody (handleChunk opts accumRef)

@@ -64,26 +64,9 @@ runStructuredOutput provider apiKey modelOverride params mode = do
       responseFormat = case mode of
         JSONObject -> jsonObjectFormat
         JSONSchema -> jsonSchemaFormat
-      reqBase = ChatCompletionRequest
-        { model = modelId
-        , messages = messages
-        , temperature = Nothing
-        , top_p = Nothing
-        , max_completion_tokens = Nothing
-        , stop = Nothing
-        , presence_penalty = Nothing
-        , frequency_penalty = Nothing
-        , seed = Nothing
-        , logit_bias = Nothing
-        , user = Nothing
-        , service_tier = Nothing
-        , reasoning_effort = Nothing
-        , stream_options = Nothing
-        , stream = True
+      reqBase = (defaultChatRequest modelId messages)
+        { stream = True
         , response_format = Just responseFormat
-        , tools = Nothing
-        , tool_choice = Nothing
-        , parallel_tool_calls = Nothing
         }
       reqBody = applyChatParams params reqBase
   accumRef <- newIORef ""

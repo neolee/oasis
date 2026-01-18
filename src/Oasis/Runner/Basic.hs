@@ -21,27 +21,7 @@ runBasic :: Provider -> Text -> Maybe Text -> ChatParams -> Text -> IO (Either T
 runBasic provider apiKey modelOverride params prompt = do
   let modelId = resolveModelId provider modelOverride
       messages = buildUserMessages prompt
-      reqBase = ChatCompletionRequest
-        { model = modelId
-        , messages = messages
-        , temperature = Nothing
-        , top_p = Nothing
-        , max_completion_tokens = Nothing
-        , stop = Nothing
-        , presence_penalty = Nothing
-        , frequency_penalty = Nothing
-        , seed = Nothing
-        , logit_bias = Nothing
-        , user = Nothing
-        , service_tier = Nothing
-        , reasoning_effort = Nothing
-        , stream_options = Nothing
-        , stream = False
-        , response_format = Nothing
-        , tools = Nothing
-        , tool_choice = Nothing
-        , parallel_tool_calls = Nothing
-        }
+      reqBase = defaultChatRequest modelId messages
       reqBody = applyChatParams params reqBase
       reqJsonText = TE.decodeUtf8Lenient (BL.toStrict (encode reqBody))
   resp <- sendChatCompletionRaw provider apiKey reqBody

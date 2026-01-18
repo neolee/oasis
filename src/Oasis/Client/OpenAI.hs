@@ -8,6 +8,7 @@ module Oasis.Client.OpenAI
   , ChatCompletionStreamChunk(..)
   , StreamChoice(..)
   , StreamDelta(..)
+  , defaultChatRequest
   , ErrorDetail(..)
   , ErrorResponse(..)
   , ClientError(..)
@@ -36,27 +37,7 @@ import Network.HTTP.Types.Status (statusCode)
 sendChatCompletion :: Provider -> Text -> Text -> [Message] -> IO (Either ClientError ChatCompletionResponse)
 sendChatCompletion provider apiKey modelId msgs = do
   let url = buildChatUrl (base_url provider)
-      reqBody = ChatCompletionRequest
-        { model = modelId
-        , messages = msgs
-        , temperature = Nothing
-        , top_p = Nothing
-        , max_completion_tokens = Nothing
-        , stop = Nothing
-        , presence_penalty = Nothing
-        , frequency_penalty = Nothing
-        , seed = Nothing
-        , logit_bias = Nothing
-        , user = Nothing
-        , service_tier = Nothing
-        , reasoning_effort = Nothing
-        , stream_options = Nothing
-        , stream = False
-        , response_format = Nothing
-        , tools = Nothing
-        , tool_choice = Nothing
-        , parallel_tool_calls = Nothing
-        }
+      reqBody = defaultChatRequest modelId msgs
   resp <- sendChatCompletionRaw provider apiKey reqBody
   case resp of
     Left err -> pure (Left err)
@@ -76,27 +57,7 @@ sendChatCompletionRaw provider apiKey reqBody = do
 
 streamChatCompletion :: Provider -> Text -> Text -> [Message] -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either ClientError ())
 streamChatCompletion provider apiKey modelId msgs onChunk = do
-  let reqBody = ChatCompletionRequest
-        { model = modelId
-        , messages = msgs
-        , temperature = Nothing
-      , top_p = Nothing
-      , max_completion_tokens = Nothing
-      , stop = Nothing
-      , presence_penalty = Nothing
-      , frequency_penalty = Nothing
-      , seed = Nothing
-      , logit_bias = Nothing
-      , user = Nothing
-      , service_tier = Nothing
-      , reasoning_effort = Nothing
-      , stream_options = Nothing
-        , stream = True
-        , response_format = Nothing
-      , tools = Nothing
-      , tool_choice = Nothing
-      , parallel_tool_calls = Nothing
-      }
+  let reqBody = (defaultChatRequest modelId msgs) { stream = True }
   streamChatCompletionWithRequest provider apiKey reqBody onChunk
 
 streamChatCompletionWithRequest :: Provider -> Text -> ChatCompletionRequest -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either ClientError ())
