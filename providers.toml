@@ -38,15 +38,16 @@ beta_base_url = ""
 chat_model_id = "kimi-k2-turbo-preview"
 coder_model_id = "kimi-k2-thinking"
 reasoner_model_id = "kimi-k2-thinking"
+default_model_type = "reasoner"
 
 [providers.zhipu]
 description = "Zhipu Official"
 api_key_name = "ZHIPU_API_KEY"
 base_url = "https://open.bigmodel.cn/api/paas/v4/"
 beta_base_url = ""
-chat_model_id = "glm-4.6"
-coder_model_id = "glm-4.6"
-reasoner_model_id = "glm-4.6"
+chat_model_id = "glm-4.7"
+coder_model_id = "glm-4.7"
+reasoner_model_id = "glm-4.7"
 
 [providers.openrouter]
 description = "OpenRouter"
