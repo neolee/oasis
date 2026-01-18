@@ -8,9 +8,11 @@ import Oasis.Runner.Chat
 import Oasis.Runner.Common (resolveModelId)
 import qualified Data.Text as T
 import qualified Data.List as L
+import GHC.IO.Encoding (setLocaleEncoding, utf8)
 
 main :: IO ()
 main = do
+  setLocaleEncoding utf8
   args <- getArgs
   case args of
     (aliasArg:modelArg:runnerArg:runnerArgs) -> do
