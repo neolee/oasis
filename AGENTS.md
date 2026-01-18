@@ -37,6 +37,39 @@ To leverage Haskell's powerful type system for building a reliable, unified LLM 
 3.  **Context Middleware**: Design the `Model` abstraction to support interceptors that can monitor or modify the message context (history) before it reaches the provider.
 4.  **Verifiable Iterations**: Each development step must produce a human-verifiable result (e.g., a CLI output or a passing test suite).
 
+## OpenAI-Compatible Client Interface Design
+
+The `Oasis.Client.OpenAI` module should expose a layered, reusable interface:
+
+1. **Core Types**
+    - `ClientConfig`: base URL, API key, timeouts, proxies, default headers, user agent.
+    - `ChatCompletionRequest` / `ChatCompletionResponse`: full OpenAI-compatible fields (model, messages, temperature, top_p, max_tokens, stop, stream, tools, tool_choice, response_format, seed, logprobs, metadata).
+    - `Message`, `Tool`, `ToolCall`, `Usage`, `ErrorResponse`.
+    - `ChatCompletionStreamChunk` with `delta` content for streaming.
+
+2. **Low-Level Request Construction**
+    - `buildChatUrl`, `buildRequest`, `withAuth` for custom headers and instrumentation.
+
+3. **Synchronous API**
+    - `sendChatCompletion`, `sendEmbedding`, `sendModels`.
+
+4. **Streaming API (SSE)**
+    - `streamChatCompletion`: parse SSE lines and emit `delta` tokens incrementally.
+
+5. **Convenience Helpers**
+    - `simpleChat`, `chatWithSystem`, `chatWithParams` for common usage.
+
+6. **Errors & Observability**
+    - Structured `ClientError` (HTTP status, error code, raw body).
+    - Hooks/middleware for logging and tracing.
+
+## Interface Design Principles (Client Purity)
+
+- **Protocol-only client**: `Oasis.Client.OpenAI` should only handle request/response encoding, HTTP, and SSE parsing.
+- **No UI/printing in client**: formatting and display (CLI/GUI/Web) must live in Runner or application layers.
+- **Stream as data**: streaming APIs should emit structured chunks/deltas, allowing callers to decide how to render or store them.
+- **Composable handlers**: callers can route tokens to stdout, UI widgets, logs, or buffers without modifying the client.
+
 ## Build & Verification (Every Iteration)
 
 Each iteration must pass the following baseline checks before moving forward:
@@ -47,6 +80,14 @@ Each iteration must pass the following baseline checks before moving forward:
 2. **Phase 1 Verification (Config Resolution)**
     - `stack exec oasis-cli -- deepseek`
     - Expected: prints the resolved `Provider` and API key presence status.
+
+3. **Phase 2 Verification (Non-Streaming Chat)**
+    - `stack exec oasis-cli -- deepseek "Hello"`
+    - Expected: prints a valid JSON response decoded as `ChatCompletionResponse`.
+
+4. **Phase 3 Verification (Streaming Chat)**
+    - `stack exec oasis-cli -- --stream deepseek "Hello"`
+    - Expected: prints incremental tokens, ending with a newline.
 
 ## Implementation Phases
 

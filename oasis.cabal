@@ -26,6 +26,8 @@ library
       Oasis.Client.OpenAI
       Oasis.Config
       Oasis.Runner.Chat
+      Oasis.Runner.History
+      Oasis.Runner.Interactive
       Oasis.Types
   other-modules:
       Paths_oasis

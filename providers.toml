@@ -95,7 +95,7 @@ reasoner_model_id = ""
 
 [defaults]
 provider = "aliyun_qwen"
-model_type = "chat"
+model_type = "reasoner"
 
 [aliases]
 qwen = "aliyun_qwen"

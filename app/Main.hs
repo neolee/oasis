@@ -4,14 +4,20 @@ import Relude
 import Oasis.Config
 import Oasis.Types
 import Oasis.Runner.Chat
+import Oasis.Runner.Interactive
 import Data.Aeson (encode)
 import qualified Data.ByteString.Lazy.Char8 as BL8
 import qualified Data.Text as T
+import qualified Data.List as L
 
 main :: IO ()
 main = do
   args <- getArgs
-  let (alias, prompt) = case args of
+  let (flags, remaining) = L.partition (L.isPrefixOf "--") args
+      useStream = "--stream" `elem` flags
+      useInteractive = "--interactive" `elem` flags
+      showThinking = "--show-thinking" `elem` flags
+      (alias, prompt) = case remaining of
         (a:rest) -> (toText a, if null rest then Nothing else Just (T.unwords (map toText rest)))
         []       -> ("deepseek", Nothing)
 
@@ -38,13 +44,25 @@ main = do
               if key /= ""
                 then putTextLn "API Key: Found (hidden)"
                 else putTextLn "API Key: NOT FOUND (Check environment variables)"
-              case prompt of
-                Nothing -> pure ()
-                Just q -> do
-                  putTextLn "--- Running single-turn chat ---"
-                  result <- runSingleTurn p key q
-                  case result of
-                    Left err -> do
-                      putTextLn $ "Request failed: " <> err
-                      exitFailure
-                    Right resp -> BL8.putStrLn (encode resp)
+              if useInteractive
+                then runInteractiveChat p key (DisplayOptions { showThinking })
+                else case prompt of
+                  Nothing -> pure ()
+                  Just q -> do
+                    if useStream
+                      then do
+                        putTextLn "--- Running single-turn streaming chat ---"
+                        result <- runSingleTurnStream p key q (handleStreamChunkContentOnly putText)
+                        case result of
+                          Left err -> do
+                            putTextLn $ "Request failed: " <> err
+                            exitFailure
+                          Right _ -> putTextLn ""
+                      else do
+                        putTextLn "--- Running single-turn chat ---"
+                        result <- runSingleTurn p key q
+                        case result of
+                          Left err -> do
+                            putTextLn $ "Request failed: " <> err
+                            exitFailure
+                          Right resp -> BL8.putStrLn (encode resp)

@@ -1,5 +1,7 @@
 module Oasis.Runner.Chat
   ( runSingleTurn
+  , runSingleTurnStream
+  , handleStreamChunkContentOnly
   , selectModelId
   ) where
 
@@ -20,3 +22,17 @@ runSingleTurn provider apiKey prompt = do
   let modelId = selectModelId provider
       messages = [Message "user" prompt]
   sendChatCompletion provider apiKey modelId messages
+
+runSingleTurnStream :: Provider -> Text -> Text -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either Text ())
+runSingleTurnStream provider apiKey prompt onChunk = do
+  let modelId = selectModelId provider
+      messages = [Message "user" prompt]
+  streamChatCompletion provider apiKey modelId messages onChunk
+
+handleStreamChunkContentOnly :: (Text -> IO ()) -> ChatCompletionStreamChunk -> IO ()
+handleStreamChunkContentOnly onToken ChatCompletionStreamChunk{choices = streamChoices} =
+  forM_ streamChoices $ \c ->
+    forM_ (delta c) $ \d ->
+      case d of
+        StreamDelta{content = deltaContent} ->
+          forM_ deltaContent onToken
