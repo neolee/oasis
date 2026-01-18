@@ -6,6 +6,7 @@ module Oasis.Runner.Chat
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
+import Oasis.Client.OpenAI.Types (setChatStream)
 import Oasis.Chat.History
 import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams)
 import Data.Aeson (eitherDecode)
@@ -80,8 +81,9 @@ runChat provider apiKey modelOverride params opts initialPrompt = do
 
     streamOnce modelId msgs = do
       let initAccum = StreamAccum InAnswer "" "" False False
-          reqBase = (defaultChatRequest modelId msgs) { stream = True }
-          reqBody = applyChatParams params reqBase
+          reqBase = defaultChatRequest modelId msgs
+          reqBaseStream = setChatStream True reqBase
+          reqBody = applyChatParams params reqBaseStream
       accumRef <- newIORef initAccum
       result <- streamChatCompletionWithRequest provider apiKey reqBody (handleChunk opts accumRef)
       case result of

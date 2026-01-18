@@ -4,6 +4,7 @@ module Oasis.Client.OpenAI.Http
   ( buildChatUrl
   , buildModelsUrl
   , buildEmbeddingsUrl
+  , buildResponsesUrl
   , authHeader
   , newTlsManager
   , buildRequest
@@ -71,6 +72,17 @@ buildEmbeddingsUrl baseUrl =
       pathSuffix = if hasVersionSuffix
                      then "/embeddings"
                      else "/v1/embeddings"
+  in trimmed <> pathSuffix
+
+buildResponsesUrl :: Text -> Text
+buildResponsesUrl baseUrl =
+  let trimmed = T.dropWhileEnd (== '/') baseUrl
+      lower   = T.toLower trimmed
+      versionSuffixes = ["/v1", "/v2", "/v3", "/v4", "/v5"]
+      hasVersionSuffix = any (`T.isSuffixOf` lower) versionSuffixes
+      pathSuffix = if hasVersionSuffix
+                     then "/responses"
+                     else "/v1/responses"
   in trimmed <> pathSuffix
 
 authHeader :: Text -> [(HeaderName, BS8.ByteString)]

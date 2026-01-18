@@ -30,7 +30,7 @@ Positional arguments:
 - `model|default|-`:
 	- `default` or `-` means “do not override,” use the provider’s configured default model.
 	- Any other value is used as the explicit model ID.
-- `runner`: `basic`, `chat`, `models`, `structured-json`, `structured-schema`, `tool-calling`, `embeddings`, `hooks-demo`.
+- `runner`: `basic`, `chat`, `models`, `structured-json`, `structured-schema`, `tool-calling`, `embeddings`, `hooks-demo`, `responses`.
 
 Runner args:
 
@@ -41,6 +41,7 @@ Runner args:
 - `tool-calling [--extra-args <json>]`: Tool calling demo.
 - `embeddings [--extra-args <json>] <text...>`: Generate embeddings for input text.
 - `hooks-demo [--extra-args <json>] <prompt...>`: Demonstrates request/response/error hooks.
+- `responses [--extra-args <json>] <input...>`: Calls the Responses API with plain text input.
 
 ### Extra Args (Model Parameters)
 
@@ -89,4 +90,10 @@ Example (hooks demo runner):
 
 ```
 oasis-cli qwen - hooks-demo "Hello hooks"
+```
+
+Example (responses runner):
+
+```
+oasis-cli qwen - responses "Hello responses"
 ```

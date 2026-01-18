@@ -13,6 +13,8 @@ module Oasis.Client.OpenAI
   , EmbeddingResponse(..)
   , EmbeddingData(..)
   , EmbeddingUsage(..)
+  , ResponsesRequest(..)
+  , ResponsesResponse(..)
   , ErrorDetail(..)
   , ErrorResponse(..)
   , ClientError(..)
@@ -23,9 +25,12 @@ module Oasis.Client.OpenAI
   , buildChatUrl
   , buildModelsUrl
   , buildEmbeddingsUrl
+  , buildResponsesUrl
   , sendEmbeddings
   , sendEmbeddingsRaw
   , sendEmbeddingsRawWithHooks
+  , sendResponses
+  , sendResponsesRaw
   , sendModelsRaw
   , sendModelsRawWithHooks
   , sendChatCompletionRawWithHooks
@@ -74,7 +79,8 @@ sendChatCompletionRawWithHooks hooks provider apiKey reqBody = do
 
 streamChatCompletion :: Provider -> Text -> Text -> [Message] -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either ClientError ())
 streamChatCompletion provider apiKey modelId msgs onChunk = do
-  let reqBody = (defaultChatRequest modelId msgs) { stream = True }
+  let reqBase = defaultChatRequest modelId msgs
+      reqBody = setChatStream True reqBase
   streamChatCompletionWithRequest provider apiKey reqBody onChunk
 
 streamChatCompletionWithRequest :: Provider -> Text -> ChatCompletionRequest -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either ClientError ())
@@ -144,6 +150,25 @@ sendEmbeddingsRawWithHooks hooks provider apiKey reqBody = do
   let url = buildEmbeddingsUrl (base_url provider)
   req <- buildRequest url "POST" (RequestBodyLBS (encode reqBody)) (jsonHeaders apiKey)
   executeRequestWithHooks hooks req manager
+
+sendResponses :: Provider -> Text -> ResponsesRequest -> IO (Either ClientError ResponsesResponse)
+sendResponses provider apiKey reqBody = do
+  resp <- sendResponsesRaw provider apiKey reqBody
+  case resp of
+    Left err -> pure (Left err)
+    Right body ->
+      case eitherDecode body of
+        Left err ->
+          let raw = TE.decodeUtf8Lenient (BL.toStrict body)
+          in pure $ Left (ClientError 0 "DecodeError" Nothing Nothing ("Failed to decode response: " <> toText err <> "\nRaw: " <> raw))
+        Right val -> pure $ Right val
+
+sendResponsesRaw :: Provider -> Text -> ResponsesRequest -> IO (Either ClientError BL.ByteString)
+sendResponsesRaw provider apiKey reqBody = do
+  manager <- newTlsManager
+  let url = buildResponsesUrl (base_url provider)
+  req <- buildRequest url "POST" (RequestBodyLBS (encode reqBody)) (jsonHeaders apiKey)
+  executeRequest req manager
 
 renderClientError :: ClientError -> Text
 renderClientError ClientError{status, statusText, requestId, errorResponse, rawBody} =

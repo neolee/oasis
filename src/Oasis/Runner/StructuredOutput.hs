@@ -6,6 +6,7 @@ module Oasis.Runner.StructuredOutput
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
+import Oasis.Client.OpenAI.Types (setChatStream, setChatResponseFormat)
 import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams)
 import Data.Aeson (Value, decode, encode, (.=))
 import qualified Data.Aeson as Aeson
@@ -67,11 +68,10 @@ runStructuredOutput provider apiKey modelOverride params mode = do
       responseFormat = case mode of
         JSONObject -> jsonObjectFormat
         JSONSchema -> jsonSchemaFormat
-      reqBase = (defaultChatRequest modelId messages)
-        { stream = True
-        , response_format = Just responseFormat
-        }
-      reqBody = applyChatParams params reqBase
+      reqBase = defaultChatRequest modelId messages
+      reqBaseStream = setChatStream True reqBase
+      reqBaseFormat = setChatResponseFormat (Just responseFormat) reqBaseStream
+      reqBody = applyChatParams params reqBaseFormat
   accumRef <- newIORef ""
   result <- streamChatCompletionWithRequest provider apiKey reqBody (handleChunk accumRef)
   case result of

@@ -59,6 +59,7 @@ library:
   - Oasis.Runner.Common
   - Oasis.Runner.Embeddings
   - Oasis.Runner.HooksDemo
+  - Oasis.Runner.Responses
   - Oasis.Runner.GetModels
   - Oasis.Runner.StructuredOutput
   - Oasis.Runner.ToolCalling

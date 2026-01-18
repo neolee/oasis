@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData #-}
 
 module Oasis.Client.OpenAI.Types
@@ -9,10 +10,14 @@ module Oasis.Client.OpenAI.Types
   , StreamChoice(..)
   , StreamDelta(..)
   , defaultChatRequest
+  , setChatStream
+  , setChatResponseFormat
   , EmbeddingRequest(..)
   , EmbeddingResponse(..)
   , EmbeddingData(..)
   , EmbeddingUsage(..)
+  , ResponsesRequest(..)
+  , ResponsesResponse(..)
   , ErrorDetail(..)
   , ErrorResponse(..)
   , ClientError(..)
@@ -72,6 +77,20 @@ defaultChatRequest modelId msgs =
     , tools = Nothing
     , tool_choice = Nothing
     , parallel_tool_calls = Nothing
+    }
+
+setChatStream :: Bool -> ChatCompletionRequest -> ChatCompletionRequest
+setChatStream enabled ChatCompletionRequest{..} =
+  ChatCompletionRequest
+    { stream = enabled
+    , ..
+    }
+
+setChatResponseFormat :: Maybe Value -> ChatCompletionRequest -> ChatCompletionRequest
+setChatResponseFormat fmt ChatCompletionRequest{..} =
+  ChatCompletionRequest
+    { response_format = fmt
+    , ..
     }
 
 data ChatCompletionResponse = ChatCompletionResponse
@@ -201,6 +220,39 @@ instance FromJSON EmbeddingResponse where
   parseJSON = genericParseJSON defaultOptions { fieldLabelModifier = dropTrailingUnderscore }
 
 instance ToJSON EmbeddingResponse where
+  toJSON = genericToJSON defaultOptions { fieldLabelModifier = dropTrailingUnderscore, omitNothingFields = True }
+
+data ResponsesRequest = ResponsesRequest
+  { model :: Text
+  , input :: Value
+  , stream :: Maybe Bool
+  , max_output_tokens :: Maybe Int
+  , temperature :: Maybe Double
+  , top_p :: Maybe Double
+  , user :: Maybe Text
+  , response_format :: Maybe Value
+  } deriving (Show, Eq, Generic)
+
+instance ToJSON ResponsesRequest where
+  toJSON = genericToJSON defaultOptions { omitNothingFields = True }
+
+instance FromJSON ResponsesRequest where
+  parseJSON = genericParseJSON defaultOptions
+
+data ResponsesResponse = ResponsesResponse
+  { id :: Maybe Text
+  , object :: Maybe Text
+  , created :: Maybe Int
+  , model :: Maybe Text
+  , output :: Maybe Value
+  , output_text :: Maybe Text
+  , usage :: Maybe Value
+  } deriving (Show, Eq, Generic)
+
+instance FromJSON ResponsesResponse where
+  parseJSON = genericParseJSON defaultOptions { fieldLabelModifier = dropTrailingUnderscore }
+
+instance ToJSON ResponsesResponse where
   toJSON = genericToJSON defaultOptions { fieldLabelModifier = dropTrailingUnderscore, omitNothingFields = True }
 
 data ErrorDetail = ErrorDetail
