@@ -35,4 +35,6 @@ resolveProvider cfg alias = do
     Nothing -> pure Nothing
     Just baseProvider -> do
       apiKey <- fromMaybe "" <$> lookupEnv (toString (api_key_name baseProvider))
-      pure $ Just (baseProvider, toText apiKey)
+      let defaultType = Just (model_type (defaults cfg))
+          providerWithDefaults = baseProvider { default_model_type = default_model_type baseProvider <|> defaultType }
+      pure $ Just (providerWithDefaults, toText apiKey)
