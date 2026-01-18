@@ -9,11 +9,10 @@ import Oasis.Client.OpenAI
 import Oasis.Client.OpenAI.Types (setChatStream)
 import Oasis.Chat.History
 import qualified Oasis.Chat.Message as Msg
-import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams)
-import Data.Aeson (eitherDecode)
+import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams, extractAssistantContent)
+import Oasis.Runner.Stream (forEachDelta, deltaReasoningText)
+import Oasis.Runner.Result (parseRawResponseStrict)
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
-import qualified Data.ByteString.Lazy as BL
 import qualified System.IO as SIO
 import Control.Monad (foldM)
 
@@ -65,20 +64,15 @@ runChat provider apiKey modelOverride params opts initialPrompt = do
       let reqBase = defaultChatRequest modelId msgs
           reqBody = applyChatParams params reqBase
       raw <- sendChatCompletionRaw provider apiKey reqBody
-      case raw of
-        Left err -> pure (Left (renderClientError err))
-        Right body ->
-          case eitherDecode body of
-            Left err ->
-              let rawText = TE.decodeUtf8Lenient (BL.toStrict body)
-              in pure $ Left ("Failed to decode response: " <> toText err <> "\nRaw: " <> rawText)
-            Right response ->
-              case extractAssistantContent response of
-                Nothing -> pure (Left "No assistant message returned.")
-                Just content -> do
-                  rendered <- renderNonStreaming opts content
-                  putTextLn ""
-                  pure (Right rendered)
+      case parseRawResponseStrict raw of
+        Left err -> pure (Left err)
+        Right (_, response) ->
+          case extractAssistantContent response of
+            Nothing -> pure (Left "No assistant message returned.")
+            Just content -> do
+              rendered <- renderNonStreaming opts content
+              putTextLn ""
+              pure (Right rendered)
 
     streamOnce modelId msgs = do
       let initAccum = StreamAccum InAnswer "" "" False False
@@ -116,9 +110,9 @@ handleCommand history line =
       let contentText = T.unwords rest
       pure (setSystemMessage contentText history)
     ("/insert":idxText:roleText:rest) ->
-      applyHistoryEdit history (insertMessage (parseIndex idxText) (Message roleText (ContentText (T.unwords rest)) Nothing Nothing) history)
+      applyHistoryEdit history (mkRoleMessage roleText (T.unwords rest) >>= \msg -> insertMessage (parseIndex idxText) msg history)
     ("/update":idxText:roleText:rest) ->
-      applyHistoryEdit history (updateMessage (parseIndex idxText) (Message roleText (ContentText (T.unwords rest)) Nothing Nothing) history)
+      applyHistoryEdit history (mkRoleMessage roleText (T.unwords rest) >>= \msg -> updateMessage (parseIndex idxText) msg history)
     ("/delete":idxText:_) ->
       applyHistoryEdit history (deleteMessage (parseIndex idxText) history)
     _ -> do
@@ -139,12 +133,6 @@ showHistory history =
   forM_ (zip [0..] (getMessages history)) $ \(idx, Message{role, content}) ->
     putTextLn (show idx <> " [" <> role <> "] " <> messageContentText content)
 
-extractAssistantContent :: ChatCompletionResponse -> Maybe Text
-extractAssistantContent ChatCompletionResponse{choices} =
-  case choices of
-    (ChatChoice{message = Just Message{content}}:_) -> Just (messageContentText content)
-    _ -> Nothing
-
 data StreamMode = InAnswer | InThinking
   deriving (Show, Eq)
 
@@ -160,14 +148,11 @@ data StreamAccum = StreamAccum
   }
 
 handleChunk :: ChatOptions -> IORef StreamAccum -> ChatCompletionStreamChunk -> IO ()
-handleChunk opts accumRef ChatCompletionStreamChunk{choices = streamChoices} =
-  forM_ streamChoices $ \c ->
-    forM_ (delta c) $ \StreamDelta{reasoning = deltaReasoning, thinking = deltaThinking, reasoning_content = deltaReasoningContent, content = deltaContent} -> do
-      let reasoningText = deltaReasoning <|> deltaThinking <|> deltaReasoningContent
-      case reasoningText of
-        Just r -> emitThinking (showThinking opts) accumRef r
-        Nothing ->
-          forM_ deltaContent $ \t -> emitContent (showThinking opts) accumRef t
+handleChunk opts accumRef chunk =
+  forEachDelta chunk $ \delta@StreamDelta{content = deltaContent} ->
+    case deltaReasoningText delta of
+      Just r -> emitThinking (showThinking opts) accumRef r
+      Nothing -> forM_ deltaContent $ \t -> emitContent (showThinking opts) accumRef t
 
 renderNonStreaming :: ChatOptions -> Text -> IO Text
 renderNonStreaming opts content = do
@@ -232,3 +217,13 @@ processContentWithTags mode text = go mode text []
               | otherwise ->
                   let remaining = T.drop 8 rest
                   in go InAnswer remaining (acc <> [ThinkingPart before])
+
+mkRoleMessage :: Text -> Text -> Either Text Message
+mkRoleMessage roleText contentText =
+  let roleLower = T.toLower (T.strip roleText)
+  in case roleLower of
+    "system" -> Right (Msg.systemMessage contentText)
+    "user" -> Right (Msg.userMessage contentText)
+    "assistant" -> Right (Msg.assistantMessage contentText)
+    "tool" -> Right (Message "tool" (ContentText contentText) Nothing Nothing)
+    _ -> Left ("Unknown role: " <> roleText)

@@ -1,5 +1,5 @@
 module Oasis.Runner.Responses
-  ( ResponsesResult(..)
+  ( ResponsesResult
   , ResponsesParams(..)
   , emptyResponsesParams
   , parseResponsesParams
@@ -9,18 +9,13 @@ module Oasis.Runner.Responses
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
-import Oasis.Runner.Common (resolveModelId)
-import Data.Aeson (FromJSON(..), ToJSON(..), (.:?), (.=), withObject, encode, decode)
+import Oasis.Runner.Common (resolveModelId, parseExtraArgs)
+import Oasis.Runner.Result (RunnerResult(..), encodeRequestJson, buildRunnerResult)
+import Data.Aeson (FromJSON(..), ToJSON(..), (.:?), (.=), withObject)
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
-import qualified Data.ByteString.Lazy as BL
 import qualified Data.Aeson as Aeson
 
-data ResponsesResult = ResponsesResult
-  { requestJson  :: Text
-  , responseJson :: Text
-  , response     :: Maybe ResponsesResponse
-  } deriving (Show, Eq)
+type ResponsesResult = RunnerResult ResponsesResponse
 
 data ResponsesParams = ResponsesParams
   { paramTemperature    :: Maybe Double
@@ -53,14 +48,7 @@ emptyResponsesParams :: ResponsesParams
 emptyResponsesParams = ResponsesParams Nothing Nothing Nothing Nothing Nothing
 
 parseResponsesParams :: Maybe Text -> Either Text ResponsesParams
-parseResponsesParams = \case
-  Nothing -> Right emptyResponsesParams
-  Just raw
-    | T.null (T.strip raw) -> Right emptyResponsesParams
-    | otherwise ->
-        case Aeson.eitherDecode (BL.fromStrict (TE.encodeUtf8 raw)) of
-          Left err -> Left ("Invalid --extra-args JSON: " <> toText err)
-          Right params -> Right params
+parseResponsesParams = parseExtraArgs "Responses" emptyResponsesParams
 
 runResponses :: Provider -> Text -> Maybe Text -> ResponsesParams -> Text -> IO (Either Text ResponsesResult)
 runResponses provider apiKey modelOverride params inputText = do
@@ -75,11 +63,6 @@ runResponses provider apiKey modelOverride params inputText = do
         , user = paramUser params
         , response_format = paramResponseFormat params
         }
-      reqJsonText = TE.decodeUtf8Lenient (BL.toStrict (encode reqBody))
+      reqJsonText = encodeRequestJson reqBody
   resp <- sendResponsesRaw provider apiKey reqBody
-  case resp of
-    Left err -> pure (Left (renderClientError err))
-    Right body ->
-      let respText = TE.decodeUtf8Lenient (BL.toStrict body)
-          decoded = decode body
-      in pure $ Right (ResponsesResult reqJsonText respText decoded)
+  pure (buildRunnerResult reqJsonText resp)

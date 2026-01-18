@@ -7,9 +7,10 @@ import Oasis.Types
 import qualified Oasis.Types as OT
 import Oasis.Client.OpenAI
 import qualified Oasis.Chat.Message as Msg
-import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams)
+import Oasis.Runner.Common (resolveModelId, ChatParams, requestChat, extractAssistantContent, extractToolCall)
+import Oasis.Runner.Result (parseRawResponseStrict)
 import Oasis.Service.Amap (getWeatherText)
-import Data.Aeson (Value, decode, eitherDecode, (.=))
+import Data.Aeson (Value, decode, (.=))
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.Text as T
@@ -31,49 +32,37 @@ runToolCalling provider apiKey modelOverride params = do
         [ Msg.systemMessage systemMessage
         , Msg.userMessage "上海天气"
         ]
-      reqBase = (defaultChatRequest modelId messages0)
+  let reqBase0 = (defaultChatRequest modelId messages0)
         { tools = Just tools
         , parallel_tool_calls = Just True
         }
-      reqBody = applyChatParams params reqBase
-  firstResp <- sendChatCompletionRaw provider apiKey reqBody
-  case firstResp of
-    Left err -> pure (Left (renderClientError err))
-    Right body ->
-      case eitherDecode body of
-        Left err ->
-          let raw = TE.decodeUtf8Lenient (BL.toStrict body)
-          in pure (Left ("Failed to decode response: " <> toText err <> "\nRaw: " <> raw))
-        Right response -> do
-          case extractToolCall response of
-            Nothing -> do
-              case extractAssistantContent response of
+  firstResp <- requestChat provider apiKey params reqBase0
+  case parseRawResponseStrict firstResp of
+    Left err -> pure (Left err)
+    Right (_, response) -> do
+      case extractToolCall response of
+        Nothing -> do
+          case extractAssistantContent response of
+            Nothing -> pure (Left "No assistant message returned.")
+            Just content -> do
+              putTextLn content
+              pure (Right ())
+        Just (assistantMessage, toolCall) -> do
+          result <- executeToolCall toolCall
+          let toolMsg = Msg.toolMessage (OT.id toolCall) result
+              messages1 = messages0 <> [assistantMessage, toolMsg]
+              reqBase2 = (defaultChatRequest modelId messages1)
+                { tools = Just tools
+                }
+          secondResp <- requestChat provider apiKey params reqBase2
+          case parseRawResponseStrict secondResp of
+            Left err -> pure (Left err)
+            Right (_, response2) ->
+              case extractAssistantContent response2 of
                 Nothing -> pure (Left "No assistant message returned.")
                 Just content -> do
                   putTextLn content
                   pure (Right ())
-            Just (assistantMessage, toolCall) -> do
-              result <- executeToolCall toolCall
-              let toolMsg = Msg.toolMessage (OT.id toolCall) result
-                  messages1 = messages0 <> [assistantMessage, toolMsg]
-                  reqBase2 = (defaultChatRequest modelId messages1)
-                    { tools = Just tools
-                    }
-                  reqBody2 = applyChatParams params reqBase2
-              secondResp <- sendChatCompletionRaw provider apiKey reqBody2
-              case secondResp of
-                Left err -> pure (Left (renderClientError err))
-                Right body2 ->
-                  case eitherDecode body2 of
-                    Left err ->
-                      let raw = TE.decodeUtf8Lenient (BL.toStrict body2)
-                      in pure (Left ("Failed to decode response: " <> toText err <> "\nRaw: " <> raw))
-                    Right response2 ->
-                      case extractAssistantContent response2 of
-                        Nothing -> pure (Left "No assistant message returned.")
-                        Just content -> do
-                          putTextLn content
-                          pure (Right ())
 
 buildTools :: [Tool]
 buildTools =
@@ -107,18 +96,6 @@ buildTools =
           }
       }
   ]
-
-extractToolCall :: ChatCompletionResponse -> Maybe (Message, ToolCall)
-extractToolCall ChatCompletionResponse{choices} =
-  case choices of
-    (ChatChoice{message = Just msg@Message{tool_calls = Just (tc:_)}}:_) -> Just (msg, tc)
-    _ -> Nothing
-
-extractAssistantContent :: ChatCompletionResponse -> Maybe Text
-extractAssistantContent ChatCompletionResponse{choices} =
-  case choices of
-    (ChatChoice{message = Just Message{content}}:_) -> Just (messageContentText content)
-    _ -> Nothing
 
 executeToolCall :: ToolCall -> IO Text
 executeToolCall ToolCall{function = ToolCallFunction{name, arguments}} =

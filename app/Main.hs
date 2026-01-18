@@ -12,6 +12,7 @@ import Oasis.Runner.Hooks
 import Oasis.Runner.Responses
 import Oasis.Runner.ToolCalling
 import Oasis.Runner.Common (resolveModelId, parseChatParams)
+import Oasis.Runner.Render (renderRunnerResult, renderResponseOnly)
 import qualified Data.Text as T
 import qualified Data.List as L
 import qualified Data.Text.Encoding as TE
@@ -148,13 +149,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                     Left err -> do
                       putTextLn $ "Request failed: " <> err
                       exitFailure
-                    Right BasicResult{requestJson, responseJson, response} -> do
-                      putTextLn "--- Request JSON ---"
-                      putTextLn requestJson
-                      putTextLn "--- Response JSON ---"
-                      putTextLn responseJson
-                      when (isNothing response) $
-                        putTextLn "Warning: response JSON could not be decoded."
+                    Right result -> renderRunnerResult result
                 Nothing -> do
                   let prompt = T.unwords (map toText restArgs2)
                   if T.null (T.strip prompt)
@@ -168,13 +163,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                         Left err -> do
                           putTextLn $ "Request failed: " <> err
                           exitFailure
-                        Right BasicResult{requestJson, responseJson, response} -> do
-                          putTextLn "--- Request JSON ---"
-                          putTextLn requestJson
-                          putTextLn "--- Response JSON ---"
-                          putTextLn responseJson
-                          when (isNothing response) $
-                            putTextLn "Warning: response JSON could not be decoded."
+                        Right result -> renderRunnerResult result
     "chat" -> do
       case extractExtraArgs runnerArgs of
         Left err -> do
@@ -209,11 +198,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
         Left err -> do
           putTextLn $ "Request failed: " <> err
           exitFailure
-        Right GetModelsResult{responseJson, response} -> do
-          putTextLn "--- Response JSON ---"
-          putTextLn responseJson
-          when (isNothing response) $
-            putTextLn "Warning: response JSON could not be decoded."
+        Right result -> renderResponseOnly result
     "structured-json" -> do
       case extractExtraArgs runnerArgs of
         Left err -> do
@@ -300,13 +285,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                 Left err -> do
                   putTextLn $ "Request failed: " <> err
                   exitFailure
-                Right EmbeddingResult{requestJson, responseJson, response} -> do
-                  putTextLn "--- Request JSON ---"
-                  putTextLn requestJson
-                  putTextLn "--- Response JSON ---"
-                  putTextLn responseJson
-                  when (isNothing response) $
-                    putTextLn "Warning: response JSON could not be decoded."
+                Right result -> renderRunnerResult result
     "hooks" -> do
       case extractExtraArgs runnerArgs of
         Left err -> do
@@ -354,13 +333,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                 Left err -> do
                   putTextLn $ "Request failed: " <> err
                   exitFailure
-                Right ResponsesResult{requestJson, responseJson, response} -> do
-                  putTextLn "--- Request JSON ---"
-                  putTextLn requestJson
-                  putTextLn "--- Response JSON ---"
-                  putTextLn responseJson
-                  when (isNothing response) $
-                    putTextLn "Warning: response JSON could not be decoded."
+                Right result -> renderRunnerResult result
     _ -> do
       putTextLn $ "Unknown runner: " <> runnerName
       putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling, embeddings, hooks, responses"

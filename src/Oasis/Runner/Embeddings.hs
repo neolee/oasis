@@ -1,5 +1,5 @@
 module Oasis.Runner.Embeddings
-  ( EmbeddingResult(..)
+  ( EmbeddingResult
   , EmbeddingParams(..)
   , emptyEmbeddingParams
   , parseEmbeddingParams
@@ -9,18 +9,13 @@ module Oasis.Runner.Embeddings
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
-import Oasis.Runner.Common (resolveModelId)
-import Data.Aeson (FromJSON(..), ToJSON(..), (.:?), (.=), withObject, encode, decode)
+import Oasis.Runner.Common (resolveModelId, parseExtraArgs)
+import Oasis.Runner.Result (RunnerResult(..), encodeRequestJson, buildRunnerResult)
+import Data.Aeson (FromJSON(..), ToJSON(..), (.:?), (.=), withObject)
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
-import qualified Data.ByteString.Lazy as BL
 import qualified Data.Aeson as Aeson
 
-data EmbeddingResult = EmbeddingResult
-  { requestJson  :: Text
-  , responseJson :: Text
-  , response     :: Maybe EmbeddingResponse
-  } deriving (Show, Eq)
+type EmbeddingResult = RunnerResult EmbeddingResponse
 
 data EmbeddingParams = EmbeddingParams
   { paramEncodingFormat :: Maybe Text
@@ -47,14 +42,7 @@ emptyEmbeddingParams :: EmbeddingParams
 emptyEmbeddingParams = EmbeddingParams Nothing Nothing Nothing
 
 parseEmbeddingParams :: Maybe Text -> Either Text EmbeddingParams
-parseEmbeddingParams = \case
-  Nothing -> Right emptyEmbeddingParams
-  Just raw
-    | T.null (T.strip raw) -> Right emptyEmbeddingParams
-    | otherwise ->
-        case Aeson.eitherDecode (BL.fromStrict (TE.encodeUtf8 raw)) of
-          Left err -> Left ("Invalid --extra-args JSON: " <> toText err)
-          Right params -> Right params
+parseEmbeddingParams = parseExtraArgs "Embeddings" emptyEmbeddingParams
 
 runEmbeddings :: Provider -> Text -> Maybe Text -> EmbeddingParams -> Text -> IO (Either Text EmbeddingResult)
 runEmbeddings provider apiKey modelOverride params inputText = do
@@ -66,11 +54,6 @@ runEmbeddings provider apiKey modelOverride params inputText = do
         , dimensions = paramDimensions params
         , user = paramUser params
         }
-      reqJsonText = TE.decodeUtf8Lenient (BL.toStrict (encode reqBody))
+      reqJsonText = encodeRequestJson reqBody
   resp <- sendEmbeddingsRaw provider apiKey reqBody
-  case resp of
-    Left err -> pure (Left (renderClientError err))
-    Right body ->
-      let respText = TE.decodeUtf8Lenient (BL.toStrict body)
-          decoded = decode body
-      in pure $ Right (EmbeddingResult reqJsonText respText decoded)
+  pure (buildRunnerResult reqJsonText resp)

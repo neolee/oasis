@@ -60,7 +60,10 @@ library:
   - Oasis.Runner.Common
   - Oasis.Runner.Embeddings
   - Oasis.Runner.Hooks
+  - Oasis.Runner.Render
+  - Oasis.Runner.Result
   - Oasis.Runner.Responses
+  - Oasis.Runner.Stream
   - Oasis.Runner.GetModels
   - Oasis.Runner.StructuredOutput
   - Oasis.Runner.ToolCalling

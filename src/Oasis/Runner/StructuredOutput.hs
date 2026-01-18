@@ -9,6 +9,7 @@ import Oasis.Client.OpenAI
 import Oasis.Client.OpenAI.Types (setChatStream, setChatResponseFormat)
 import qualified Oasis.Chat.Message as Msg
 import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams)
+import Oasis.Runner.Stream (forEachDeltaContent)
 import Data.Aeson (Value, decode, encode, (.=))
 import qualified Data.Aeson as Aeson
 import qualified Data.Text as T
@@ -88,9 +89,7 @@ runStructuredOutput provider apiKey modelOverride params mode = do
       pure (Right ())
 
 handleChunk :: IORef Text -> ChatCompletionStreamChunk -> IO ()
-handleChunk accumRef ChatCompletionStreamChunk{choices} =
-  forM_ choices $ \StreamChoice{delta} ->
-    forM_ delta $ \StreamDelta{content} ->
-      forM_ content $ \t -> do
-        putText t
-        modifyIORef' accumRef (<> t)
+handleChunk accumRef chunk =
+  forEachDeltaContent chunk $ \t -> do
+    putText t
+    modifyIORef' accumRef (<> t)
