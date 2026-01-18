@@ -43,7 +43,7 @@ The `Oasis.Client.OpenAI` module should expose a layered, reusable interface:
 
 1. **Core Types**
     - `ClientConfig`: base URL, API key, timeouts, proxies, default headers, user agent.
-    - `ChatCompletionRequest` / `ChatCompletionResponse`: full OpenAI-compatible fields (model, messages, temperature, top_p, max_tokens, stop, stream, tools, tool_choice, response_format, seed, logprobs, metadata).
+    - `ChatCompletionRequest` / `ChatCompletionResponse`: full OpenAI-compatible fields (model, messages, temperature, top_p, max_completion_tokens, stop, presence_penalty, frequency_penalty, seed, logit_bias, user, service_tier, reasoning_effort, stream, stream_options, tools, tool_choice, response_format).
     - `Message`, `Tool`, `ToolCall`, `Usage`, `ErrorResponse`.
     - `ChatCompletionStreamChunk` with `delta` content for streaming.
 
@@ -85,7 +85,7 @@ The `Oasis.Client.OpenAI` module should expose a layered, reusable interface:
 **L3: Runners (LLM capability modules)**
 - `Oasis.Runner.Chat` (multi-turn + streaming toggle).
 - `Oasis.Runner.Basic` (single-turn, non-streaming; full JSON input/output for low-level verification).
-- `Oasis.Runner.Structured`, `Oasis.Runner.ToolCalling` (future).
+- `Oasis.Runner.Structured`, `Oasis.Runner.ToolCalling`, etc.
 
 **L4: CLI Entry**
 - Menu + selection + rendering only; no protocol or session logic.

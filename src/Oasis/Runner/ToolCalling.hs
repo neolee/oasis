@@ -6,7 +6,7 @@ import Relude
 import Oasis.Types
 import qualified Oasis.Types as OT
 import Oasis.Client.OpenAI
-import Oasis.Runner.Common (resolveModelId)
+import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams)
 import Oasis.Service.Amap (getWeatherText)
 import Data.Aeson (Value, decode, eitherDecode, (.=))
 import qualified Data.Aeson as Aeson
@@ -16,8 +16,8 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
 import Data.Time (getZonedTime, formatTime, defaultTimeLocale)
 
-runToolCalling :: Provider -> Text -> Maybe Text -> IO (Either Text ())
-runToolCalling provider apiKey modelOverride = do
+runToolCalling :: Provider -> Text -> Maybe Text -> ChatParams -> IO (Either Text ())
+runToolCalling provider apiKey modelOverride params = do
   let modelId = resolveModelId provider modelOverride
       tools = buildTools
       systemMessage = T.unlines
@@ -30,16 +30,28 @@ runToolCalling provider apiKey modelOverride = do
         [ Message "system" systemMessage Nothing Nothing
         , Message "user" "上海天气" Nothing Nothing
         ]
-      reqBody = ChatCompletionRequest
+      reqBase = ChatCompletionRequest
         { model = modelId
         , messages = messages0
         , temperature = Nothing
+        , top_p = Nothing
+        , max_completion_tokens = Nothing
+        , stop = Nothing
+        , presence_penalty = Nothing
+        , frequency_penalty = Nothing
+        , seed = Nothing
+        , logit_bias = Nothing
+        , user = Nothing
+        , service_tier = Nothing
+        , reasoning_effort = Nothing
+        , stream_options = Nothing
         , stream = False
         , response_format = Nothing
         , tools = Just tools
         , tool_choice = Nothing
         , parallel_tool_calls = Just True
         }
+      reqBody = applyChatParams params reqBase
   firstResp <- sendChatCompletionRaw provider apiKey reqBody
   case firstResp of
     Left err -> pure (Left err)
@@ -60,16 +72,28 @@ runToolCalling provider apiKey modelOverride = do
               result <- executeToolCall toolCall
               let toolMsg = Message "tool" result (Just (OT.id toolCall)) Nothing
                   messages1 = messages0 <> [assistantMessage, toolMsg]
-                  reqBody2 = ChatCompletionRequest
+                  reqBase2 = ChatCompletionRequest
                     { model = modelId
                     , messages = messages1
                     , temperature = Nothing
+                    , top_p = Nothing
+                    , max_completion_tokens = Nothing
+                    , stop = Nothing
+                    , presence_penalty = Nothing
+                    , frequency_penalty = Nothing
+                    , seed = Nothing
+                    , logit_bias = Nothing
+                    , user = Nothing
+                    , service_tier = Nothing
+                    , reasoning_effort = Nothing
+                    , stream_options = Nothing
                     , stream = False
                     , response_format = Nothing
                     , tools = Just tools
                     , tool_choice = Nothing
                     , parallel_tool_calls = Nothing
                     }
+                  reqBody2 = applyChatParams params reqBase2
               secondResp <- sendChatCompletionRaw provider apiKey reqBody2
               case secondResp of
                 Left err -> pure (Left err)

@@ -8,7 +8,7 @@ import Oasis.Runner.Chat
 import Oasis.Runner.GetModels
 import Oasis.Runner.StructuredOutput
 import Oasis.Runner.ToolCalling
-import Oasis.Runner.Common (resolveModelId)
+import Oasis.Runner.Common (resolveModelId, parseChatParams)
 import qualified Data.Text as T
 import qualified Data.List as L
 import GHC.IO.Encoding (setLocaleEncoding, utf8)
@@ -44,10 +44,10 @@ main = do
     _ -> do
       putTextLn "Usage: oasis-cli <provider> <model|default|-> <runner> [runner args...]"
       putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling"
-      putTextLn "Chat runner args: [--no-stream] [--hide-thinking] [initial prompt...]"
-      putTextLn "Basic runner args: <prompt...>"
-      putTextLn "Structured runner args: (none)"
-      putTextLn "Tool calling runner args: (none)"
+      putTextLn "Chat runner args: [--no-stream] [--hide-thinking] [--extra-args <json>] [initial prompt...]"
+      putTextLn "Basic runner args: [--extra-args <json>] <prompt...>"
+      putTextLn "Structured runner args: [--extra-args <json>]"
+      putTextLn "Tool calling runner args: [--extra-args <json>]"
       exitFailure
 
 normalizeModel :: Text -> Maybe Text
@@ -55,6 +55,27 @@ normalizeModel t
   | T.toLower (T.strip t) `elem` ["default", "-"] = Nothing
   | T.null (T.strip t) = Nothing
   | otherwise = Just t
+
+extractExtraArgs :: [String] -> Either Text (Maybe Text, [String])
+extractExtraArgs = go Nothing []
+  where
+    go found acc = \case
+      [] -> Right (found, reverse acc)
+      (x:xs)
+        | x == "--extra-args" ->
+            case xs of
+              [] -> Left "Missing value for --extra-args"
+              (v:rest) ->
+                if isJust found
+                  then Left "--extra-args specified more than once"
+                  else go (Just (toText v)) acc rest
+        | "--extra-args=" `L.isPrefixOf` x ->
+            let prefix = "--extra-args=" :: String
+                v = drop (length prefix) x
+            in if isJust found
+              then Left "--extra-args specified more than once"
+              else go (Just (toText v)) acc xs
+        | otherwise -> go found (x:acc) xs
 
 dispatchRunner :: Text -> Provider -> Text -> Maybe Text -> Text -> [String] -> IO ()
 dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
@@ -66,37 +87,57 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
       if apiKey /= ""
         then putTextLn "API Key: Found (hidden)"
         else putTextLn "API Key: NOT FOUND (Check environment variables)"
-      let prompt = T.unwords (map toText runnerArgs)
-      if T.null (T.strip prompt)
-        then do
-          putTextLn "Basic runner requires a prompt."
+      case extractExtraArgs runnerArgs of
+        Left err -> do
+          putTextLn err
           exitFailure
-        else do
+        Right (extraArgsText, restArgs) -> do
+          params <- case parseChatParams extraArgsText of
+            Left err -> do
+              putTextLn err
+              exitFailure
+            Right p -> pure p
+          let prompt = T.unwords (map toText restArgs)
+          if T.null (T.strip prompt)
+            then do
+              putTextLn "Basic runner requires a prompt."
+              exitFailure
+            else do
+              putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+              result <- runBasic provider apiKey modelOverride params prompt
+              case result of
+                Left err -> do
+                  putTextLn $ "Request failed: " <> err
+                  exitFailure
+                Right BasicResult{requestJson, responseJson, response} -> do
+                  putTextLn "--- Request JSON ---"
+                  putTextLn requestJson
+                  putTextLn "--- Response JSON ---"
+                  putTextLn responseJson
+                  when (isNothing response) $
+                    putTextLn "Warning: response JSON could not be decoded."
+    "chat" -> do
+      case extractExtraArgs runnerArgs of
+        Left err -> do
+          putTextLn err
+          exitFailure
+        Right (extraArgsText, restArgs) -> do
+          params <- case parseChatParams extraArgsText of
+            Left err -> do
+              putTextLn err
+              exitFailure
+            Right p -> pure p
+          let (flags, rest) = L.partition (L.isPrefixOf "--") restArgs
+              useStream = "--no-stream" `notElem` flags
+              showThinking = "--hide-thinking" `notElem` flags
+              initialPrompt = if null rest then Nothing else Just (T.unwords (map toText rest))
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runBasic provider apiKey modelOverride prompt
+          result <- runChat provider apiKey modelOverride params (ChatOptions useStream showThinking) initialPrompt
           case result of
             Left err -> do
               putTextLn $ "Request failed: " <> err
               exitFailure
-            Right BasicResult{requestJson, responseJson, response} -> do
-              putTextLn "--- Request JSON ---"
-              putTextLn requestJson
-              putTextLn "--- Response JSON ---"
-              putTextLn responseJson
-              when (isNothing response) $
-                putTextLn "Warning: response JSON could not be decoded."
-    "chat" -> do
-      let (flags, rest) = L.partition (L.isPrefixOf "--") runnerArgs
-          useStream = "--no-stream" `notElem` flags
-          showThinking = "--hide-thinking" `notElem` flags
-          initialPrompt = if null rest then Nothing else Just (T.unwords (map toText rest))
-      putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-      result <- runChat provider apiKey modelOverride (ChatOptions useStream showThinking) initialPrompt
-      case result of
-        Left err -> do
-          putTextLn $ "Request failed: " <> err
-          exitFailure
-        Right _ -> pure ()
+            Right _ -> pure ()
     "models" -> do
       putTextLn $ "Loading config for alias: " <> alias
       putTextLn "--- Resolved Provider ---"
@@ -115,29 +156,68 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
           when (isNothing response) $
             putTextLn "Warning: response JSON could not be decoded."
     "structured-json" -> do
-      putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-      result <- runStructuredOutput provider apiKey modelOverride JSONObject
-      case result of
+      case extractExtraArgs runnerArgs of
         Left err -> do
-          putTextLn $ "Request failed: " <> err
+          putTextLn err
           exitFailure
-        Right _ -> pure ()
+        Right (extraArgsText, restArgs) -> do
+          unless (null restArgs) $ do
+            putTextLn "Structured runner does not accept positional args."
+            exitFailure
+          params <- case parseChatParams extraArgsText of
+            Left err -> do
+              putTextLn err
+              exitFailure
+            Right p -> pure p
+          putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+          result <- runStructuredOutput provider apiKey modelOverride params JSONObject
+          case result of
+            Left err -> do
+              putTextLn $ "Request failed: " <> err
+              exitFailure
+            Right _ -> pure ()
     "structured-schema" -> do
-      putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-      result <- runStructuredOutput provider apiKey modelOverride JSONSchema
-      case result of
+      case extractExtraArgs runnerArgs of
         Left err -> do
-          putTextLn $ "Request failed: " <> err
+          putTextLn err
           exitFailure
-        Right _ -> pure ()
+        Right (extraArgsText, restArgs) -> do
+          unless (null restArgs) $ do
+            putTextLn "Structured runner does not accept positional args."
+            exitFailure
+          params <- case parseChatParams extraArgsText of
+            Left err -> do
+              putTextLn err
+              exitFailure
+            Right p -> pure p
+          putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+          result <- runStructuredOutput provider apiKey modelOverride params JSONSchema
+          case result of
+            Left err -> do
+              putTextLn $ "Request failed: " <> err
+              exitFailure
+            Right _ -> pure ()
     "tool-calling" -> do
-      putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-      result <- runToolCalling provider apiKey modelOverride
-      case result of
+      case extractExtraArgs runnerArgs of
         Left err -> do
-          putTextLn $ "Request failed: " <> err
+          putTextLn err
           exitFailure
-        Right _ -> pure ()
+        Right (extraArgsText, restArgs) -> do
+          unless (null restArgs) $ do
+            putTextLn "Tool calling runner does not accept positional args."
+            exitFailure
+          params <- case parseChatParams extraArgsText of
+            Left err -> do
+              putTextLn err
+              exitFailure
+            Right p -> pure p
+          putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+          result <- runToolCalling provider apiKey modelOverride params
+          case result of
+            Left err -> do
+              putTextLn $ "Request failed: " <> err
+              exitFailure
+            Right _ -> pure ()
     _ -> do
       putTextLn $ "Unknown runner: " <> runnerName
       putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling"

@@ -6,7 +6,7 @@ module Oasis.Runner.StructuredOutput
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
-import Oasis.Runner.Common (resolveModelId)
+import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams)
 import Data.Aeson (Value, decode, encode, (.=))
 import qualified Data.Aeson as Aeson
 import qualified Data.Text as T
@@ -57,23 +57,35 @@ data StructuredMode
   | JSONSchema
   deriving (Show, Eq)
 
-runStructuredOutput :: Provider -> Text -> Maybe Text -> StructuredMode -> IO (Either Text ())
-runStructuredOutput provider apiKey modelOverride mode = do
+runStructuredOutput :: Provider -> Text -> Maybe Text -> ChatParams -> StructuredMode -> IO (Either Text ())
+runStructuredOutput provider apiKey modelOverride params mode = do
   let modelId = resolveModelId provider modelOverride
       messages = [Message "system" systemMessage Nothing Nothing, Message "user" questionText Nothing Nothing]
       responseFormat = case mode of
         JSONObject -> jsonObjectFormat
         JSONSchema -> jsonSchemaFormat
-      reqBody = ChatCompletionRequest
+      reqBase = ChatCompletionRequest
         { model = modelId
         , messages = messages
         , temperature = Nothing
+        , top_p = Nothing
+        , max_completion_tokens = Nothing
+        , stop = Nothing
+        , presence_penalty = Nothing
+        , frequency_penalty = Nothing
+        , seed = Nothing
+        , logit_bias = Nothing
+        , user = Nothing
+        , service_tier = Nothing
+        , reasoning_effort = Nothing
+        , stream_options = Nothing
         , stream = True
         , response_format = Just responseFormat
         , tools = Nothing
         , tool_choice = Nothing
         , parallel_tool_calls = Nothing
         }
+      reqBody = applyChatParams params reqBase
   accumRef <- newIORef ""
   result <- streamChatCompletionWithRequest provider apiKey reqBody (handleChunk accumRef)
   case result of

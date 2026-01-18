@@ -34,6 +34,17 @@ data ChatCompletionRequest = ChatCompletionRequest
   { model       :: Text
   , messages    :: [Message]
   , temperature :: Maybe Double
+  , top_p       :: Maybe Double
+  , max_completion_tokens :: Maybe Int
+  , stop        :: Maybe StopParam
+  , presence_penalty :: Maybe Double
+  , frequency_penalty :: Maybe Double
+  , seed        :: Maybe Int
+  , logit_bias  :: Maybe Value
+  , user        :: Maybe Text
+  , service_tier :: Maybe Text
+  , reasoning_effort :: Maybe Text
+  , stream_options :: Maybe Value
   , stream      :: Bool
   , response_format :: Maybe Value
   , tools       :: Maybe [Tool]
@@ -155,6 +166,17 @@ sendChatCompletion provider apiKey modelId msgs = do
         { model = modelId
         , messages = msgs
         , temperature = Nothing
+        , top_p = Nothing
+        , max_completion_tokens = Nothing
+        , stop = Nothing
+        , presence_penalty = Nothing
+        , frequency_penalty = Nothing
+        , seed = Nothing
+        , logit_bias = Nothing
+        , user = Nothing
+        , service_tier = Nothing
+        , reasoning_effort = Nothing
+        , stream_options = Nothing
         , stream = False
         , response_format = Nothing
         , tools = Nothing
@@ -194,6 +216,17 @@ streamChatCompletion provider apiKey modelId msgs onChunk = do
         { model = modelId
         , messages = msgs
         , temperature = Nothing
+      , top_p = Nothing
+      , max_completion_tokens = Nothing
+      , stop = Nothing
+      , presence_penalty = Nothing
+      , frequency_penalty = Nothing
+      , seed = Nothing
+      , logit_bias = Nothing
+      , user = Nothing
+      , service_tier = Nothing
+      , reasoning_effort = Nothing
+      , stream_options = Nothing
         , stream = True
         , response_format = Nothing
       , tools = Nothing

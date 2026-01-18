@@ -3,7 +3,8 @@
 module Oasis.Types where
 
 import Relude
-import Data.Aeson (ToJSON(..), FromJSON(..), Value, defaultOptions, fieldLabelModifier, genericToJSON, genericParseJSON, withObject, (.:), (.:?), (.=), object)
+import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), defaultOptions, fieldLabelModifier, genericToJSON, genericParseJSON, withArray, withObject, withText, (.:), (.:?), (.=), object)
+import qualified Data.Vector as V
 import Toml (decode)
 import Toml.Schema (FromValue(..), parseTableFromValue, reqKey, optKey)
 import Toml.Schema.Generic (GenericTomlTable(..))
@@ -70,6 +71,21 @@ data ToolCallFunction = ToolCallFunction
   { name      :: Text
   , arguments :: Text
   } deriving (Show, Eq, Generic, FromJSON, ToJSON)
+
+data StopParam
+  = StopText Text
+  | StopList [Text]
+  deriving (Show, Eq)
+
+instance ToJSON StopParam where
+  toJSON = \case
+    StopText t -> String t
+    StopList xs -> toJSON xs
+
+instance FromJSON StopParam where
+  parseJSON v =
+    withText "StopParam" (pure . StopText) v
+    <|> withArray "StopParam" (\arr -> StopList <$> traverse parseJSON (V.toList arr)) v
 
 data ToolCall = ToolCall
   { id       :: Text

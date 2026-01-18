@@ -7,8 +7,11 @@ import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
 import Oasis.Chat.History
-import Oasis.Runner.Common (resolveModelId)
+import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams)
+import Data.Aeson (eitherDecode)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
+import qualified Data.ByteString.Lazy as BL
 import qualified System.IO as SIO
 import Control.Monad (foldM)
 
@@ -17,8 +20,8 @@ data ChatOptions = ChatOptions
   , showThinking :: Bool
   } deriving (Show, Eq)
 
-runChat :: Provider -> Text -> Maybe Text -> ChatOptions -> Maybe Text -> IO (Either Text ())
-runChat provider apiKey modelOverride opts initialPrompt = do
+runChat :: Provider -> Text -> Maybe Text -> ChatParams -> ChatOptions -> Maybe Text -> IO (Either Text ())
+runChat provider apiKey modelOverride params opts initialPrompt = do
   let modelId = resolveModelId provider modelOverride
   putTextLn "--- Chat ---"
   putTextLn "Type /help for commands."
@@ -57,21 +60,70 @@ runChat provider apiKey modelOverride opts initialPrompt = do
         Right answer -> pure (Right (answer, appendMessage (Message "assistant" answer Nothing Nothing) history'))
 
     nonStreamOnce modelId msgs = do
-      resp <- sendChatCompletion provider apiKey modelId msgs
-      case resp of
+      let reqBase = ChatCompletionRequest
+            { model = modelId
+            , messages = msgs
+            , temperature = Nothing
+            , top_p = Nothing
+            , max_completion_tokens = Nothing
+            , stop = Nothing
+            , presence_penalty = Nothing
+            , frequency_penalty = Nothing
+            , seed = Nothing
+            , logit_bias = Nothing
+            , user = Nothing
+            , service_tier = Nothing
+            , reasoning_effort = Nothing
+            , stream_options = Nothing
+            , stream = False
+            , response_format = Nothing
+            , tools = Nothing
+            , tool_choice = Nothing
+            , parallel_tool_calls = Nothing
+            }
+          reqBody = applyChatParams params reqBase
+      raw <- sendChatCompletionRaw provider apiKey reqBody
+      case raw of
         Left err -> pure (Left err)
-        Right response ->
-          case extractAssistantContent response of
-            Nothing -> pure (Left "No assistant message returned.")
-            Just content -> do
-              rendered <- renderNonStreaming opts content
-              putTextLn ""
-              pure (Right rendered)
+        Right body ->
+          case eitherDecode body of
+            Left err ->
+              let rawText = TE.decodeUtf8Lenient (BL.toStrict body)
+              in pure $ Left ("Failed to decode response: " <> toText err <> "\nRaw: " <> rawText)
+            Right response ->
+              case extractAssistantContent response of
+                Nothing -> pure (Left "No assistant message returned.")
+                Just content -> do
+                  rendered <- renderNonStreaming opts content
+                  putTextLn ""
+                  pure (Right rendered)
 
     streamOnce modelId msgs = do
       let initAccum = StreamAccum InAnswer "" "" False False
+          reqBase = ChatCompletionRequest
+            { model = modelId
+            , messages = msgs
+            , temperature = Nothing
+            , top_p = Nothing
+            , max_completion_tokens = Nothing
+            , stop = Nothing
+            , presence_penalty = Nothing
+            , frequency_penalty = Nothing
+            , seed = Nothing
+            , logit_bias = Nothing
+            , user = Nothing
+            , service_tier = Nothing
+            , reasoning_effort = Nothing
+            , stream_options = Nothing
+            , stream = True
+            , response_format = Nothing
+            , tools = Nothing
+            , tool_choice = Nothing
+            , parallel_tool_calls = Nothing
+            }
+          reqBody = applyChatParams params reqBase
       accumRef <- newIORef initAccum
-      result <- streamChatCompletion provider apiKey modelId msgs (handleChunk opts accumRef)
+      result <- streamChatCompletionWithRequest provider apiKey reqBody (handleChunk opts accumRef)
       case result of
         Left err -> pure (Left err)
         Right _ -> do

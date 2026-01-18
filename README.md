@@ -34,5 +34,31 @@ Positional arguments:
 
 Runner args:
 
-- `basic <prompt...>`: Single-turn, non-streaming. Prints raw request/response JSON for debugging.
-- `chat [--no-stream] [--hide-thinking] [initial prompt...]`: Multi-turn chat. Defaults to streaming and showing thinking.
+- `basic [--extra-args <json>] <prompt...>`: Single-turn, non-streaming. Prints raw request/response JSON for debugging.
+- `chat [--no-stream] [--hide-thinking] [--extra-args <json>] [initial prompt...]`: Multi-turn chat. Defaults to streaming and showing thinking.
+- `structured-json [--extra-args <json>]`: Structured output (JSON object).
+- `structured-schema [--extra-args <json>]`: Structured output (JSON schema).
+- `tool-calling [--extra-args <json>]`: Tool calling demo.
+
+### Extra Args (Model Parameters)
+
+Use `--extra-args` to pass OpenAI-compatible request parameters as JSON. Field names should follow the OpenAI API naming (snake_case). Example parameters supported:
+
+- `temperature`
+- `top_p`
+- `max_completion_tokens`
+- `stop` (string or array)
+- `presence_penalty`
+- `frequency_penalty`
+- `seed`
+- `logit_bias` (object)
+- `user`
+- `service_tier`
+- `reasoning_effort`
+- `stream_options` (object)
+
+Example (basic runner prints request JSON):
+
+```
+oasis-cli deepseek - basic --extra-args '{"temperature":0.2,"top_p":0.9,"max_completion_tokens":64,"stop":["\n\n"],"logit_bias":{"123":-2},"user":"u1","service_tier":"default","reasoning_effort":"low","stream_options":{"include_usage":true}}' 你好
+```
