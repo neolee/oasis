@@ -11,6 +11,7 @@ module Oasis.Client.OpenAI
   , sendChatCompletion
   , sendChatCompletionRaw
   , streamChatCompletion
+  , streamChatCompletionWithRequest
   , buildChatUrl
   , buildModelsUrl
   , sendModelsRaw
@@ -34,6 +35,7 @@ data ChatCompletionRequest = ChatCompletionRequest
   , messages    :: [Message]
   , temperature :: Maybe Double
   , stream      :: Bool
+  , response_format :: Maybe Value
   } deriving (Show, Eq, Generic)
 
 instance ToJSON ChatCompletionRequest where
@@ -151,6 +153,7 @@ sendChatCompletion provider apiKey modelId msgs = do
         , messages = msgs
         , temperature = Nothing
         , stream = False
+        , response_format = Nothing
         }
   resp <- sendChatCompletionRaw provider apiKey reqBody
   case resp of
@@ -181,14 +184,19 @@ sendChatCompletionRaw provider apiKey reqBody = do
 
 streamChatCompletion :: Provider -> Text -> Text -> [Message] -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either Text ())
 streamChatCompletion provider apiKey modelId msgs onChunk = do
-  manager <- newManager tlsManagerSettings
-  let url = buildChatUrl (base_url provider)
-      reqBody = ChatCompletionRequest
+  let reqBody = ChatCompletionRequest
         { model = modelId
         , messages = msgs
         , temperature = Nothing
         , stream = True
+        , response_format = Nothing
         }
+  streamChatCompletionWithRequest provider apiKey reqBody onChunk
+
+streamChatCompletionWithRequest :: Provider -> Text -> ChatCompletionRequest -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either Text ())
+streamChatCompletionWithRequest provider apiKey reqBody onChunk = do
+  manager <- newManager tlsManagerSettings
+  let url = buildChatUrl (base_url provider)
   initReq <- parseRequest (toString url)
   let headers =
         [ (hContentType, "application/json")

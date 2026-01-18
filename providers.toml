@@ -10,7 +10,6 @@ beta_base_url = "https://api.deepseek.com/beta"
 chat_model_id = "deepseek-chat"
 coder_model_id = "deepseek-chat"
 reasoner_model_id = "deepseek-reasoner"
-default_model_type = "reasoner"
 
 [providers.aliyun_deepseek]
 description = "DeepSeek on Aliyun"

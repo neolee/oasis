@@ -55,6 +55,7 @@ library:
   - Oasis.Runner.Chat
   - Oasis.Runner.Common
   - Oasis.Runner.GetModels
+  - Oasis.Runner.StructuredOutput
   - Oasis.Types
 
 executables:

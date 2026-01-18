@@ -6,6 +6,7 @@ import Oasis.Types
 import Oasis.Runner.Basic
 import Oasis.Runner.Chat
 import Oasis.Runner.GetModels
+import Oasis.Runner.StructuredOutput
 import Oasis.Runner.Common (resolveModelId)
 import qualified Data.Text as T
 import qualified Data.List as L
@@ -41,9 +42,10 @@ main = do
                 Just (p, key) -> dispatchRunner alias p key modelOverride runnerName runnerArgs
     _ -> do
       putTextLn "Usage: oasis-cli <provider> <model|default|-> <runner> [runner args...]"
-      putTextLn "Runners: basic, chat, models"
+      putTextLn "Runners: basic, chat, models, structured-json, structured-schema"
       putTextLn "Chat runner args: [--no-stream] [--hide-thinking] [initial prompt...]"
       putTextLn "Basic runner args: <prompt...>"
+      putTextLn "Structured runner args: (none)"
       exitFailure
 
 normalizeModel :: Text -> Maybe Text
@@ -110,7 +112,23 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
           putTextLn responseJson
           when (isNothing response) $
             putTextLn "Warning: response JSON could not be decoded."
+    "structured-json" -> do
+      putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+      result <- runStructuredOutput provider apiKey modelOverride JSONObject
+      case result of
+        Left err -> do
+          putTextLn $ "Request failed: " <> err
+          exitFailure
+        Right _ -> pure ()
+    "structured-schema" -> do
+      putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+      result <- runStructuredOutput provider apiKey modelOverride JSONSchema
+      case result of
+        Left err -> do
+          putTextLn $ "Request failed: " <> err
+          exitFailure
+        Right _ -> pure ()
     _ -> do
       putTextLn $ "Unknown runner: " <> runnerName
-      putTextLn "Runners: basic, chat, models"
+      putTextLn "Runners: basic, chat, models, structured-json, structured-schema"
       exitFailure
