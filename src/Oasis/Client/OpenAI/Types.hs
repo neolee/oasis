@@ -21,6 +21,7 @@ module Oasis.Client.OpenAI.Types
   , ErrorDetail(..)
   , ErrorResponse(..)
   , ClientError(..)
+  , renderClientError
   ) where
 
 import Relude
@@ -285,3 +286,16 @@ data ClientError = ClientError
   , errorResponse :: Maybe ErrorResponse
   , rawBody      :: Text
   } deriving (Show, Eq, Generic)
+
+renderClientError :: ClientError -> Text
+renderClientError ClientError{status, statusText, requestId, errorResponse, rawBody} =
+  let header = "HTTP " <> show status <> " " <> statusText
+      reqLine = maybe "" ("\nRequest-Id: " <>) requestId
+      errLine = case errorResponse of
+        Nothing -> ""
+        Just ErrorResponse{error = ErrorDetail{message, type_, code}} ->
+          let typeLine = maybe "" ("\nType: " <>) type_
+              codeLine = maybe "" ("\nCode: " <>) code
+          in "\nError: " <> message <> typeLine <> codeLine
+      rawLine = if rawBody == "" then "" else "\nRaw: " <> rawBody
+  in header <> reqLine <> errLine <> rawLine

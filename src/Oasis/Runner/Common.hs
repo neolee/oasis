@@ -11,6 +11,7 @@ module Oasis.Runner.Common
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI (ChatCompletionRequest(..))
+import Oasis.Chat.Message (userMessage)
 import Data.Aeson (FromJSON(..), ToJSON(..), (.:?), (.=), object, withObject)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -34,7 +35,7 @@ resolveModelId provider = \case
   _ -> selectModelId provider
 
 buildUserMessages :: Text -> [Message]
-buildUserMessages prompt = [Message "user" (ContentText prompt) Nothing Nothing]
+buildUserMessages prompt = [userMessage prompt]
 
 data ChatParams = ChatParams
   { paramTemperature :: Maybe Double

@@ -7,6 +7,7 @@ import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
 import Oasis.Client.OpenAI.Types (setChatStream, setChatResponseFormat)
+import qualified Oasis.Chat.Message as Msg
 import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams)
 import Data.Aeson (Value, decode, encode, (.=))
 import qualified Data.Aeson as Aeson
@@ -62,8 +63,8 @@ runStructuredOutput :: Provider -> Text -> Maybe Text -> ChatParams -> Structure
 runStructuredOutput provider apiKey modelOverride params mode = do
   let modelId = resolveModelId provider modelOverride
       messages =
-        [ Message "system" (ContentText systemMessage) Nothing Nothing
-        , Message "user" (ContentText questionText) Nothing Nothing
+        [ Msg.systemMessage systemMessage
+        , Msg.userMessage questionText
         ]
       responseFormat = case mode of
         JSONObject -> jsonObjectFormat

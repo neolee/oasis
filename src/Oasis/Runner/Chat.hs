@@ -8,6 +8,7 @@ import Oasis.Types
 import Oasis.Client.OpenAI
 import Oasis.Client.OpenAI.Types (setChatStream)
 import Oasis.Chat.History
+import qualified Oasis.Chat.Message as Msg
 import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams)
 import Data.Aeson (eitherDecode)
 import qualified Data.Text as T
@@ -51,14 +52,14 @@ runChat provider apiKey modelOverride params opts initialPrompt = do
               Right (_, newHistory) -> loop modelId newHistory
 
     chatOnce modelId history line = do
-      let history' = appendMessage (Message "user" (ContentText line) Nothing Nothing) history
+      let history' = appendMessage (Msg.userMessage line) history
           msgs = getMessages history'
       result <- if streaming opts
         then streamOnce modelId msgs
         else nonStreamOnce modelId msgs
       case result of
         Left err -> pure (Left err)
-        Right answer -> pure (Right (answer, appendMessage (Message "assistant" (ContentText answer) Nothing Nothing) history'))
+        Right answer -> pure (Right (answer, appendMessage (Msg.assistantMessage answer) history'))
 
     nonStreamOnce modelId msgs = do
       let reqBase = defaultChatRequest modelId msgs
