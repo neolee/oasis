@@ -16,10 +16,6 @@ The project aims to simplify the integration of various LLMs into Haskell applic
 - **Pluggable Runners**: A flexible "Runner" architecture to implement and test different LLM use cases.
 - **Type-Safe Models**: Clear data structures for messages, tools, and model configurations.
 
-## Getting Started
-
-*(Instructions for building with Stack/Cabal will be added as the implementation progresses.)*
-
 ## CLI Parameters
 
 Usage:

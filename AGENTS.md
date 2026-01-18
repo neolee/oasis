@@ -90,7 +90,7 @@ The `Oasis.Client.OpenAI` module should expose a layered, reusable interface:
 **L4: CLI Entry**
 - Menu + selection + rendering only; no protocol or session logic.
 
-## Build & Verification (Every Iteration) — Phase 1–4 Complete
+## Build & Verification
 
 Each iteration must pass the following baseline checks before moving forward:
 
@@ -99,53 +99,3 @@ Each iteration must pass the following baseline checks before moving forward:
 
 2. **Build**
     - `stack build`
-
-3. **Phase 1 Verification (Config Resolution)**
-    - `stack exec oasis-cli -- deepseek`
-    - Expected: prints the resolved `Provider` and API key presence status.
-
-4. **Phase 2 Verification (Non-Streaming Chat)**
-    - `stack exec oasis-cli -- deepseek "Hello"`
-    - Expected: prints a valid JSON response decoded as `ChatCompletionResponse`.
-
-5. **Phase 3 Verification (Streaming Chat)**
-    - `stack exec oasis-cli -- --stream deepseek "Hello"`
-    - Expected: prints incremental tokens, ending with a newline.
-
-6. **Phase 4 Verification (Interactive Chat)**
-    - `stack exec oasis-cli -- --interactive --show-thinking deepseek`
-    - Expected: opens an interactive loop where multi-turn chat works.
-
-## Implementation Phases
-
-### Phase 1: Infrastructure & MAL (Verifiable: Config Printing)
-- Define core types for `Provider`, `Model`, `Message`, and `Completion`.
-- Implement TOML parser for `providers.toml`.
-- API Key management from environment variables.
-- **Verification**: A small CLI tool that loads `providers.toml` and prints a resolved `Provider` object based on an alias.
-
-### Phase 2: Non-Streaming Client (Verifiable: Non-Streaming Chat)
-- Implement basic OpenAI-compatible HTTP client.
-- Handle authentication and error responses.
-- **Verification**: A runner that sends a single question to an LLM and prints the full JSON-decoded response.
-
-### Phase 3: Streaming & Conduit (Verifiable: Real-time Output)
-- Implement streaming support using `conduit`.
-- Parse Server-Sent Events (SSE) into incremental chunks.
-- **Verification**: A terminal output that prints tokens as they are received from the API.
-
-### Phase 4: Interactive Chat & History (Verifiable: Multi-turn Chat)
-- Implement `ChatRunner` with multi-turn conversation logic.
-- Handle "Reasoning" tokens for models like DeepSeek-R1.
-- **Verification**: An interactive terminal loop where the user can carry out a full conversation.
-
-### Phase 5: Extensions & Interceptors
-- Implement Structured Output and Tool Calling.
-- Add logging and context modification interceptors.
-
-## Agent Context & Instructions
-
--   **Source Material**: Reference implementation is in `/ref/`. 
--   **MAL Logic**: The Python `mal/` module provides a good reference for how providers are indexed and selected.
--   **Type Safety**: Prioritize strong types over raw strings (e.g., use an `Enum` or sum type for `ModelType` instead of raw strings like `"chat"`).
--   **Error Handling**: Use explicit error types rather than throwing exceptions where possible.
