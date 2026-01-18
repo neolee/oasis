@@ -90,24 +90,31 @@ The `Oasis.Client.OpenAI` module should expose a layered, reusable interface:
 **L4: CLI Entry**
 - Menu + selection + rendering only; no protocol or session logic.
 
-## Build & Verification (Every Iteration)
+## Build & Verification (Every Iteration) — Phase 1–4 Complete
 
 Each iteration must pass the following baseline checks before moving forward:
 
-1. **Build**
+1. **Typecheck (HLS diagnostics)**
+    - `haskell-language-server-wrapper typecheck .`
+
+2. **Build**
     - `stack build`
 
-2. **Phase 1 Verification (Config Resolution)**
+3. **Phase 1 Verification (Config Resolution)**
     - `stack exec oasis-cli -- deepseek`
     - Expected: prints the resolved `Provider` and API key presence status.
 
-3. **Phase 2 Verification (Non-Streaming Chat)**
+4. **Phase 2 Verification (Non-Streaming Chat)**
     - `stack exec oasis-cli -- deepseek "Hello"`
     - Expected: prints a valid JSON response decoded as `ChatCompletionResponse`.
 
-4. **Phase 3 Verification (Streaming Chat)**
+5. **Phase 3 Verification (Streaming Chat)**
     - `stack exec oasis-cli -- --stream deepseek "Hello"`
     - Expected: prints incremental tokens, ending with a newline.
+
+6. **Phase 4 Verification (Interactive Chat)**
+    - `stack exec oasis-cli -- --interactive --show-thinking deepseek`
+    - Expected: opens an interactive loop where multi-turn chat works.
 
 ## Implementation Phases
 

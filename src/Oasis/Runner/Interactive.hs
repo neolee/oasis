@@ -12,7 +12,7 @@ import qualified Data.Text as T
 import qualified System.IO as SIO
 import Control.Monad (foldM)
 
-data DisplayOptions = DisplayOptions
+newtype DisplayOptions = DisplayOptions
   { showThinking :: Bool
   } deriving (Show, Eq)
 
@@ -113,14 +113,12 @@ showHistory history =
 handleChunk :: DisplayOptions -> IORef StreamAccum -> ChatCompletionStreamChunk -> IO ()
 handleChunk opts accumRef ChatCompletionStreamChunk{choices = streamChoices} =
   forM_ streamChoices $ \c ->
-    forM_ (delta c) $ \d ->
-      case d of
-        StreamDelta{reasoning = deltaReasoning, thinking = deltaThinking, reasoning_content = deltaReasoningContent, content = deltaContent} -> do
-          let reasoningText = deltaReasoning <|> deltaThinking <|> deltaReasoningContent
-          case reasoningText of
-            Just r -> emitThinking opts accumRef r
-            Nothing ->
-              forM_ deltaContent $ \t -> emitContent opts accumRef t
+    forM_ (delta c) $ \StreamDelta{reasoning = deltaReasoning, thinking = deltaThinking, reasoning_content = deltaReasoningContent, content = deltaContent} -> do
+      let reasoningText = deltaReasoning <|> deltaThinking <|> deltaReasoningContent
+      case reasoningText of
+        Just r -> emitThinking opts accumRef r
+        Nothing ->
+          forM_ deltaContent $ \t -> emitContent opts accumRef t
 
 emitContent :: DisplayOptions -> IORef StreamAccum -> Text -> IO ()
 emitContent opts accumRef text = do
@@ -154,7 +152,7 @@ emitPart DisplayOptions{showThinking} (thinkingBuffer, answerBuffer, printedThin
             when showThinking $ do
               putTextLn ""
               putTextLn "## Answer"
-          when (not showThinking) $ pure ()
+          unless showThinking $ pure ()
           putText t
           pure (thinkingBuffer, answerBuffer <> t, printedThinking, True)
 

@@ -10,7 +10,7 @@ import Oasis.Types
 import Oasis.Client.OpenAI
 import qualified Data.Text as T
 
-data ChatOptions = ChatOptions
+newtype ChatOptions = ChatOptions
   { streaming :: Bool
   } deriving (Show, Eq)
 
@@ -35,7 +35,5 @@ runChat provider apiKey ChatOptions{streaming} messages onChunk = do
 handleStreamChunkContentOnly :: (Text -> IO ()) -> ChatCompletionStreamChunk -> IO ()
 handleStreamChunkContentOnly onToken ChatCompletionStreamChunk{choices = streamChoices} =
   forM_ streamChoices $ \c ->
-    forM_ (delta c) $ \d ->
-      case d of
-        StreamDelta{content = deltaContent} ->
-          forM_ deltaContent onToken
+    forM_ (delta c) $ \StreamDelta{content = deltaContent} ->
+      forM_ deltaContent onToken

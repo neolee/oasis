@@ -7,7 +7,7 @@ module Oasis.Chat.Log
 import Relude
 import Oasis.Types
 
-data ChatLogEntry = ChatLogEntry
+newtype ChatLogEntry = ChatLogEntry
   { message   :: Message
   } deriving (Show, Eq)
 
