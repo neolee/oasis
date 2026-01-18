@@ -30,6 +30,7 @@ dependencies:
 - directory
 - filepath
 - time
+- vector
 
 default-extensions:
 - NoImplicitPrelude
@@ -58,6 +59,7 @@ library:
   - Oasis.Runner.GetModels
   - Oasis.Runner.StructuredOutput
   - Oasis.Runner.ToolCalling
+  - Oasis.Service.Amap
   - Oasis.Types
 
 executables:

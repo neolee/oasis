@@ -7,6 +7,7 @@ import Oasis.Types
 import qualified Oasis.Types as OT
 import Oasis.Client.OpenAI
 import Oasis.Runner.Common (resolveModelId)
+import Oasis.Service.Amap (getWeatherText)
 import Data.Aeson (Value, decode, eitherDecode, (.=))
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.KeyMap as KM
@@ -148,8 +149,11 @@ getLocation (Aeson.Object obj) =
 getLocation _ = Nothing
 
 getCurrentWeather :: Text -> IO Text
-getCurrentWeather location =
-  pure (location <> "今天天气是晴。")
+getCurrentWeather location = do
+  result <- getWeatherText location
+  case result of
+    Left err -> pure (location <> "天气查询失败：" <> err)
+    Right weather -> pure (location <> "今天天气是" <> weather <> "。")
 
 getCurrentTime :: IO Text
 getCurrentTime = do
