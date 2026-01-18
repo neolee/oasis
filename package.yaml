@@ -61,6 +61,9 @@ library:
   - Oasis.Runner.ToolCalling
   - Oasis.Service.Amap
   - Oasis.Types
+  other-modules:
+  - Oasis.Client.OpenAI.Http
+  - Oasis.Client.OpenAI.Types
 
 executables:
   oasis-cli:

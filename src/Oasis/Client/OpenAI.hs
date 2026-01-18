@@ -20,38 +20,14 @@ module Oasis.Client.OpenAI
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI.Types
+import Oasis.Client.OpenAI.Http
 import Data.Aeson
-import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Lazy as BL
 import Data.Char (isSpace)
 import Network.HTTP.Client
-import Network.HTTP.Client.TLS (tlsManagerSettings)
-import Network.HTTP.Types.Header (HeaderName, hAccept, hAuthorization, hContentType)
-
-buildChatUrl :: Text -> Text
-buildChatUrl baseUrl =
-  let trimmed = T.dropWhileEnd (== '/') baseUrl
-      lower   = T.toLower trimmed
-      versionSuffixes = ["/v1", "/v2", "/v3", "/v4", "/v5"]
-      hasVersionSuffix = any (`T.isSuffixOf` lower) versionSuffixes
-      pathSuffix = if hasVersionSuffix
-                     then "/chat/completions"
-                     else "/v1/chat/completions"
-  in trimmed <> pathSuffix
-
-buildModelsUrl :: Text -> Text
-buildModelsUrl baseUrl =
-  let trimmed = T.dropWhileEnd (== '/') baseUrl
-      lower   = T.toLower trimmed
-      versionSuffixes = ["/v1", "/v2", "/v3", "/v4", "/v5"]
-      hasVersionSuffix = any (`T.isSuffixOf` lower) versionSuffixes
-      pathSuffix = if hasVersionSuffix
-                     then "/models"
-                     else "/v1/models"
-  in trimmed <> pathSuffix
 
 sendChatCompletion :: Provider -> Text -> Text -> [Message] -> IO (Either Text ChatCompletionResponse)
 sendChatCompletion provider apiKey modelId msgs = do
@@ -89,18 +65,9 @@ sendChatCompletion provider apiKey modelId msgs = do
 
 sendChatCompletionRaw :: Provider -> Text -> ChatCompletionRequest -> IO (Either Text BL.ByteString)
 sendChatCompletionRaw provider apiKey reqBody = do
-  manager <- newManager tlsManagerSettings
+  manager <- newTlsManager
   let url = buildChatUrl (base_url provider)
-  initReq <- parseRequest (toString url)
-  let headers =
-        [ (hContentType, "application/json")
-        , (hAccept, "application/json")
-        ] <> authHeader apiKey
-      req = initReq
-        { method = "POST"
-        , requestBody = RequestBodyLBS (encode reqBody)
-        , requestHeaders = headers
-        }
+  req <- buildRequest url "POST" (RequestBodyLBS (encode reqBody)) (jsonHeaders apiKey)
   resp <- httpLbs req manager
   pure (Right (responseBody resp))
 
@@ -131,18 +98,9 @@ streamChatCompletion provider apiKey modelId msgs onChunk = do
 
 streamChatCompletionWithRequest :: Provider -> Text -> ChatCompletionRequest -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either Text ())
 streamChatCompletionWithRequest provider apiKey reqBody onChunk = do
-  manager <- newManager tlsManagerSettings
+  manager <- newTlsManager
   let url = buildChatUrl (base_url provider)
-  initReq <- parseRequest (toString url)
-  let headers =
-        [ (hContentType, "application/json")
-        , (hAccept, "text/event-stream")
-        ] <> authHeader apiKey
-      req = initReq
-        { method = "POST"
-        , requestBody = RequestBodyLBS (encode reqBody)
-        , requestHeaders = headers
-        }
+  req <- buildRequest url "POST" (RequestBodyLBS (encode reqBody)) (sseHeaders apiKey)
   withResponse req manager $ \resp -> do
     let reader = responseBody resp
     streamLoop reader BS.empty
@@ -190,22 +148,10 @@ streamChatCompletionWithRequest provider apiKey reqBody onChunk = do
                   processLines ls
           else processLines ls
 
-authHeader :: Text -> [(HeaderName, BS8.ByteString)]
-authHeader apiKey
-  | T.null apiKey = []
-  | otherwise    = [(hAuthorization, "Bearer " <> TE.encodeUtf8 apiKey)]
-
 sendModelsRaw :: Provider -> Text -> IO (Either Text BL.ByteString)
 sendModelsRaw provider apiKey = do
-  manager <- newManager tlsManagerSettings
+  manager <- newTlsManager
   let url = buildModelsUrl (base_url provider)
-  initReq <- parseRequest (toString url)
-  let headers =
-        [ (hAccept, "application/json")
-        ] <> authHeader apiKey
-      req = initReq
-        { method = "GET"
-        , requestHeaders = headers
-        }
+  req <- buildRequest url "GET" (RequestBodyBS BS.empty) (modelsHeaders apiKey)
   resp <- httpLbs req manager
   pure (Right (responseBody resp))
