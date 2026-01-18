@@ -34,7 +34,7 @@ Positional arguments:
 
 Runner args:
 
-- `basic [--extra-args <json>] <prompt...>`: Single-turn, non-streaming. Prints raw request/response JSON for debugging.
+- `basic [--extra-args <json>] [--raw <json>] <prompt...>`: Single-turn, non-streaming. Prints raw request/response JSON for debugging. When `--raw` is provided, the prompt is ignored and the JSON is treated as a `messages` array.
 - `chat [--no-stream] [--hide-thinking] [--extra-args <json>] [initial prompt...]`: Multi-turn chat. Defaults to streaming and showing thinking.
 - `structured-json [--extra-args <json>]`: Structured output (JSON object).
 - `structured-schema [--extra-args <json>]`: Structured output (JSON schema).
@@ -57,8 +57,18 @@ Use `--extra-args` to pass OpenAI-compatible request parameters as JSON. Field n
 - `reasoning_effort`
 - `stream_options` (object)
 
-Example (basic runner prints request JSON):
+Example (basic runner with extra args, prints request JSON):
 
 ```
 oasis-cli deepseek - basic --extra-args '{"temperature":0.2,"top_p":0.9,"max_completion_tokens":64,"stop":["\n\n"],"logit_bias":{"123":-2},"user":"u1","service_tier":"default","reasoning_effort":"low","stream_options":{"include_usage":true}}' 你好
+```
+
+Example (basic runner with raw messages array):
+
+```
+stack exec oasis-cli -- qwen - basic --raw '[{"role":"user","content":[{"type":"text","text":"请用一句话解释虹吸效应。"}]}]'
+```
+
+```
+oasis-cli qwen - basic --raw '[{"role":"user","content":[{"type":"text","text":"第一段。"},{"type":"text","text":"第二段。"}]}]'
 ```

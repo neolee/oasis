@@ -34,7 +34,7 @@ resolveModelId provider = \case
   _ -> selectModelId provider
 
 buildUserMessages :: Text -> [Message]
-buildUserMessages prompt = [Message "user" prompt Nothing Nothing]
+buildUserMessages prompt = [Message "user" (ContentText prompt) Nothing Nothing]
 
 data ChatParams = ChatParams
   { paramTemperature :: Maybe Double

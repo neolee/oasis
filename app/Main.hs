@@ -11,6 +11,9 @@ import Oasis.Runner.ToolCalling
 import Oasis.Runner.Common (resolveModelId, parseChatParams)
 import qualified Data.Text as T
 import qualified Data.List as L
+import qualified Data.Text.Encoding as TE
+import qualified Data.ByteString.Lazy as BL
+import Data.Aeson (eitherDecode)
 import GHC.IO.Encoding (setLocaleEncoding, utf8)
 
 main :: IO ()
@@ -45,7 +48,7 @@ main = do
       putTextLn "Usage: oasis-cli <provider> <model|default|-> <runner> [runner args...]"
       putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling"
       putTextLn "Chat runner args: [--no-stream] [--hide-thinking] [--extra-args <json>] [initial prompt...]"
-      putTextLn "Basic runner args: [--extra-args <json>] <prompt...>"
+      putTextLn "Basic runner args: [--extra-args <json>] [--raw <json>] <prompt...>"
       putTextLn "Structured runner args: [--extra-args <json>]"
       putTextLn "Tool calling runner args: [--extra-args <json>]"
       exitFailure
@@ -77,6 +80,27 @@ extractExtraArgs = go Nothing []
               else go (Just (toText v)) acc xs
         | otherwise -> go found (x:acc) xs
 
+extractRawArgs :: [String] -> Either Text (Maybe Text, [String])
+extractRawArgs = go Nothing []
+  where
+    go found acc = \case
+      [] -> Right (found, reverse acc)
+      (x:xs)
+        | x == "--raw" ->
+            case xs of
+              [] -> Left "Missing value for --raw"
+              (v:rest) ->
+                if isJust found
+                  then Left "--raw specified more than once"
+                  else go (Just (toText v)) acc rest
+        | "--raw=" `L.isPrefixOf` x ->
+            let prefix = "--raw=" :: String
+                v = drop (length prefix) x
+            in if isJust found
+              then Left "--raw specified more than once"
+              else go (Just (toText v)) acc xs
+        | otherwise -> go found (x:acc) xs
+
 dispatchRunner :: Text -> Provider -> Text -> Maybe Text -> Text -> [String] -> IO ()
 dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
   case runnerName of
@@ -97,25 +121,54 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               putTextLn err
               exitFailure
             Right p -> pure p
-          let prompt = T.unwords (map toText restArgs)
-          if T.null (T.strip prompt)
-            then do
-              putTextLn "Basic runner requires a prompt."
+          case extractRawArgs restArgs of
+            Left err -> do
+              putTextLn err
               exitFailure
-            else do
-              putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-              result <- runBasic provider apiKey modelOverride params prompt
-              case result of
-                Left err -> do
-                  putTextLn $ "Request failed: " <> err
-                  exitFailure
-                Right BasicResult{requestJson, responseJson, response} -> do
-                  putTextLn "--- Request JSON ---"
-                  putTextLn requestJson
-                  putTextLn "--- Response JSON ---"
-                  putTextLn responseJson
-                  when (isNothing response) $
-                    putTextLn "Warning: response JSON could not be decoded."
+            Right (rawText, restArgs2) -> do
+              case rawText of
+                Just rawJson -> do
+                  unless (null restArgs2) $ do
+                    putTextLn "Basic runner with --raw does not accept positional prompt."
+                    exitFailure
+                  messages <- case eitherDecode (BL.fromStrict (TE.encodeUtf8 rawJson)) of
+                    Left err -> do
+                      putTextLn $ "Invalid --raw JSON: " <> toText err
+                      exitFailure
+                    Right msgs -> pure msgs
+                  putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+                  result <- runBasicRaw provider apiKey modelOverride params messages
+                  case result of
+                    Left err -> do
+                      putTextLn $ "Request failed: " <> err
+                      exitFailure
+                    Right BasicResult{requestJson, responseJson, response} -> do
+                      putTextLn "--- Request JSON ---"
+                      putTextLn requestJson
+                      putTextLn "--- Response JSON ---"
+                      putTextLn responseJson
+                      when (isNothing response) $
+                        putTextLn "Warning: response JSON could not be decoded."
+                Nothing -> do
+                  let prompt = T.unwords (map toText restArgs2)
+                  if T.null (T.strip prompt)
+                    then do
+                      putTextLn "Basic runner requires a prompt."
+                      exitFailure
+                    else do
+                      putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+                      result <- runBasic provider apiKey modelOverride params prompt
+                      case result of
+                        Left err -> do
+                          putTextLn $ "Request failed: " <> err
+                          exitFailure
+                        Right BasicResult{requestJson, responseJson, response} -> do
+                          putTextLn "--- Request JSON ---"
+                          putTextLn requestJson
+                          putTextLn "--- Response JSON ---"
+                          putTextLn responseJson
+                          when (isNothing response) $
+                            putTextLn "Warning: response JSON could not be decoded."
     "chat" -> do
       case extractExtraArgs runnerArgs of
         Left err -> do

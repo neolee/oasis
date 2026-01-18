@@ -50,14 +50,14 @@ runChat provider apiKey modelOverride params opts initialPrompt = do
               Right (_, newHistory) -> loop modelId newHistory
 
     chatOnce modelId history line = do
-      let history' = appendMessage (Message "user" line Nothing Nothing) history
+      let history' = appendMessage (Message "user" (ContentText line) Nothing Nothing) history
           msgs = getMessages history'
       result <- if streaming opts
         then streamOnce modelId msgs
         else nonStreamOnce modelId msgs
       case result of
         Left err -> pure (Left err)
-        Right answer -> pure (Right (answer, appendMessage (Message "assistant" answer Nothing Nothing) history'))
+        Right answer -> pure (Right (answer, appendMessage (Message "assistant" (ContentText answer) Nothing Nothing) history'))
 
     nonStreamOnce modelId msgs = do
       let reqBase = defaultChatRequest modelId msgs
@@ -113,9 +113,9 @@ handleCommand history line =
       let contentText = T.unwords rest
       pure (setSystemMessage contentText history)
     ("/insert":idxText:roleText:rest) ->
-      applyHistoryEdit history (insertMessage (parseIndex idxText) (Message roleText (T.unwords rest) Nothing Nothing) history)
+      applyHistoryEdit history (insertMessage (parseIndex idxText) (Message roleText (ContentText (T.unwords rest)) Nothing Nothing) history)
     ("/update":idxText:roleText:rest) ->
-      applyHistoryEdit history (updateMessage (parseIndex idxText) (Message roleText (T.unwords rest) Nothing Nothing) history)
+      applyHistoryEdit history (updateMessage (parseIndex idxText) (Message roleText (ContentText (T.unwords rest)) Nothing Nothing) history)
     ("/delete":idxText:_) ->
       applyHistoryEdit history (deleteMessage (parseIndex idxText) history)
     _ -> do
@@ -134,12 +134,12 @@ applyHistoryEdit history = \case
 showHistory :: History -> IO ()
 showHistory history =
   forM_ (zip [0..] (getMessages history)) $ \(idx, Message{role, content}) ->
-    putTextLn (show idx <> " [" <> role <> "] " <> content)
+    putTextLn (show idx <> " [" <> role <> "] " <> messageContentText content)
 
 extractAssistantContent :: ChatCompletionResponse -> Maybe Text
 extractAssistantContent ChatCompletionResponse{choices} =
   case choices of
-    (ChatChoice{message = Just Message{content}}:_) -> Just content
+    (ChatChoice{message = Just Message{content}}:_) -> Just (messageContentText content)
     _ -> Nothing
 
 data StreamMode = InAnswer | InThinking

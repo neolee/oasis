@@ -9,6 +9,7 @@ import Toml (decode)
 import Toml.Schema (FromValue(..), parseTableFromValue, reqKey, optKey)
 import Toml.Schema.Generic (GenericTomlTable(..))
 import GHC.Generics (Generic)
+import qualified Data.Aeson.KeyMap as KM
 
 data ModelType
   = Chat
@@ -99,9 +100,47 @@ instance ToJSON ToolCall where
 instance FromJSON ToolCall where
   parseJSON = genericParseJSON defaultOptions { fieldLabelModifier = dropTrailingUnderscore }
 
+data MessageContent
+  = ContentText Text
+  | ContentParts [MessageContentPart]
+  deriving (Show, Eq, Generic)
+
+data MessageContentPart
+  = ContentTextPart Text
+  | ContentObjectPart Value
+  deriving (Show, Eq, Generic)
+
+instance FromJSON MessageContentPart where
+  parseJSON v =
+    case v of
+      String t -> pure (ContentTextPart t)
+      Object o ->
+        case KM.lookup "type" o of
+          Just (String "text") -> ContentTextPart <$> (o .: "text")
+          _ -> pure (ContentObjectPart v)
+      _ -> pure (ContentObjectPart v)
+
+instance ToJSON MessageContentPart where
+  toJSON = \case
+    ContentTextPart t -> object ["type" .= ("text" :: Text), "text" .= t]
+    ContentObjectPart v -> v
+
+instance FromJSON MessageContent where
+  parseJSON v =
+    withText "MessageContent" (pure . ContentText) v
+    <|> withArray "MessageContent" (\arr -> ContentParts <$> traverse parseJSON (V.toList arr)) v
+    <|> case v of
+          Null -> pure (ContentText "")
+          _ -> fail "Invalid MessageContent"
+
+instance ToJSON MessageContent where
+  toJSON = \case
+    ContentText t -> String t
+    ContentParts parts -> toJSON parts
+
 data Message = Message
   { role          :: Text
-  , content       :: Text
+  , content       :: MessageContent
   , tool_call_id  :: Maybe Text
   , tool_calls    :: Maybe [ToolCall]
   } deriving (Show, Eq, Generic)
@@ -109,7 +148,11 @@ data Message = Message
 instance FromJSON Message where
   parseJSON = withObject "Message" $ \o -> do
     role <- o .: "role"
-    content <- fromMaybe "" <$> o .:? "content"
+    contentValue <- o .:? "content"
+    content <- case contentValue of
+      Nothing -> pure (ContentText "")
+      Just Null -> pure (ContentText "")
+      Just v -> parseJSON v
     toolCallId <- o .:? "tool_call_id"
     toolCalls <- o .:? "tool_calls"
     pure Message
@@ -125,6 +168,17 @@ instance ToJSON Message where
     , "content" .= content
     ] <> maybe [] (\v -> ["tool_call_id" .= v]) tool_call_id
       <> maybe [] (\v -> ["tool_calls" .= v]) tool_calls
+
+messageContentText :: MessageContent -> Text
+messageContentText = \case
+  ContentText t -> t
+  ContentParts parts ->
+    let pieces = mapMaybe partText parts
+    in mconcat pieces
+  where
+    partText = \case
+      ContentTextPart t -> Just t
+      ContentObjectPart _ -> Nothing
 
 dropTrailingUnderscore :: String -> String
 dropTrailingUnderscore field =

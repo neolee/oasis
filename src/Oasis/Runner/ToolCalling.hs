@@ -27,8 +27,8 @@ runToolCalling provider apiKey modelOverride params = do
         , "请以友好的语气回答问题。"
         ]
       messages0 =
-        [ Message "system" systemMessage Nothing Nothing
-        , Message "user" "上海天气" Nothing Nothing
+        [ Message "system" (ContentText systemMessage) Nothing Nothing
+        , Message "user" (ContentText "上海天气") Nothing Nothing
         ]
       reqBase = (defaultChatRequest modelId messages0)
         { tools = Just tools
@@ -53,7 +53,7 @@ runToolCalling provider apiKey modelOverride params = do
                   pure (Right ())
             Just (assistantMessage, toolCall) -> do
               result <- executeToolCall toolCall
-              let toolMsg = Message "tool" result (Just (OT.id toolCall)) Nothing
+              let toolMsg = Message "tool" (ContentText result) (Just (OT.id toolCall)) Nothing
                   messages1 = messages0 <> [assistantMessage, toolMsg]
                   reqBase2 = (defaultChatRequest modelId messages1)
                     { tools = Just tools
@@ -116,7 +116,7 @@ extractToolCall ChatCompletionResponse{choices} =
 extractAssistantContent :: ChatCompletionResponse -> Maybe Text
 extractAssistantContent ChatCompletionResponse{choices} =
   case choices of
-    (ChatChoice{message = Just Message{content}}:_) -> Just content
+    (ChatChoice{message = Just Message{content}}:_) -> Just (messageContentText content)
     _ -> Nothing
 
 executeToolCall :: ToolCall -> IO Text

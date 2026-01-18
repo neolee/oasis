@@ -1,6 +1,7 @@
 module Oasis.Runner.Basic
   ( BasicResult(..)
   , runBasic
+  , runBasicRaw
   ) where
 
 import Relude
@@ -21,6 +22,20 @@ runBasic :: Provider -> Text -> Maybe Text -> ChatParams -> Text -> IO (Either T
 runBasic provider apiKey modelOverride params prompt = do
   let modelId = resolveModelId provider modelOverride
       messages = buildUserMessages prompt
+      reqBase = defaultChatRequest modelId messages
+      reqBody = applyChatParams params reqBase
+      reqJsonText = TE.decodeUtf8Lenient (BL.toStrict (encode reqBody))
+  resp <- sendChatCompletionRaw provider apiKey reqBody
+  case resp of
+    Left err -> pure (Left (renderClientError err))
+    Right body ->
+      let respText = TE.decodeUtf8Lenient (BL.toStrict body)
+          decoded = decode body
+      in pure $ Right (BasicResult reqJsonText respText decoded)
+
+runBasicRaw :: Provider -> Text -> Maybe Text -> ChatParams -> [Message] -> IO (Either Text BasicResult)
+runBasicRaw provider apiKey modelOverride params messages = do
+  let modelId = resolveModelId provider modelOverride
       reqBase = defaultChatRequest modelId messages
       reqBody = applyChatParams params reqBase
       reqJsonText = TE.decodeUtf8Lenient (BL.toStrict (encode reqBody))

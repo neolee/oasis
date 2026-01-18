@@ -60,7 +60,10 @@ data StructuredMode
 runStructuredOutput :: Provider -> Text -> Maybe Text -> ChatParams -> StructuredMode -> IO (Either Text ())
 runStructuredOutput provider apiKey modelOverride params mode = do
   let modelId = resolveModelId provider modelOverride
-      messages = [Message "system" systemMessage Nothing Nothing, Message "user" questionText Nothing Nothing]
+      messages =
+        [ Message "system" (ContentText systemMessage) Nothing Nothing
+        , Message "user" (ContentText questionText) Nothing Nothing
+        ]
       responseFormat = case mode of
         JSONObject -> jsonObjectFormat
         JSONSchema -> jsonSchemaFormat
