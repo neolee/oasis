@@ -54,7 +54,7 @@ runToolCalling provider apiKey modelOverride params = do
       reqBody = applyChatParams params reqBase
   firstResp <- sendChatCompletionRaw provider apiKey reqBody
   case firstResp of
-    Left err -> pure (Left err)
+    Left err -> pure (Left (renderClientError err))
     Right body ->
       case eitherDecode body of
         Left err ->
@@ -96,7 +96,7 @@ runToolCalling provider apiKey modelOverride params = do
                   reqBody2 = applyChatParams params reqBase2
               secondResp <- sendChatCompletionRaw provider apiKey reqBody2
               case secondResp of
-                Left err -> pure (Left err)
+                Left err -> pure (Left (renderClientError err))
                 Right body2 ->
                   case eitherDecode body2 of
                     Left err ->

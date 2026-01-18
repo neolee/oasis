@@ -8,6 +8,9 @@ module Oasis.Client.OpenAI.Types
   , ChatCompletionStreamChunk(..)
   , StreamChoice(..)
   , StreamDelta(..)
+  , ErrorDetail(..)
+  , ErrorResponse(..)
+  , ClientError(..)
   ) where
 
 import Relude
@@ -120,3 +123,34 @@ instance FromJSON ChatCompletionStreamChunk where
 
 instance ToJSON ChatCompletionStreamChunk where
   toJSON = genericToJSON defaultOptions { omitNothingFields = True }
+
+data ErrorDetail = ErrorDetail
+  { message :: Text
+  , type_   :: Maybe Text
+  , param   :: Maybe Value
+  , code    :: Maybe Text
+  } deriving (Show, Eq, Generic)
+
+instance FromJSON ErrorDetail where
+  parseJSON = genericParseJSON defaultOptions { fieldLabelModifier = dropTrailingUnderscore }
+
+instance ToJSON ErrorDetail where
+  toJSON = genericToJSON defaultOptions { fieldLabelModifier = dropTrailingUnderscore, omitNothingFields = True }
+
+newtype ErrorResponse = ErrorResponse
+  { error :: ErrorDetail
+  } deriving (Show, Eq, Generic)
+
+instance FromJSON ErrorResponse where
+  parseJSON = genericParseJSON defaultOptions
+
+instance ToJSON ErrorResponse where
+  toJSON = genericToJSON defaultOptions
+
+data ClientError = ClientError
+  { status       :: Int
+  , statusText   :: Text
+  , requestId    :: Maybe Text
+  , errorResponse :: Maybe ErrorResponse
+  , rawBody      :: Text
+  } deriving (Show, Eq, Generic)

@@ -84,7 +84,7 @@ runChat provider apiKey modelOverride params opts initialPrompt = do
           reqBody = applyChatParams params reqBase
       raw <- sendChatCompletionRaw provider apiKey reqBody
       case raw of
-        Left err -> pure (Left err)
+        Left err -> pure (Left (renderClientError err))
         Right body ->
           case eitherDecode body of
             Left err ->
@@ -125,7 +125,7 @@ runChat provider apiKey modelOverride params opts initialPrompt = do
       accumRef <- newIORef initAccum
       result <- streamChatCompletionWithRequest provider apiKey reqBody (handleChunk opts accumRef)
       case result of
-        Left err -> pure (Left err)
+        Left err -> pure (Left (renderClientError err))
         Right _ -> do
           StreamAccum{answerBuffer} <- readIORef accumRef
           putTextLn ""

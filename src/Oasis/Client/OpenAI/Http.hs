@@ -6,19 +6,26 @@ module Oasis.Client.OpenAI.Http
   , authHeader
   , newTlsManager
   , buildRequest
+  , executeRequest
+  , clientErrorFromResponse
   , jsonHeaders
   , sseHeaders
   , modelsHeaders
   ) where
 
 import Relude
+import Oasis.Client.OpenAI.Types
+import Data.Aeson (decode)
+import qualified Data.List as L
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Char8 as BS8
+import qualified Data.ByteString.Lazy as BL
 import Network.HTTP.Client
 import Network.HTTP.Client.TLS (tlsManagerSettings)
-import Network.HTTP.Types.Header (HeaderName, hAccept, hAuthorization, hContentType)
+import Network.HTTP.Types.Header (HeaderName, ResponseHeaders, hAccept, hAuthorization, hContentType)
 import Network.HTTP.Types.Method (Method)
+import Network.HTTP.Types.Status (Status, statusCode, statusMessage)
 
 buildChatUrl :: Text -> Text
 buildChatUrl baseUrl =
@@ -58,6 +65,32 @@ buildRequest url method reqBody headers = do
     , requestBody = reqBody
     , requestHeaders = headers
     }
+
+executeRequest :: Request -> Manager -> IO (Either ClientError BL.ByteString)
+executeRequest req manager = do
+  resp <- httpLbs req manager
+  let status = responseStatus resp
+  if isSuccessStatus status
+    then pure (Right (responseBody resp))
+    else pure (Left (clientErrorFromResponse status (responseHeaders resp) (responseBody resp)))
+
+clientErrorFromResponse :: Status -> ResponseHeaders -> BL.ByteString -> ClientError
+clientErrorFromResponse status headers body =
+  let rawText = TE.decodeUtf8Lenient (BL.toStrict body)
+      reqId = L.lookup "x-request-id" headers <|> L.lookup "request-id" headers
+      errResp = decode body
+  in ClientError
+      { status = statusCode status
+      , statusText = TE.decodeUtf8Lenient (statusMessage status)
+      , requestId = TE.decodeUtf8Lenient <$> reqId
+      , errorResponse = errResp
+      , rawBody = rawText
+      }
+
+isSuccessStatus :: Status -> Bool
+isSuccessStatus st =
+  let code = statusCode st
+  in code >= 200 && code < 300
 
 jsonHeaders :: Text -> [(HeaderName, BS8.ByteString)]
 jsonHeaders apiKey =

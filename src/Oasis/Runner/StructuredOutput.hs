@@ -89,7 +89,7 @@ runStructuredOutput provider apiKey modelOverride params mode = do
   accumRef <- newIORef ""
   result <- streamChatCompletionWithRequest provider apiKey reqBody (handleChunk accumRef)
   case result of
-    Left err -> pure (Left err)
+    Left err -> pure (Left (renderClientError err))
     Right _ -> do
       putTextLn ""
       output <- readIORef accumRef

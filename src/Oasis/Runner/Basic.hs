@@ -46,7 +46,7 @@ runBasic provider apiKey modelOverride params prompt = do
       reqJsonText = TE.decodeUtf8Lenient (BL.toStrict (encode reqBody))
   resp <- sendChatCompletionRaw provider apiKey reqBody
   case resp of
-    Left err -> pure (Left err)
+    Left err -> pure (Left (renderClientError err))
     Right body ->
       let respText = TE.decodeUtf8Lenient (BL.toStrict body)
           decoded = decode body
