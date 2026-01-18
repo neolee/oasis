@@ -9,6 +9,7 @@ module Oasis.Client.OpenAI
   , StreamChoice(..)
   , StreamDelta(..)
   , sendChatCompletion
+  , sendChatCompletionRaw
   , streamChatCompletion
   , buildChatUrl
   ) where
@@ -131,7 +132,6 @@ buildChatUrl baseUrl =
 
 sendChatCompletion :: Provider -> Text -> Text -> [Message] -> IO (Either Text ChatCompletionResponse)
 sendChatCompletion provider apiKey modelId msgs = do
-  manager <- newManager tlsManagerSettings
   let url = buildChatUrl (base_url provider)
       reqBody = ChatCompletionRequest
         { model = modelId
@@ -139,6 +139,20 @@ sendChatCompletion provider apiKey modelId msgs = do
         , temperature = Nothing
         , stream = False
         }
+  resp <- sendChatCompletionRaw provider apiKey reqBody
+  case resp of
+    Left err -> pure (Left err)
+    Right body ->
+      case eitherDecode body of
+        Left err ->
+          let raw = TE.decodeUtf8Lenient (BL.toStrict body)
+          in pure $ Left ("Failed to decode response: " <> toText err <> "\nRaw: " <> raw)
+        Right val -> pure $ Right val
+
+sendChatCompletionRaw :: Provider -> Text -> ChatCompletionRequest -> IO (Either Text BL.ByteString)
+sendChatCompletionRaw provider apiKey reqBody = do
+  manager <- newManager tlsManagerSettings
+  let url = buildChatUrl (base_url provider)
   initReq <- parseRequest (toString url)
   let headers =
         [ (hContentType, "application/json")
@@ -150,12 +164,7 @@ sendChatCompletion provider apiKey modelId msgs = do
         , requestHeaders = headers
         }
   resp <- httpLbs req manager
-  let body = responseBody resp
-  case eitherDecode body of
-    Left err ->
-      let raw = TE.decodeUtf8Lenient (BL.toStrict body)
-      in pure $ Left ("Failed to decode response: " <> toText err <> "\nRaw: " <> raw)
-    Right val -> pure $ Right val
+  pure (Right (responseBody resp))
 
 streamChatCompletion :: Provider -> Text -> Text -> [Message] -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either Text ())
 streamChatCompletion provider apiKey modelId msgs onChunk = do

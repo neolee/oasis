@@ -30,7 +30,7 @@ library
       Oasis.Config
       Oasis.Runner.Basic
       Oasis.Runner.Chat
-      Oasis.Runner.Interactive
+      Oasis.Runner.Common
       Oasis.Types
   other-modules:
       Paths_oasis

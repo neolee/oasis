@@ -22,18 +22,21 @@ The project aims to simplify the integration of various LLMs into Haskell applic
 
 ## CLI Parameters
 
-The CLI supports a small set of flags and positional arguments:
+Usage:
 
-- `--interactive`: Start interactive multi-turn chat mode.
-	- Module: [app/Main.hs](app/Main.hs), [src/Oasis/Runner/Interactive.hs](src/Oasis/Runner/Interactive.hs)
-- `--stream`: Stream tokens instead of waiting for a full response (single-turn mode).
-	- Module: [app/Main.hs](app/Main.hs), [src/Oasis/Runner/Chat.hs](src/Oasis/Runner/Chat.hs)
-- `--show-thinking`: When streaming in interactive mode, display thinking tokens if provided by the model.
-	- Module: [app/Main.hs](app/Main.hs), [src/Oasis/Runner/Interactive.hs](src/Oasis/Runner/Interactive.hs)
+```
+oasis-cli <provider> <model|default|-> <runner> [runner args...]
+```
 
 Positional arguments:
 
-- `alias`: Provider alias (e.g., `deepseek`, `qwen`). Defaults to `deepseek`.
-	- Module: [app/Main.hs](app/Main.hs), [src/Oasis/Config.hs](src/Oasis/Config.hs)
-- `prompt`: Single-turn prompt text (only when not using `--interactive`).
-	- Module: [app/Main.hs](app/Main.hs), [src/Oasis/Runner/Chat.hs](src/Oasis/Runner/Chat.hs)
+- `provider`: Provider alias (e.g., `deepseek`, `qwen`).
+- `model|default|-`:
+	- `default` or `-` means “do not override,” use the provider’s configured default model.
+	- Any other value is used as the explicit model ID.
+- `runner`: `basic` or `chat`.
+
+Runner args:
+
+- `basic <prompt...>`: Single-turn, non-streaming. Prints raw request/response JSON for debugging.
+- `chat [--no-stream] [--hide-thinking] [initial prompt...]`: Multi-turn chat. Defaults to streaming and showing thinking.

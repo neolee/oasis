@@ -6,15 +6,32 @@ module Oasis.Runner.Basic
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
-import Oasis.Runner.Chat (selectModelId)
+import Data.Aeson (encode, decode)
+import Oasis.Runner.Common (resolveModelId, buildUserMessages)
+import qualified Data.Text.Encoding as TE
+import qualified Data.ByteString.Lazy as BL
 
-newtype BasicResult = BasicResult
-  { response :: ChatCompletionResponse
+data BasicResult = BasicResult
+  { requestJson  :: Text
+  , responseJson :: Text
+  , response     :: Maybe ChatCompletionResponse
   } deriving (Show, Eq)
 
-runBasic :: Provider -> Text -> Text -> IO (Either Text BasicResult)
-runBasic provider apiKey prompt = do
-  let modelId = selectModelId provider
-      messages = [Message "user" prompt]
-  result <- sendChatCompletion provider apiKey modelId messages
-  pure (fmap BasicResult result)
+runBasic :: Provider -> Text -> Maybe Text -> Text -> IO (Either Text BasicResult)
+runBasic provider apiKey modelOverride prompt = do
+  let modelId = resolveModelId provider modelOverride
+      messages = buildUserMessages prompt
+      reqBody = ChatCompletionRequest
+        { model = modelId
+        , messages = messages
+        , temperature = Nothing
+        , stream = False
+        }
+      reqJsonText = TE.decodeUtf8Lenient (BL.toStrict (encode reqBody))
+  resp <- sendChatCompletionRaw provider apiKey reqBody
+  case resp of
+    Left err -> pure (Left err)
+    Right body ->
+      let respText = TE.decodeUtf8Lenient (BL.toStrict body)
+          decoded = decode body
+      in pure $ Right (BasicResult reqJsonText respText decoded)

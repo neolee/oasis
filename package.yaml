@@ -45,6 +45,16 @@ default-extensions:
 
 library:
   source-dirs: src
+  exposed-modules:
+  - Oasis.Chat.History
+  - Oasis.Chat.Log
+  - Oasis.Chat.Prompt
+  - Oasis.Client.OpenAI
+  - Oasis.Config
+  - Oasis.Runner.Basic
+  - Oasis.Runner.Chat
+  - Oasis.Runner.Common
+  - Oasis.Types
 
 executables:
   oasis-cli:
