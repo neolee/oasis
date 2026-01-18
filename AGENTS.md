@@ -94,7 +94,7 @@ The `Oasis.Client.OpenAI` module should expose a layered, reusable interface:
 
 Each iteration must pass the following baseline checks before moving forward:
 
-1. **Typecheck (HLS diagnostics)**
+1. **Type Check (HLS diagnostics)**
     - `haskell-language-server-wrapper typecheck .`
 
 2. **Build**

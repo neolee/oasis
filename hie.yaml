@@ -1,0 +1,7 @@
+cradle:
+  cabal:
+    - path: "src"
+      component: "lib:oasis"
+
+    - path: "app/Main.hs"
+      component: "oasis:exe:oasis-cli"
