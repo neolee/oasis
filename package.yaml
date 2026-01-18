@@ -51,6 +51,7 @@ library:
   exposed-modules:
   - Oasis.Chat.History
   - Oasis.Chat.Log
+  - Oasis.Chat.Message
   - Oasis.Chat.Prompt
   - Oasis.Client.OpenAI
   - Oasis.Config
@@ -67,6 +68,7 @@ library:
   - Oasis.Types
   other-modules:
   - Oasis.Client.OpenAI.Http
+  - Oasis.Client.OpenAI.Request
   - Oasis.Client.OpenAI.Stream
   - Oasis.Client.OpenAI.Types
 

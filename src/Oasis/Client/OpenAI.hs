@@ -50,10 +50,10 @@ import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI.Types
 import Oasis.Client.OpenAI.Http
+import Oasis.Client.OpenAI.Request
 import Oasis.Client.OpenAI.Stream
 import Data.Aeson
 import qualified Data.Text.Encoding as TE
-import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import Network.HTTP.Client
 import Network.HTTP.Types.Status (statusCode)
@@ -78,7 +78,7 @@ sendChatCompletionRawWithHooks hooks provider apiKey reqBody = do
 sendChatCompletionRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> ChatCompletionRequest -> IO (Either ClientError BL.ByteString)
 sendChatCompletionRawWithManager manager hooks provider apiKey reqBody = do
   let url = buildChatUrl (base_url provider)
-  req <- buildRequest url "POST" (RequestBodyLBS (encode reqBody)) (jsonHeaders apiKey)
+  req <- buildJsonRequest url "POST" (encode reqBody) apiKey
   executeRequestWithHooks hooks req manager
 
 streamChatCompletion :: Provider -> Text -> Text -> [Message] -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either ClientError ())
@@ -99,7 +99,7 @@ streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody onChunk =
 streamChatCompletionWithRequestWithManager :: Manager -> ClientHooks -> Provider -> Text -> ChatCompletionRequest -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either ClientError ())
 streamChatCompletionWithRequestWithManager manager hooks provider apiKey reqBody onChunk = do
   let url = buildChatUrl (base_url provider)
-  req <- buildRequest url "POST" (RequestBodyLBS (encode reqBody)) (sseHeaders apiKey)
+  req <- buildSseRequest url (encode reqBody) apiKey
   forM_ (onRequest hooks) ($ req)
   withResponse req manager $ \resp -> do
     let status = responseStatus resp
@@ -137,7 +137,7 @@ sendModelsRawWithHooks hooks provider apiKey = do
 sendModelsRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> IO (Either ClientError BL.ByteString)
 sendModelsRawWithManager manager hooks provider apiKey = do
   let url = buildModelsUrl (base_url provider)
-  req <- buildRequest url "GET" (RequestBodyBS BS.empty) (modelsHeaders apiKey)
+  req <- buildGetRequest url apiKey
   executeRequestWithHooks hooks req manager
 
 sendEmbeddings :: Provider -> Text -> EmbeddingRequest -> IO (Either ClientError EmbeddingResponse)
@@ -159,7 +159,7 @@ sendEmbeddingsRawWithHooks hooks provider apiKey reqBody = do
 sendEmbeddingsRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> EmbeddingRequest -> IO (Either ClientError BL.ByteString)
 sendEmbeddingsRawWithManager manager hooks provider apiKey reqBody = do
   let url = buildEmbeddingsUrl (base_url provider)
-  req <- buildRequest url "POST" (RequestBodyLBS (encode reqBody)) (jsonHeaders apiKey)
+  req <- buildJsonRequest url "POST" (encode reqBody) apiKey
   executeRequestWithHooks hooks req manager
 
 sendResponses :: Provider -> Text -> ResponsesRequest -> IO (Either ClientError ResponsesResponse)
@@ -181,7 +181,7 @@ sendResponsesRawWithHooks hooks provider apiKey reqBody = do
 sendResponsesRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> ResponsesRequest -> IO (Either ClientError BL.ByteString)
 sendResponsesRawWithManager manager hooks provider apiKey reqBody = do
   let url = buildResponsesUrl (base_url provider)
-  req <- buildRequest url "POST" (RequestBodyLBS (encode reqBody)) (jsonHeaders apiKey)
+  req <- buildJsonRequest url "POST" (encode reqBody) apiKey
   executeRequestWithHooks hooks req manager
 
 decodeOrError :: FromJSON a => BL.ByteString -> Either ClientError a

@@ -11,6 +11,7 @@ module Oasis.Chat.History
 
 import Relude
 import Oasis.Types
+import Oasis.Chat.Message (systemMessage)
 
 newtype History = History { messages :: [Message] }
   deriving (Show, Eq)
@@ -55,5 +56,5 @@ deleteMessage idx (History msgs)
 setSystemMessage :: Text -> History -> History
 setSystemMessage contentText (History msgs) =
   case msgs of
-    (Message { role = "system" }:rest) -> History (Message "system" (ContentText contentText) Nothing Nothing : rest)
-    _ -> History (Message "system" (ContentText contentText) Nothing Nothing : msgs)
+    (Message { role = "system" }:rest) -> History (systemMessage contentText : rest)
+    _ -> History (systemMessage contentText : msgs)
