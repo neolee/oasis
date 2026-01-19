@@ -14,7 +14,7 @@ module Oasis.Runner.Common
 
 import Relude
 import Oasis.Types
-import Oasis.Client.OpenAI (ChatCompletionRequest(..), ChatCompletionResponse(..), ChatChoice(..), ClientError, sendChatCompletionRaw)
+import Oasis.Client.OpenAI (ChatCompletionRequest(..), ChatCompletionResponse(..), ChatChoice(..), ClientError, sendChatCompletionRawWithHooks, emptyClientHooks)
 import Oasis.Chat.Message (userMessage)
 import Data.Aeson (FromJSON(..), ToJSON(..), (.:?), (.=), withObject)
 import Data.Aeson.Types (Parser)
@@ -125,10 +125,10 @@ applyChatParams ChatParams{..} req =
     , stream_options = paramStreamOptions <|> stream_options req
     }
 
-requestChat :: Provider -> Text -> ChatParams -> ChatCompletionRequest -> IO (Either ClientError BL.ByteString)
-requestChat provider apiKey params reqBase = do
+requestChat :: Provider -> Text -> ChatParams -> ChatCompletionRequest -> Bool -> IO (Either ClientError BL.ByteString)
+requestChat provider apiKey params reqBase useBeta = do
   let reqBody = applyChatParams params reqBase
-  sendChatCompletionRaw provider apiKey reqBody
+  sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody useBeta
 
 extractAssistantContent :: ChatCompletionResponse -> Maybe Text
 extractAssistantContent ChatCompletionResponse{choices} =

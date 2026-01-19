@@ -15,8 +15,8 @@ import Network.HTTP.Client (Request(..))
 import Network.HTTP.Types.Header (HeaderName, hAuthorization)
 import Network.HTTP.Types.Status (Status, statusCode)
 
-runHooks :: Provider -> Text -> Maybe Text -> ChatParams -> Text -> IO (Either Text ())
-runHooks provider apiKey modelOverride params prompt = do
+runHooks :: Provider -> Text -> Maybe Text -> ChatParams -> Text -> Bool -> IO (Either Text ())
+runHooks provider apiKey modelOverride params prompt useBeta = do
   let modelId = resolveModelId provider modelOverride
       messages = buildUserMessages prompt
       reqBase = defaultChatRequest modelId messages
@@ -26,7 +26,7 @@ runHooks provider apiKey modelOverride params prompt = do
         , onResponse = Just logResponse
         , onError = Just (putTextLn . renderClientError)
         }
-  result <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody False
+  result <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody useBeta
   case result of
     Left err -> pure (Left (renderClientError err))
     Right body -> do

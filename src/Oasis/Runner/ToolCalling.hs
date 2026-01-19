@@ -18,8 +18,8 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
 import Data.Time (getZonedTime, formatTime, defaultTimeLocale)
 
-runToolCalling :: Provider -> Text -> Maybe Text -> ChatParams -> IO (Either Text ())
-runToolCalling provider apiKey modelOverride params = do
+runToolCalling :: Provider -> Text -> Maybe Text -> ChatParams -> Bool -> IO (Either Text ())
+runToolCalling provider apiKey modelOverride params useBeta = do
   let modelId = resolveModelId provider modelOverride
       tools = buildTools
       systemMessage = T.unlines
@@ -36,7 +36,7 @@ runToolCalling provider apiKey modelOverride params = do
         { tools = Just tools
         , parallel_tool_calls = Just True
         }
-  firstResp <- requestChat provider apiKey params reqBase0
+  firstResp <- requestChat provider apiKey params reqBase0 useBeta
   case parseRawResponseStrict firstResp of
     Left err -> pure (Left err)
     Right (_, response) -> do
@@ -54,7 +54,7 @@ runToolCalling provider apiKey modelOverride params = do
               reqBase2 = (defaultChatRequest modelId messages1)
                 { tools = Just tools
                 }
-          secondResp <- requestChat provider apiKey params reqBase2
+          secondResp <- requestChat provider apiKey params reqBase2 useBeta
           case parseRawResponseStrict secondResp of
             Left err -> pure (Left err)
             Right (_, response2) ->

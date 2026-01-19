@@ -12,21 +12,21 @@ import Oasis.Runner.Result (RunnerResult(..), encodeRequestJson, buildRunnerResu
 
 type BasicResult = RunnerResult ChatCompletionResponse
 
-runBasic :: Provider -> Text -> Maybe Text -> ChatParams -> Text -> IO (Either Text BasicResult)
-runBasic provider apiKey modelOverride params prompt = do
+runBasic :: Provider -> Text -> Maybe Text -> ChatParams -> Text -> Bool -> IO (Either Text BasicResult)
+runBasic provider apiKey modelOverride params prompt useBeta = do
   let modelId = resolveModelId provider modelOverride
       messages = buildUserMessages prompt
       reqBase = defaultChatRequest modelId messages
       reqBody = applyChatParams params reqBase
       reqJsonText = encodeRequestJson reqBody
-  resp <- sendChatCompletionRaw provider apiKey reqBody
+  resp <- sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody useBeta
   pure (buildRunnerResult reqJsonText resp)
 
-runBasicRaw :: Provider -> Text -> Maybe Text -> ChatParams -> [Message] -> IO (Either Text BasicResult)
-runBasicRaw provider apiKey modelOverride params messages = do
+runBasicRaw :: Provider -> Text -> Maybe Text -> ChatParams -> [Message] -> Bool -> IO (Either Text BasicResult)
+runBasicRaw provider apiKey modelOverride params messages useBeta = do
   let modelId = resolveModelId provider modelOverride
       reqBase = defaultChatRequest modelId messages
       reqBody = applyChatParams params reqBase
       reqJsonText = encodeRequestJson reqBody
-  resp <- sendChatCompletionRaw provider apiKey reqBody
+  resp <- sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody useBeta
   pure (buildRunnerResult reqJsonText resp)

@@ -30,18 +30,27 @@ Positional arguments:
 - `model|default|-`:
 	- `default` or `-` means “do not override,” use the provider’s configured default model.
 	- Any other value is used as the explicit model ID.
-- `runner`: `basic`, `chat`, `models`, `structured-json`, `structured-schema`, `tool-calling`, `embeddings`, `hooks`, `responses`.
+- `runner`: `basic`, `chat`, `models`, `structured-json`, `structured-schema`, `tool-calling`, `embeddings`, `hooks`, `responses`, `partial-mode`, `prefix-completion`, `fim-completion`.
 
 Runner args:
 
-- `basic [--extra-args <json>] [--raw <json>] <prompt...>`: Single-turn, non-streaming. Prints raw request/response JSON for debugging. When `--raw` is provided, the prompt is ignored and the JSON is treated as a `messages` array.
-- `chat [--no-stream] [--hide-thinking] [--extra-args <json>] [initial prompt...]`: Multi-turn chat. Defaults to streaming and showing thinking.
-- `structured-json [--extra-args <json>]`: Structured output (JSON object).
-- `structured-schema [--extra-args <json>]`: Structured output (JSON schema).
-- `tool-calling [--extra-args <json>]`: Tool calling.
-- `embeddings [--extra-args <json>] <text...>`: Generate embeddings for input text.
-- `hooks [--extra-args <json>] <prompt...>`: Request/response/error hooks.
-- `responses [--extra-args <json>] <input...>`: Calls the Responses API with plain text input.
+Common options available to all runners:
+- `--beta`: Use beta features/APIs (e.g., Anthropic prompt caching).
+- `--extra-args <json>`: Pass extra model parameters (temperature, max_tokens, etc.) as a JSON string.
+
+Runner specific args:
+
+- `basic [--raw <json>] <prompt...>`: Single-turn, non-streaming. Prints raw request/response JSON for debugging. When `--raw` is provided, the prompt is ignored and the JSON is treated as a `messages` array.
+- `chat [--no-stream] [--hide-thinking] [initial prompt...]`: Multi-turn chat. Defaults to streaming and showing thinking.
+- `structured-json`: Structured output (JSON object).
+- `structured-schema`: Structured output (JSON schema).
+- `tool-calling`: Tool calling.
+- `embeddings <text...>`: Generate embeddings for input text.
+- `hooks <prompt...>`: Request/response/error hooks.
+- `responses <input...>`: Calls the Responses API with plain text input.
+- `partial-mode`: Partial mode.
+- `prefix-completion`: Prefix completion.
+- `fim-completion`: Fill-In-the-Middle (FIM) completion.
 
 ### Extra Args (Model Parameters)
 

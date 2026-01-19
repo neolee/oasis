@@ -60,8 +60,8 @@ data StructuredMode
   | JSONSchema
   deriving (Show, Eq)
 
-runStructuredOutput :: Provider -> Text -> Maybe Text -> ChatParams -> StructuredMode -> IO (Either Text ())
-runStructuredOutput provider apiKey modelOverride params mode = do
+runStructuredOutput :: Provider -> Text -> Maybe Text -> ChatParams -> StructuredMode -> Bool -> IO (Either Text ())
+runStructuredOutput provider apiKey modelOverride params mode useBeta = do
   let modelId = resolveModelId provider modelOverride
       messages =
         [ Msg.systemMessage systemMessage
@@ -75,7 +75,7 @@ runStructuredOutput provider apiKey modelOverride params mode = do
       reqBaseFormat = setChatResponseFormat (Just responseFormat) reqBaseStream
       reqBody = applyChatParams params reqBaseFormat
   accumRef <- newIORef ""
-  result <- streamChatCompletionWithRequest provider apiKey reqBody (handleChunk accumRef)
+  result <- streamChatCompletionWithRequestWithHooks emptyClientHooks provider apiKey reqBody (handleChunk accumRef) useBeta
   case result of
     Left err -> pure (Left (renderClientError err))
     Right _ -> do

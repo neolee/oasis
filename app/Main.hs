@@ -53,14 +53,20 @@ main = do
                 Just (p, key) -> dispatchRunner alias p key modelOverride runnerName runnerArgs
     _ -> do
       putTextLn "Usage: oasis-cli <provider> <model|default|-> <runner> [runner args...]"
+      putTextLn "Common options: [--beta] [--extra-args <json>]"
       putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling, embeddings, hooks, responses, partial-mode, prefix-completion, fim-completion"
-      putTextLn "Chat runner args: [--no-stream] [--hide-thinking] [--extra-args <json>] [initial prompt...]"
-      putTextLn "Basic runner args: [--extra-args <json>] [--raw <json>] <prompt...>"
-      putTextLn "Structured runner args: [--extra-args <json>]"
-      putTextLn "Tool calling runner args: [--extra-args <json>]"
-      putTextLn "Embeddings runner args: [--extra-args <json>] <text...>"
-      putTextLn "Hooks runner args: [--extra-args <json>] <prompt...>"
-      putTextLn "Responses runner args: [--extra-args <json>] <input...>"
+      putTextLn ""
+      putTextLn "Runner specific args:"
+      putTextLn "  basic [--raw <json>] <prompt...>"
+      putTextLn "  chat [--no-stream] [--hide-thinking] [initial prompt...]"
+      putTextLn "  structured-json / structured-schema"
+      putTextLn "  tool-calling"
+      putTextLn "  embeddings <text...>"
+      putTextLn "  hooks <prompt...>"
+      putTextLn "  responses <input...>"
+      putTextLn "  partial-mode"
+      putTextLn "  prefix-completion"
+      putTextLn "  fim-completion"
       exitFailure
 
 normalizeModel :: Text -> Maybe Text
@@ -111,8 +117,19 @@ extractRawArgs = go Nothing []
               else go (Just (toText v)) acc xs
         | otherwise -> go found (x:acc) xs
 
+extractBetaFlag :: [String] -> (Bool, [String])
+extractBetaFlag = go False []
+  where
+    go found acc = \case
+      [] -> (found, reverse acc)
+      (x:xs)
+        | x == "--beta" -> go True acc xs
+        | otherwise -> go found (x:acc) xs
+
 dispatchRunner :: Text -> Provider -> Text -> Maybe Text -> Text -> [String] -> IO ()
 dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
+  let (useBeta, runnerArgs') = extractBetaFlag runnerArgs
+  in
   case runnerName of
     "basic" -> do
       putTextLn $ "Loading config for alias: " <> alias
@@ -121,7 +138,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
       if apiKey /= ""
         then putTextLn "API Key: Found (hidden)"
         else putTextLn "API Key: NOT FOUND (Check environment variables)"
-      case extractExtraArgs runnerArgs of
+      case extractExtraArgs runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
@@ -147,7 +164,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                       exitFailure
                     Right msgs -> pure msgs
                   putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-                  result <- runBasicRaw provider apiKey modelOverride params messages
+                  result <- runBasicRaw provider apiKey modelOverride params messages useBeta
                   case result of
                     Left err -> do
                       putTextLn $ "Request failed: " <> err
@@ -161,14 +178,14 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                       exitFailure
                     else do
                       putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-                      result <- runBasic provider apiKey modelOverride params prompt
+                      result <- runBasic provider apiKey modelOverride params prompt useBeta
                       case result of
                         Left err -> do
                           putTextLn $ "Request failed: " <> err
                           exitFailure
                         Right result -> renderRunnerResult result
     "chat" -> do
-      case extractExtraArgs runnerArgs of
+      case extractExtraArgs runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
@@ -183,7 +200,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               showThinking = "--hide-thinking" `notElem` flags
               initialPrompt = if null rest then Nothing else Just (T.unwords (map toText rest))
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runChat provider apiKey modelOverride params (ChatOptions useStream showThinking) initialPrompt
+          result <- runChat provider apiKey modelOverride params (ChatOptions useStream showThinking useBeta) initialPrompt
           case result of
             Left err -> do
               putTextLn $ "Request failed: " <> err
@@ -203,7 +220,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
           exitFailure
         Right result -> renderResponseOnly result
     "structured-json" -> do
-      case extractExtraArgs runnerArgs of
+      case extractExtraArgs runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
@@ -217,14 +234,14 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             Right p -> pure p
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runStructuredOutput provider apiKey modelOverride params JSONObject
+          result <- runStructuredOutput provider apiKey modelOverride params JSONObject useBeta
           case result of
             Left err -> do
               putTextLn $ "Request failed: " <> err
               exitFailure
             Right _ -> pure ()
     "structured-schema" -> do
-      case extractExtraArgs runnerArgs of
+      case extractExtraArgs runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
@@ -238,14 +255,14 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             Right p -> pure p
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runStructuredOutput provider apiKey modelOverride params JSONSchema
+          result <- runStructuredOutput provider apiKey modelOverride params JSONSchema useBeta
           case result of
             Left err -> do
               putTextLn $ "Request failed: " <> err
               exitFailure
             Right _ -> pure ()
     "tool-calling" -> do
-      case extractExtraArgs runnerArgs of
+      case extractExtraArgs runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
@@ -259,14 +276,14 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             Right p -> pure p
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runToolCalling provider apiKey modelOverride params
+          result <- runToolCalling provider apiKey modelOverride params useBeta
           case result of
             Left err -> do
               putTextLn $ "Request failed: " <> err
               exitFailure
             Right _ -> pure ()
     "embeddings" -> do
-      case extractExtraArgs runnerArgs of
+      case extractExtraArgs runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
@@ -290,7 +307,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                   exitFailure
                 Right result -> renderRunnerResult result
     "hooks" -> do
-      case extractExtraArgs runnerArgs of
+      case extractExtraArgs runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
@@ -307,14 +324,14 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             else do
               putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-              result <- runHooks provider apiKey modelOverride params prompt
+              result <- runHooks provider apiKey modelOverride params prompt useBeta
               case result of
                 Left err -> do
                   putTextLn $ "Request failed: " <> err
                   exitFailure
                 Right _ -> pure ()
     "responses" -> do
-      case extractExtraArgs runnerArgs of
+      case extractExtraArgs runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
@@ -338,7 +355,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                   exitFailure
                 Right result -> renderRunnerResult result
     "partial-mode" -> do
-      case extractExtraArgs runnerArgs of
+      case extractExtraArgs runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
@@ -349,14 +366,14 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             Right p -> pure p
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runPartialMode provider apiKey modelOverride params
+          result <- runPartialMode provider apiKey modelOverride params useBeta
           case result of
             Left err -> do
               putTextLn $ "Request failed: " <> err
               exitFailure
             Right _ -> pure ()
     "prefix-completion" -> do
-      case extractExtraArgs runnerArgs of
+      case extractExtraArgs runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
@@ -367,7 +384,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             Right p -> pure p
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runPrefixCompletion provider apiKey modelOverride params
+          result <- runPrefixCompletion provider apiKey modelOverride params useBeta
           case result of
             Left err -> do
               putTextLn $ "Request failed: " <> err
@@ -375,7 +392,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
             Right _ -> pure ()
     "fim-completion" -> do
       putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-      result <- runFIMCompletion provider apiKey modelOverride
+      result <- runFIMCompletion provider apiKey modelOverride useBeta
       case result of
         Left err -> do
           putTextLn $ "Request failed: " <> err
@@ -383,5 +400,5 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
         Right _ -> pure ()
     _ -> do
       putTextLn $ "Unknown runner: " <> runnerName
-      putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling, embeddings, hooks, responses"
+      putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling, embeddings, hooks, responses, partial-mode, prefix-completion, fim-completion"
       exitFailure

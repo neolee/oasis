@@ -19,6 +19,7 @@ import Control.Monad (foldM)
 data ChatOptions = ChatOptions
   { streaming    :: Bool
   , showThinking :: Bool
+  , useBeta      :: Bool
   } deriving (Show, Eq)
 
 runChat :: Provider -> Text -> Maybe Text -> ChatParams -> ChatOptions -> Maybe Text -> IO (Either Text ())
@@ -63,7 +64,7 @@ runChat provider apiKey modelOverride params opts initialPrompt = do
     nonStreamOnce modelId msgs = do
       let reqBase = defaultChatRequest modelId msgs
           reqBody = applyChatParams params reqBase
-      raw <- sendChatCompletionRaw provider apiKey reqBody
+      raw <- sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody (useBeta opts)
       case parseRawResponseStrict raw of
         Left err -> pure (Left err)
         Right (_, response) ->
@@ -80,7 +81,7 @@ runChat provider apiKey modelOverride params opts initialPrompt = do
           reqBaseStream = setChatStream True reqBase
           reqBody = applyChatParams params reqBaseStream
       accumRef <- newIORef initAccum
-      result <- streamChatCompletionWithRequest provider apiKey reqBody (handleChunk opts accumRef)
+      result <- streamChatCompletionWithRequestWithHooks emptyClientHooks provider apiKey reqBody (handleChunk opts accumRef) (useBeta opts)
       case result of
         Left err -> pure (Left (renderClientError err))
         Right _ -> do

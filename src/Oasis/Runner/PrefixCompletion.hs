@@ -8,8 +8,8 @@ import Oasis.Client.OpenAI
 import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams, extractAssistantContent)
 import Oasis.Runner.Result (parseRawResponseStrict)
 
-runPrefixCompletion :: Provider -> Text -> Maybe Text -> ChatParams -> IO (Either Text ())
-runPrefixCompletion provider apiKey modelOverride params = do
+runPrefixCompletion :: Provider -> Text -> Maybe Text -> ChatParams -> Bool -> IO (Either Text ())
+runPrefixCompletion provider apiKey modelOverride params useBeta = do
   let modelId = resolveModelId provider modelOverride
       messages =
         [ Message "user" (ContentText "Please write quick sort code") Nothing Nothing Nothing Nothing
@@ -39,7 +39,7 @@ runPrefixCompletion provider apiKey modelOverride params = do
         }
       reqBody = applyChatParams params reqBase
   
-  result <- sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody True
+  result <- sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody useBeta
   case parseRawResponseStrict result of
     Left err -> pure (Left err)
     Right (_, response) ->

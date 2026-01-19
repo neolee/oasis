@@ -8,8 +8,8 @@ import Oasis.Client.OpenAI
 import Oasis.Runner.Common (resolveModelId)
 import Oasis.Runner.Result (parseRawResponseStrict)
 
-runFIMCompletion :: Provider -> Text -> Maybe Text -> IO (Either Text ())
-runFIMCompletion provider apiKey modelOverride = do
+runFIMCompletion :: Provider -> Text -> Maybe Text -> Bool -> IO (Either Text ())
+runFIMCompletion provider apiKey modelOverride useBeta = do
   let modelId = resolveModelId provider modelOverride
       reqBody = CompletionRequest
         { model = modelId
@@ -24,7 +24,7 @@ runFIMCompletion provider apiKey modelOverride = do
         , logprobs = Nothing
         }
   
-  result <- sendCompletionsRaw provider apiKey reqBody
+  result <- sendCompletionsRaw provider apiKey reqBody useBeta
   case parseRawResponseStrict result of
     Left err -> pure (Left err)
     Right (_, response) ->
