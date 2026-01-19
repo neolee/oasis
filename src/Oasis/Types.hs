@@ -143,6 +143,8 @@ data Message = Message
   , content       :: MessageContent
   , tool_call_id  :: Maybe Text
   , tool_calls    :: Maybe [ToolCall]
+  , prefix        :: Maybe Bool
+  , partial       :: Maybe Bool
   } deriving (Show, Eq, Generic)
 
 instance FromJSON Message where
@@ -155,11 +157,15 @@ instance FromJSON Message where
       Just v -> parseJSON v
     toolCallId <- o .:? "tool_call_id"
     toolCalls <- o .:? "tool_calls"
+    prefix <- o .:? "prefix"
+    partial <- o .:? "partial"
     pure Message
       { role
       , content
       , tool_call_id = toolCallId
       , tool_calls = toolCalls
+      , prefix = prefix
+      , partial = partial
       }
 
 instance ToJSON Message where
@@ -168,6 +174,8 @@ instance ToJSON Message where
     , "content" .= content
     ] <> maybe [] (\v -> ["tool_call_id" .= v]) tool_call_id
       <> maybe [] (\v -> ["tool_calls" .= v]) tool_calls
+      <> maybe [] (\v -> ["prefix" .= v]) prefix
+      <> maybe [] (\v -> ["partial" .= v]) partial
 
 messageContentText :: MessageContent -> Text
 messageContentText = \case

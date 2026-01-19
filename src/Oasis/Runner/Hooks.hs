@@ -26,7 +26,7 @@ runHooks provider apiKey modelOverride params prompt = do
         , onResponse = Just logResponse
         , onError = Just (putTextLn . renderClientError)
         }
-  result <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody
+  result <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody False
   case result of
     Left err -> pure (Left (renderClientError err))
     Right body -> do

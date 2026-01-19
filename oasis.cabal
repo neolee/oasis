@@ -41,6 +41,9 @@ library
       Oasis.Runner.GetModels
       Oasis.Runner.StructuredOutput
       Oasis.Runner.ToolCalling
+      Oasis.Runner.PartialMode
+      Oasis.Runner.PrefixCompletion
+      Oasis.Runner.FIMCompletion
       Oasis.Service.Amap
       Oasis.Types
   other-modules:

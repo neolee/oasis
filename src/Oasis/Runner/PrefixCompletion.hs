@@ -1,0 +1,50 @@
+module Oasis.Runner.PrefixCompletion
+  ( runPrefixCompletion
+  ) where
+
+import Relude
+import Oasis.Types
+import Oasis.Client.OpenAI
+import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams, extractAssistantContent)
+import Oasis.Runner.Result (parseRawResponseStrict)
+
+runPrefixCompletion :: Provider -> Text -> Maybe Text -> ChatParams -> IO (Either Text ())
+runPrefixCompletion provider apiKey modelOverride params = do
+  let modelId = resolveModelId provider modelOverride
+      messages =
+        [ Message "user" (ContentText "Please write quick sort code") Nothing Nothing Nothing Nothing
+        , Message "assistant" (ContentText "```python\n") Nothing Nothing (Just True) (Just True)
+        ]
+      -- Use beta URL for this feature
+      reqBase = ChatCompletionRequest
+        { model = modelId
+        , messages = messages
+        , temperature = Nothing
+        , top_p = Nothing
+        , max_completion_tokens = Nothing
+        , stop = Just (StopList ["```"])
+        , presence_penalty = Nothing
+        , frequency_penalty = Nothing
+        , seed = Nothing
+        , logit_bias = Nothing
+        , user = Nothing
+        , service_tier = Nothing
+        , reasoning_effort = Nothing
+        , stream_options = Nothing
+        , stream = False
+        , response_format = Nothing
+        , tools = Nothing
+        , tool_choice = Nothing
+        , parallel_tool_calls = Nothing
+        }
+      reqBody = applyChatParams params reqBase
+  
+  result <- sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody True
+  case parseRawResponseStrict result of
+    Left err -> pure (Left err)
+    Right (_, response) ->
+      case extractAssistantContent response of
+        Nothing -> pure (Left "No assistant message returned.")
+        Just content -> do
+          putTextLn content
+          pure (Right ())

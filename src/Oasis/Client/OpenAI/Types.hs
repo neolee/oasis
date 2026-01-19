@@ -18,6 +18,9 @@ module Oasis.Client.OpenAI.Types
   , EmbeddingUsage(..)
   , ResponsesRequest(..)
   , ResponsesResponse(..)
+  , CompletionRequest(..)
+  , CompletionResponse(..)
+  , CompletionChoice(..)
   , ErrorDetail(..)
   , ErrorResponse(..)
   , ClientError(..)
@@ -255,6 +258,52 @@ instance FromJSON ResponsesResponse where
 
 instance ToJSON ResponsesResponse where
   toJSON = genericToJSON defaultOptions { fieldLabelModifier = dropTrailingUnderscore, omitNothingFields = True }
+
+data CompletionRequest = CompletionRequest
+  { model       :: Text
+  , prompt      :: Text
+  , suffix      :: Maybe Text
+  , max_tokens  :: Maybe Int
+  , temperature :: Maybe Double
+  , top_p       :: Maybe Double
+  , stream      :: Bool
+  , stop        :: Maybe StopParam
+  , echo        :: Maybe Bool
+  , logprobs    :: Maybe Int
+  } deriving (Show, Eq, Generic)
+
+instance ToJSON CompletionRequest where
+  toJSON = genericToJSON defaultOptions { omitNothingFields = True }
+
+instance FromJSON CompletionRequest where
+  parseJSON = genericParseJSON defaultOptions
+
+data CompletionChoice = CompletionChoice
+  { text          :: Text
+  , index         :: Int
+  , finish_reason :: Maybe Text
+  } deriving (Show, Eq, Generic)
+
+instance FromJSON CompletionChoice where
+  parseJSON = genericParseJSON defaultOptions
+
+instance ToJSON CompletionChoice where
+  toJSON = genericToJSON defaultOptions { omitNothingFields = True }
+
+data CompletionResponse = CompletionResponse
+  { id      :: Maybe Text
+  , object  :: Maybe Text
+  , created :: Maybe Int
+  , model   :: Maybe Text
+  , choices :: [CompletionChoice]
+  , usage   :: Maybe Usage
+  } deriving (Show, Eq, Generic)
+
+instance FromJSON CompletionResponse where
+  parseJSON = genericParseJSON defaultOptions
+
+instance ToJSON CompletionResponse where
+  toJSON = genericToJSON defaultOptions { omitNothingFields = True }
 
 data ErrorDetail = ErrorDetail
   { message :: Text

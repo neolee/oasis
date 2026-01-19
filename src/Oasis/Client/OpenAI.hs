@@ -15,6 +15,9 @@ module Oasis.Client.OpenAI
   , EmbeddingUsage(..)
   , ResponsesRequest(..)
   , ResponsesResponse(..)
+  , CompletionRequest(..)
+  , CompletionResponse(..)
+  , CompletionChoice(..)
   , ErrorDetail(..)
   , ErrorResponse(..)
   , ClientError(..)
@@ -22,10 +25,15 @@ module Oasis.Client.OpenAI
   , sendChatCompletionRaw
   , streamChatCompletion
   , streamChatCompletionWithRequest
+  , sendCompletions
+  , sendCompletionsRaw
+  , sendCompletionsRawWithHooks
+  , sendCompletionsRawWithManager
   , buildChatUrl
   , buildModelsUrl
   , buildEmbeddingsUrl
   , buildResponsesUrl
+  , buildCompletionsUrl
   , sendEmbeddings
   , sendEmbeddingsRaw
   , sendEmbeddingsRawWithHooks
@@ -68,16 +76,17 @@ sendChatCompletion provider apiKey modelId msgs = do
 
 sendChatCompletionRaw :: Provider -> Text -> ChatCompletionRequest -> IO (Either ClientError BL.ByteString)
 sendChatCompletionRaw provider apiKey reqBody = do
-  sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody
+  sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody False
 
-sendChatCompletionRawWithHooks :: ClientHooks -> Provider -> Text -> ChatCompletionRequest -> IO (Either ClientError BL.ByteString)
-sendChatCompletionRawWithHooks hooks provider apiKey reqBody = do
+sendChatCompletionRawWithHooks :: ClientHooks -> Provider -> Text -> ChatCompletionRequest -> Bool -> IO (Either ClientError BL.ByteString)
+sendChatCompletionRawWithHooks hooks provider apiKey reqBody useBeta = do
   manager <- newTlsManager
-  sendChatCompletionRawWithManager manager hooks provider apiKey reqBody
+  sendChatCompletionRawWithManager manager hooks provider apiKey reqBody useBeta
 
-sendChatCompletionRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> ChatCompletionRequest -> IO (Either ClientError BL.ByteString)
-sendChatCompletionRawWithManager manager hooks provider apiKey reqBody = do
-  let url = buildChatUrl (base_url provider)
+sendChatCompletionRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> ChatCompletionRequest -> Bool -> IO (Either ClientError BL.ByteString)
+sendChatCompletionRawWithManager manager hooks provider apiKey reqBody useBeta = do
+  let baseUrl = if useBeta then fromMaybe (base_url provider) (beta_base_url provider) else base_url provider
+      url = buildChatUrl baseUrl
   req <- buildJsonRequest url "POST" (encode reqBody) apiKey
   executeRequestWithHooks hooks req manager
 
@@ -89,16 +98,17 @@ streamChatCompletion provider apiKey modelId msgs onChunk = do
 
 streamChatCompletionWithRequest :: Provider -> Text -> ChatCompletionRequest -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either ClientError ())
 streamChatCompletionWithRequest provider apiKey reqBody onChunk = do
-  streamChatCompletionWithRequestWithHooks emptyClientHooks provider apiKey reqBody onChunk
+  streamChatCompletionWithRequestWithHooks emptyClientHooks provider apiKey reqBody onChunk False
 
-streamChatCompletionWithRequestWithHooks :: ClientHooks -> Provider -> Text -> ChatCompletionRequest -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either ClientError ())
-streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody onChunk = do
+streamChatCompletionWithRequestWithHooks :: ClientHooks -> Provider -> Text -> ChatCompletionRequest -> (ChatCompletionStreamChunk -> IO ()) -> Bool -> IO (Either ClientError ())
+streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody onChunk useBeta = do
   manager <- newTlsManager
-  streamChatCompletionWithRequestWithManager manager hooks provider apiKey reqBody onChunk
+  streamChatCompletionWithRequestWithManager manager hooks provider apiKey reqBody onChunk useBeta
 
-streamChatCompletionWithRequestWithManager :: Manager -> ClientHooks -> Provider -> Text -> ChatCompletionRequest -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either ClientError ())
-streamChatCompletionWithRequestWithManager manager hooks provider apiKey reqBody onChunk = do
-  let url = buildChatUrl (base_url provider)
+streamChatCompletionWithRequestWithManager :: Manager -> ClientHooks -> Provider -> Text -> ChatCompletionRequest -> (ChatCompletionStreamChunk -> IO ()) -> Bool -> IO (Either ClientError ())
+streamChatCompletionWithRequestWithManager manager hooks provider apiKey reqBody onChunk useBeta = do
+  let baseUrl = if useBeta then fromMaybe (base_url provider) (beta_base_url provider) else base_url provider
+      url = buildChatUrl baseUrl
   req <- buildSseRequest url (encode reqBody) apiKey
   forM_ (onRequest hooks) ($ req)
   withResponse req manager $ \resp -> do
@@ -127,6 +137,30 @@ streamChatCompletionWithRequestWithManager manager hooks provider apiKey reqBody
             Right chunk -> do
               onChunk chunk
               pure (Right ())
+
+sendCompletions :: Provider -> Text -> CompletionRequest -> IO (Either ClientError CompletionResponse)
+sendCompletions provider apiKey reqBody = do
+  resp <- sendCompletionsRaw provider apiKey reqBody
+  case resp of
+    Left err -> pure (Left err)
+    Right body -> pure (decodeOrError body)
+
+sendCompletionsRaw :: Provider -> Text -> CompletionRequest -> IO (Either ClientError BL.ByteString)
+sendCompletionsRaw provider apiKey reqBody = do
+  sendCompletionsRawWithHooks emptyClientHooks provider apiKey reqBody
+
+sendCompletionsRawWithHooks :: ClientHooks -> Provider -> Text -> CompletionRequest -> IO (Either ClientError BL.ByteString)
+sendCompletionsRawWithHooks hooks provider apiKey reqBody = do
+  manager <- newTlsManager
+  sendCompletionsRawWithManager manager hooks provider apiKey reqBody
+
+sendCompletionsRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> CompletionRequest -> IO (Either ClientError BL.ByteString)
+sendCompletionsRawWithManager manager hooks provider apiKey reqBody = do
+  -- Completion API usually defaults to beta base url if it's FIM
+  let baseUrl = fromMaybe (base_url provider) (beta_base_url provider)
+      url = buildCompletionsUrl baseUrl
+  req <- buildJsonRequest url "POST" (encode reqBody) apiKey
+  executeRequestWithHooks hooks req manager
 
 sendModelsRaw :: Provider -> Text -> IO (Either ClientError BL.ByteString)
 sendModelsRaw provider apiKey = do

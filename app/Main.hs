@@ -11,6 +11,9 @@ import Oasis.Runner.Embeddings
 import Oasis.Runner.Hooks
 import Oasis.Runner.Responses
 import Oasis.Runner.ToolCalling
+import Oasis.Runner.PartialMode
+import Oasis.Runner.PrefixCompletion
+import Oasis.Runner.FIMCompletion
 import Oasis.Runner.Common (resolveModelId, parseChatParams)
 import Oasis.Runner.Render (renderRunnerResult, renderResponseOnly)
 import qualified Data.Text as T
@@ -50,7 +53,7 @@ main = do
                 Just (p, key) -> dispatchRunner alias p key modelOverride runnerName runnerArgs
     _ -> do
       putTextLn "Usage: oasis-cli <provider> <model|default|-> <runner> [runner args...]"
-      putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling, embeddings, hooks, responses"
+      putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling, embeddings, hooks, responses, partial-mode, prefix-completion, fim-completion"
       putTextLn "Chat runner args: [--no-stream] [--hide-thinking] [--extra-args <json>] [initial prompt...]"
       putTextLn "Basic runner args: [--extra-args <json>] [--raw <json>] <prompt...>"
       putTextLn "Structured runner args: [--extra-args <json>]"
@@ -334,6 +337,50 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                   putTextLn $ "Request failed: " <> err
                   exitFailure
                 Right result -> renderRunnerResult result
+    "partial-mode" -> do
+      case extractExtraArgs runnerArgs of
+        Left err -> do
+          putTextLn err
+          exitFailure
+        Right (extraArgsText, _) -> do
+          params <- case parseChatParams extraArgsText of
+            Left err -> do
+              putTextLn err
+              exitFailure
+            Right p -> pure p
+          putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+          result <- runPartialMode provider apiKey modelOverride params
+          case result of
+            Left err -> do
+              putTextLn $ "Request failed: " <> err
+              exitFailure
+            Right _ -> pure ()
+    "prefix-completion" -> do
+      case extractExtraArgs runnerArgs of
+        Left err -> do
+          putTextLn err
+          exitFailure
+        Right (extraArgsText, _) -> do
+          params <- case parseChatParams extraArgsText of
+            Left err -> do
+              putTextLn err
+              exitFailure
+            Right p -> pure p
+          putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+          result <- runPrefixCompletion provider apiKey modelOverride params
+          case result of
+            Left err -> do
+              putTextLn $ "Request failed: " <> err
+              exitFailure
+            Right _ -> pure ()
+    "fim-completion" -> do
+      putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+      result <- runFIMCompletion provider apiKey modelOverride
+      case result of
+        Left err -> do
+          putTextLn $ "Request failed: " <> err
+          exitFailure
+        Right _ -> pure ()
     _ -> do
       putTextLn $ "Unknown runner: " <> runnerName
       putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling, embeddings, hooks, responses"

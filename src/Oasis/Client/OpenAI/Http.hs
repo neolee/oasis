@@ -5,6 +5,7 @@ module Oasis.Client.OpenAI.Http
   , buildModelsUrl
   , buildEmbeddingsUrl
   , buildResponsesUrl
+  , buildCompletionsUrl
   , authHeader
   , newTlsManager
   , buildRequest
@@ -52,6 +53,9 @@ buildEmbeddingsUrl baseUrl = buildEndpointUrl baseUrl "/embeddings"
 
 buildResponsesUrl :: Text -> Text
 buildResponsesUrl baseUrl = buildEndpointUrl baseUrl "/responses"
+
+buildCompletionsUrl :: Text -> Text
+buildCompletionsUrl baseUrl = buildEndpointUrl baseUrl "/completions"
 
 buildEndpointUrl :: Text -> Text -> Text
 buildEndpointUrl baseUrl pathSuffix =

@@ -225,5 +225,5 @@ mkRoleMessage roleText contentText =
     "system" -> Right (Msg.systemMessage contentText)
     "user" -> Right (Msg.userMessage contentText)
     "assistant" -> Right (Msg.assistantMessage contentText)
-    "tool" -> Right (Message "tool" (ContentText contentText) Nothing Nothing)
+    "tool" -> Right (Msg.plainMessage "tool" contentText)
     _ -> Left ("Unknown role: " <> roleText)

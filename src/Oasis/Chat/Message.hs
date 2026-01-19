@@ -4,22 +4,37 @@ module Oasis.Chat.Message
   , assistantMessage
   , toolMessage
   , toolCallMessage
+  , plainMessage
   ) where
 
 import Relude
 import Oasis.Types
 
+plainMessage :: Text -> Text -> Message
+plainMessage roleText txt = Message
+  { role = roleText
+  , content = ContentText txt
+  , tool_call_id = Nothing
+  , tool_calls = Nothing
+  , prefix = Nothing
+  , partial = Nothing
+  }
+
 systemMessage :: Text -> Message
-systemMessage txt = Message "system" (ContentText txt) Nothing Nothing
+systemMessage = plainMessage "system"
 
 userMessage :: Text -> Message
-userMessage txt = Message "user" (ContentText txt) Nothing Nothing
+userMessage = plainMessage "user"
 
 assistantMessage :: Text -> Message
-assistantMessage txt = Message "assistant" (ContentText txt) Nothing Nothing
+assistantMessage = plainMessage "assistant"
 
 toolMessage :: Text -> Text -> Message
-toolMessage toolCallId txt = Message "tool" (ContentText txt) (Just toolCallId) Nothing
+toolMessage toolCallId txt = (plainMessage "tool" txt)
+  { tool_call_id = Just toolCallId
+  }
 
 toolCallMessage :: [ToolCall] -> Message
-toolCallMessage calls = Message "assistant" (ContentText "") Nothing (Just calls)
+toolCallMessage calls = (plainMessage "assistant" "")
+  { tool_calls = Just calls
+  }
