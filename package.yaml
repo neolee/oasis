@@ -37,6 +37,7 @@ dependencies:
 - brick
 - brick-panes
 - brick-skylighting
+- vty
 
 default-extensions:
 - NoImplicitPrelude

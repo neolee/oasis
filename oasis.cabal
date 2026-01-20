@@ -91,6 +91,7 @@ library
     , transformers
     , unordered-containers
     , vector
+    , vty
   default-language: GHC2024
 
 executable oasis-cli
@@ -137,6 +138,7 @@ executable oasis-cli
     , transformers
     , unordered-containers
     , vector
+    , vty
   default-language: GHC2024
 
 executable oasis-tui
@@ -183,4 +185,5 @@ executable oasis-tui
     , transformers
     , unordered-containers
     , vector
+    , vty
   default-language: GHC2024
