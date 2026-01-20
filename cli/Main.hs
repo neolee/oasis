@@ -14,8 +14,9 @@ import Oasis.Runner.ToolCalling
 import Oasis.Runner.PartialMode
 import Oasis.Runner.PrefixCompletion
 import Oasis.Runner.FIMCompletion
-import Oasis.Runner.Common (resolveModelId, parseChatParams)
-import Oasis.Runner.Render (renderRunnerResult, renderResponseOnly)
+import Oasis.Model (resolveModelId)
+import Oasis.Client.OpenAI.Param (parseChatParams)
+import Oasis.Render.Text (renderRunnerResultText, renderResponseOnlyText)
 import qualified Data.Text as T
 import qualified Data.List as L
 import qualified Data.Text.Encoding as TE
@@ -169,7 +170,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                     Left err -> do
                       putTextLn $ "Request failed: " <> err
                       exitFailure
-                    Right result -> renderRunnerResult result
+                    Right result -> putTextLn (renderRunnerResultText result)
                 Nothing -> do
                   let prompt = T.unwords (map toText restArgs2)
                   if T.null (T.strip prompt)
@@ -183,7 +184,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                         Left err -> do
                           putTextLn $ "Request failed: " <> err
                           exitFailure
-                        Right result -> renderRunnerResult result
+                        Right result -> putTextLn (renderRunnerResultText result)
     "chat" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
@@ -218,7 +219,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
         Left err -> do
           putTextLn $ "Request failed: " <> err
           exitFailure
-        Right result -> renderResponseOnly result
+        Right result -> putTextLn (renderResponseOnlyText result)
     "structured-json" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
@@ -305,7 +306,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                 Left err -> do
                   putTextLn $ "Request failed: " <> err
                   exitFailure
-                Right result -> renderRunnerResult result
+                Right result -> putTextLn (renderRunnerResultText result)
     "hooks" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
@@ -353,7 +354,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                 Left err -> do
                   putTextLn $ "Request failed: " <> err
                   exitFailure
-                Right result -> renderRunnerResult result
+                Right result -> putTextLn (renderRunnerResultText result)
     "partial-mode" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do

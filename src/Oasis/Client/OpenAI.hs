@@ -47,6 +47,7 @@ module Oasis.Client.OpenAI
   , sendModelsRawWithManager
   , sendChatCompletionRawWithHooks
   , sendChatCompletionRawWithManager
+  , requestChat
   , renderClientError
   , ClientHooks(..)
   , emptyClientHooks
@@ -60,6 +61,7 @@ import Oasis.Client.OpenAI.Types
 import Oasis.Client.OpenAI.Http
 import Oasis.Client.OpenAI.Request
 import Oasis.Client.OpenAI.Stream
+import Oasis.Client.OpenAI.Param (ChatParams, applyChatParams)
 import Data.Aeson
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text as T
@@ -98,6 +100,11 @@ sendChatCompletionRawWithManager manager hooks provider apiKey reqBody useBeta =
   let url = buildChatUrl (selectBaseUrl provider useBeta)
   req <- buildJsonRequest url "POST" (encode reqBody) apiKey
   executeRequestWithHooks hooks req manager
+
+requestChat :: Provider -> Text -> ChatParams -> ChatCompletionRequest -> Bool -> IO (Either ClientError BL.ByteString)
+requestChat provider apiKey params reqBase useBeta = do
+  let reqBody = applyChatParams params reqBase
+  sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody useBeta
 
 streamChatCompletion :: Provider -> Text -> Text -> [Message] -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either ClientError ())
 streamChatCompletion provider apiKey modelId msgs onChunk = do

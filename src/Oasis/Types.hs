@@ -51,6 +51,12 @@ data Defaults = Defaults
   } deriving (Show, Eq, Generic, FromJSON, ToJSON)
     deriving FromValue via GenericTomlTable Defaults
 
+data RequestResponse a = RequestResponse
+  { requestJson  :: Text
+  , responseJson :: Text
+  , response     :: Maybe a
+  } deriving (Show, Eq)
+
 data ToolFunctionSpec = ToolFunctionSpec
   { name        :: Text
   , description :: Maybe Text

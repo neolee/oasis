@@ -9,15 +9,16 @@ module Oasis.Runner.Embeddings
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
-import Oasis.Runner.Common (resolveModelId, parseExtraArgs)
-import Oasis.Runner.Result (RunnerResult(..), encodeRequestJson, buildRunnerResult)
+import Oasis.Model (resolveModelId)
+import Oasis.Client.OpenAI.Param (parseExtraArgs)
+import Oasis.Runner.Result (encodeRequestJson, buildRequestResponse)
 import Data.Aeson (FromJSON(..), ToJSON(..), (.:?), (.=), withObject)
 import Data.Aeson.Types (Parser)
 import qualified Data.Text as T
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as Key
 
-type EmbeddingResult = RunnerResult EmbeddingResponse
+type EmbeddingResult = RequestResponse EmbeddingResponse
 
 data EmbeddingParams = EmbeddingParams
   { paramEncodingFormat :: Maybe Text
@@ -59,4 +60,4 @@ runEmbeddings provider apiKey modelOverride params inputText = do
         }
       reqJsonText = encodeRequestJson reqBody
   resp <- sendEmbeddingsRaw provider apiKey reqBody
-  pure (buildRunnerResult reqJsonText resp)
+  pure (buildRequestResponse reqJsonText resp)

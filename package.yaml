@@ -34,6 +34,7 @@ dependencies:
 - filepath
 - time
 - vector
+- brick
 
 default-extensions:
 - NoImplicitPrelude
@@ -51,21 +52,21 @@ default-extensions:
 library:
   source-dirs: src
   exposed-modules:
+  - Oasis.Types
+  - Oasis.Config
+  - Oasis.Model
+  - Oasis.Render.Text
+  - Oasis.Client.OpenAI
+  - Oasis.Client.OpenAI.Param
   - Oasis.Chat.History
   - Oasis.Chat.Log
   - Oasis.Chat.Message
   - Oasis.Chat.Prompt
-  - Oasis.Client.OpenAI
-  - Oasis.Config
   - Oasis.Runner.Basic
   - Oasis.Runner.Chat
-  - Oasis.Runner.Common
   - Oasis.Runner.Embeddings
   - Oasis.Runner.Hooks
-  - Oasis.Runner.Render
-  - Oasis.Runner.Result
   - Oasis.Runner.Responses
-  - Oasis.Runner.Stream
   - Oasis.Runner.GetModels
   - Oasis.Runner.StructuredOutput
   - Oasis.Runner.ToolCalling
@@ -73,17 +74,28 @@ library:
   - Oasis.Runner.PrefixCompletion
   - Oasis.Runner.FIMCompletion
   - Oasis.Service.Amap
-  - Oasis.Types
   other-modules:
   - Oasis.Client.OpenAI.Http
+  - Oasis.Client.OpenAI.Context
   - Oasis.Client.OpenAI.Request
   - Oasis.Client.OpenAI.Stream
   - Oasis.Client.OpenAI.Types
+  - Oasis.Runner.Result
+  - Oasis.Runner.Stream
 
 executables:
   oasis-cli:
     main:                Main.hs
-    source-dirs:         app
+    source-dirs:         cli
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - oasis
+  oasis-tui:
+    main:                Main.hs
+    source-dirs:         tui
     ghc-options:
     - -threaded
     - -rtsopts

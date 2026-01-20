@@ -5,7 +5,9 @@ module Oasis.Runner.PartialMode
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
-import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams, extractAssistantContent)
+import Oasis.Model (resolveModelId)
+import Oasis.Client.OpenAI.Param (ChatParams, applyChatParams)
+import Oasis.Client.OpenAI.Context (extractAssistantContent)
 import Oasis.Runner.Result (parseRawResponseStrict)
 
 runPartialMode :: Provider -> Text -> Maybe Text -> ChatParams -> Bool -> IO (Either Text ())

@@ -9,7 +9,9 @@ import Oasis.Client.OpenAI
 import Oasis.Client.OpenAI.Types (setChatStream)
 import Oasis.Chat.History
 import qualified Oasis.Chat.Message as Msg
-import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams, extractAssistantContent)
+import Oasis.Model (resolveModelId)
+import Oasis.Client.OpenAI.Param (ChatParams, applyChatParams)
+import Oasis.Client.OpenAI.Context (extractAssistantContent)
 import Oasis.Runner.Stream (forEachDelta, deltaReasoningText)
 import Oasis.Runner.Result (parseRawResponseStrict)
 import qualified Data.Text as T

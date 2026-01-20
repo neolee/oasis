@@ -8,7 +8,8 @@ import Oasis.Types
 import Oasis.Client.OpenAI
 import Oasis.Client.OpenAI.Types (setChatStream, setChatResponseFormat)
 import qualified Oasis.Chat.Message as Msg
-import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams)
+import Oasis.Model (resolveModelId)
+import Oasis.Client.OpenAI.Param (ChatParams, applyChatParams)
 import Oasis.Runner.Stream (forEachDeltaContent)
 import Data.Aeson (Value, decode, encode, (.=))
 import qualified Data.Aeson as Aeson

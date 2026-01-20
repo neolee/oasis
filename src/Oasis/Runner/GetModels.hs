@@ -7,11 +7,11 @@ import Relude
 import Data.Aeson (Value)
 import Oasis.Client.OpenAI
 import Oasis.Types
-import Oasis.Runner.Result (RunnerResult(..), buildRunnerResult)
+import Oasis.Runner.Result (buildRequestResponse)
 
-type GetModelsResult = RunnerResult Value
+type GetModelsResult = RequestResponse Value
 
 runGetModels :: Provider -> Text -> IO (Either Text GetModelsResult)
 runGetModels provider apiKey = do
   resp <- sendModelsRaw provider apiKey
-  pure (buildRunnerResult "" resp)
+  pure (buildRequestResponse "" resp)

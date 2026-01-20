@@ -7,10 +7,12 @@ module Oasis.Runner.Basic
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
-import Oasis.Runner.Common (resolveModelId, buildUserMessages, ChatParams, applyChatParams)
-import Oasis.Runner.Result (RunnerResult(..), encodeRequestJson, buildRunnerResult)
+import Oasis.Model (resolveModelId)
+import Oasis.Client.OpenAI.Context (buildUserMessages)
+import Oasis.Client.OpenAI.Param (ChatParams, applyChatParams)
+import Oasis.Runner.Result (encodeRequestJson, buildRequestResponse)
 
-type BasicResult = RunnerResult ChatCompletionResponse
+type BasicResult = RequestResponse ChatCompletionResponse
 
 runBasic :: Provider -> Text -> Maybe Text -> ChatParams -> Text -> Bool -> IO (Either Text BasicResult)
 runBasic provider apiKey modelOverride params prompt useBeta = do
@@ -20,7 +22,7 @@ runBasic provider apiKey modelOverride params prompt useBeta = do
       reqBody = applyChatParams params reqBase
       reqJsonText = encodeRequestJson reqBody
   resp <- sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody useBeta
-  pure (buildRunnerResult reqJsonText resp)
+  pure (buildRequestResponse reqJsonText resp)
 
 runBasicRaw :: Provider -> Text -> Maybe Text -> ChatParams -> [Message] -> Bool -> IO (Either Text BasicResult)
 runBasicRaw provider apiKey modelOverride params messages useBeta = do
@@ -29,4 +31,4 @@ runBasicRaw provider apiKey modelOverride params messages useBeta = do
       reqBody = applyChatParams params reqBase
       reqJsonText = encodeRequestJson reqBody
   resp <- sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody useBeta
-  pure (buildRunnerResult reqJsonText resp)
+  pure (buildRequestResponse reqJsonText resp)

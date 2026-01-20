@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.38.1.
+-- This file has been generated from package.yaml by hpack version 0.39.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -23,21 +23,21 @@ source-repository head
 
 library
   exposed-modules:
+      Oasis.Types
+      Oasis.Config
+      Oasis.Model
+      Oasis.Render.Text
+      Oasis.Client.OpenAI
+      Oasis.Client.OpenAI.Param
       Oasis.Chat.History
       Oasis.Chat.Log
       Oasis.Chat.Message
       Oasis.Chat.Prompt
-      Oasis.Client.OpenAI
-      Oasis.Config
       Oasis.Runner.Basic
       Oasis.Runner.Chat
-      Oasis.Runner.Common
       Oasis.Runner.Embeddings
       Oasis.Runner.Hooks
-      Oasis.Runner.Render
-      Oasis.Runner.Result
       Oasis.Runner.Responses
-      Oasis.Runner.Stream
       Oasis.Runner.GetModels
       Oasis.Runner.StructuredOutput
       Oasis.Runner.ToolCalling
@@ -45,12 +45,14 @@ library
       Oasis.Runner.PrefixCompletion
       Oasis.Runner.FIMCompletion
       Oasis.Service.Amap
-      Oasis.Types
   other-modules:
       Oasis.Client.OpenAI.Http
+      Oasis.Client.OpenAI.Context
       Oasis.Client.OpenAI.Request
       Oasis.Client.OpenAI.Stream
       Oasis.Client.OpenAI.Types
+      Oasis.Runner.Result
+      Oasis.Runner.Stream
   hs-source-dirs:
       src
   default-extensions:
@@ -68,6 +70,7 @@ library
   build-depends:
       aeson
     , base >=4.7 && <5
+    , brick
     , bytestring
     , case-insensitive
     , conduit
@@ -93,7 +96,7 @@ executable oasis-cli
   other-modules:
       Paths_oasis
   hs-source-dirs:
-      app
+      cli
   default-extensions:
       NoImplicitPrelude
       OverloadedStrings
@@ -110,6 +113,51 @@ executable oasis-cli
   build-depends:
       aeson
     , base >=4.7 && <5
+    , brick
+    , bytestring
+    , case-insensitive
+    , conduit
+    , containers
+    , directory
+    , filepath
+    , http-client
+    , http-client-tls
+    , http-conduit
+    , http-types
+    , mtl
+    , oasis
+    , relude
+    , text
+    , time
+    , toml-parser >=2.0.0.0
+    , transformers
+    , unordered-containers
+    , vector
+  default-language: GHC2024
+
+executable oasis-tui
+  main-is: Main.hs
+  other-modules:
+      Paths_oasis
+  hs-source-dirs:
+      tui
+  default-extensions:
+      NoImplicitPrelude
+      OverloadedStrings
+      DeriveGeneric
+      DuplicateRecordFields
+      NamedFieldPuns
+      RecordWildCards
+      LambdaCase
+      FlexibleContexts
+      TypeApplications
+      DeriveAnyClass
+      DerivingVia
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , brick
     , bytestring
     , case-insensitive
     , conduit

@@ -1,21 +1,14 @@
-module Oasis.Runner.Common
-  ( selectModelId
-  , resolveModelId
-  , buildUserMessages
-  , extractAssistantContent
-  , extractToolCall
-  , ChatParams(..)
+module Oasis.Client.OpenAI.Param
+  ( ChatParams(..)
   , emptyChatParams
   , parseChatParams
   , parseExtraArgs
   , applyChatParams
-  , requestChat
   ) where
 
 import Relude
 import Oasis.Types
-import Oasis.Client.OpenAI (ChatCompletionRequest(..), ChatCompletionResponse(..), ChatChoice(..), ClientError, sendChatCompletionRawWithHooks, emptyClientHooks)
-import Oasis.Chat.Message (userMessage)
+import Oasis.Client.OpenAI.Types (ChatCompletionRequest(..))
 import Data.Aeson (FromJSON(..), ToJSON(..), (.:?), (.=), withObject)
 import Data.Aeson.Types (Parser)
 import qualified Data.Text as T
@@ -23,25 +16,6 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as Key
-
-selectModelId :: Provider -> Text
-selectModelId Provider{..} =
-  case fmap T.toLower default_model_type of
-    Just "reasoner" | not (T.null reasoner_model_id) -> reasoner_model_id
-    Just "coder"    | not (T.null coder_model_id)    -> coder_model_id
-    _                                             -> chat_model_id
-
-resolveModelId :: Provider -> Maybe Text -> Text
-resolveModelId provider = \case
-  Just m
-    | let trimmed = T.strip m
-    , not (T.null trimmed)
-    , T.toLower trimmed /= "default"
-    , trimmed /= "-" -> trimmed
-  _ -> selectModelId provider
-
-buildUserMessages :: Text -> [Message]
-buildUserMessages prompt = [userMessage prompt]
 
 data ChatParams = ChatParams
   { paramTemperature :: Maybe Double
@@ -124,20 +98,3 @@ applyChatParams ChatParams{..} req =
     , reasoning_effort = paramReasoningEffort <|> reasoning_effort req
     , stream_options = paramStreamOptions <|> stream_options req
     }
-
-requestChat :: Provider -> Text -> ChatParams -> ChatCompletionRequest -> Bool -> IO (Either ClientError BL.ByteString)
-requestChat provider apiKey params reqBase useBeta = do
-  let reqBody = applyChatParams params reqBase
-  sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody useBeta
-
-extractAssistantContent :: ChatCompletionResponse -> Maybe Text
-extractAssistantContent ChatCompletionResponse{choices} =
-  case choices of
-    (ChatChoice{message = Just Message{content}}:_) -> Just (messageContentText content)
-    _ -> Nothing
-
-extractToolCall :: ChatCompletionResponse -> Maybe (Message, ToolCall)
-extractToolCall ChatCompletionResponse{choices} =
-  case choices of
-    (ChatChoice{message = Just msg@Message{tool_calls = Just (tc:_)}}:_) -> Just (msg, tc)
-    _ -> Nothing

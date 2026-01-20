@@ -5,7 +5,7 @@ module Oasis.Runner.FIMCompletion
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
-import Oasis.Runner.Common (resolveModelId)
+import Oasis.Model (resolveModelId)
 import Oasis.Runner.Result (parseRawResponseStrict)
 
 runFIMCompletion :: Provider -> Text -> Maybe Text -> Bool -> IO (Either Text ())

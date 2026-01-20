@@ -7,7 +7,9 @@ import Oasis.Types
 import qualified Oasis.Types as OT
 import Oasis.Client.OpenAI
 import qualified Oasis.Chat.Message as Msg
-import Oasis.Runner.Common (resolveModelId, ChatParams, requestChat, extractAssistantContent, extractToolCall)
+import Oasis.Model (resolveModelId)
+import Oasis.Client.OpenAI.Param (ChatParams)
+import Oasis.Client.OpenAI.Context (extractAssistantContent, extractToolCall)
 import Oasis.Runner.Result (parseRawResponseStrict)
 import Oasis.Service.Amap (getWeatherText)
 import Data.Aeson (Value, decode, (.=))

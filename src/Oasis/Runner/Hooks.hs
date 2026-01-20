@@ -5,7 +5,9 @@ module Oasis.Runner.Hooks
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
-import Oasis.Runner.Common (resolveModelId, ChatParams, applyChatParams, buildUserMessages)
+import Oasis.Model (resolveModelId)
+import Oasis.Client.OpenAI.Context (buildUserMessages)
+import Oasis.Client.OpenAI.Param (ChatParams, applyChatParams)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString as BS

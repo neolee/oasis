@@ -1,11 +1,10 @@
 module Oasis.Runner.Result
-  ( RunnerResult(..)
-  , encodeRequestJson
+  ( encodeRequestJson
   , decodeResponseJson
   , decodeResponseJsonStrict
   , parseRawResponse
   , parseRawResponseStrict
-  , buildRunnerResult
+  , buildRequestResponse
   ) where
 
 import Relude
@@ -13,12 +12,7 @@ import Data.Aeson (ToJSON(..), FromJSON(..), encode, decode, eitherDecode)
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
 import Oasis.Client.OpenAI (ClientError, renderClientError)
-
-data RunnerResult a = RunnerResult
-  { requestJson  :: Text
-  , responseJson :: Text
-  , response     :: Maybe a
-  } deriving (Show, Eq)
+import Oasis.Types (RequestResponse(..))
 
 encodeRequestJson :: ToJSON a => a -> Text
 encodeRequestJson req = TE.decodeUtf8Lenient (BL.toStrict (encode req))
@@ -47,8 +41,8 @@ parseRawResponseStrict = \case
   Left err -> Left (renderClientError err)
   Right body -> decodeResponseJsonStrict body
 
-buildRunnerResult :: FromJSON a => Text -> Either ClientError BL.ByteString -> Either Text (RunnerResult a)
-buildRunnerResult reqJson resp =
+buildRequestResponse :: FromJSON a => Text -> Either ClientError BL.ByteString -> Either Text (RequestResponse a)
+buildRequestResponse reqJson resp =
   case parseRawResponse resp of
     Left err -> Left err
-    Right (respText, decoded) -> Right (RunnerResult reqJson respText decoded)
+    Right (respText, decoded) -> Right (RequestResponse reqJson respText decoded)
