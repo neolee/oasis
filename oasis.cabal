@@ -71,6 +71,8 @@ library
       aeson
     , base >=4.7 && <5
     , brick
+    , brick-panes
+    , brick-skylighting
     , bytestring
     , case-insensitive
     , conduit
@@ -114,6 +116,8 @@ executable oasis-cli
       aeson
     , base >=4.7 && <5
     , brick
+    , brick-panes
+    , brick-skylighting
     , bytestring
     , case-insensitive
     , conduit
@@ -158,6 +162,8 @@ executable oasis-tui
       aeson
     , base >=4.7 && <5
     , brick
+    , brick-panes
+    , brick-skylighting
     , bytestring
     , case-insensitive
     , conduit

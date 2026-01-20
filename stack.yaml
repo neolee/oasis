@@ -3,3 +3,6 @@ compiler: ghc-9.10.3
 system-ghc: true
 packages:
 - .
+extra-deps:
+- brick-panes-1.0.3.0@sha256:d3976e9834db7942fe8720fba7d4ac58a74f75ad911c7b3f7ad5156555ca0bc0,3034
+- brick-skylighting-1.0@sha256:64764b6be36c05261959f68ed38b9cb37e1acb6180a3bde5dd98255f62ea7e3b,1812

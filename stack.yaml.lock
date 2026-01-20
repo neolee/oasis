@@ -3,7 +3,21 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/topics/lock_files
 
-packages: []
+packages:
+- completed:
+    hackage: brick-panes-1.0.3.0@sha256:d3976e9834db7942fe8720fba7d4ac58a74f75ad911c7b3f7ad5156555ca0bc0,3034
+    pantry-tree:
+      sha256: f7d189a9ce2a01617aa5e45cc8c295e1f7d54e71b0ade2ca9054a12d857e0cf9
+      size: 884
+  original:
+    hackage: brick-panes-1.0.3.0@sha256:d3976e9834db7942fe8720fba7d4ac58a74f75ad911c7b3f7ad5156555ca0bc0,3034
+- completed:
+    hackage: brick-skylighting-1.0@sha256:64764b6be36c05261959f68ed38b9cb37e1acb6180a3bde5dd98255f62ea7e3b,1812
+    pantry-tree:
+      sha256: d598090f726b96e84438f3b8bc52174faeb21c0f00f85f77060e3a25c89ad926
+      size: 393
+  original:
+    hackage: brick-skylighting-1.0@sha256:64764b6be36c05261959f68ed38b9cb37e1acb6180a3bde5dd98255f62ea7e3b,1812
 snapshots:
 - completed:
     sha256: 72cdd5851794184138551f43f0897c28f1a5acdda303b266aa9e910461103b3c

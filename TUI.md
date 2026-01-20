@@ -292,10 +292,7 @@ data RunnerInfo = RunnerInfo
 ### 实施计划
 
 #### 阶段 1：基础框架
-1. 修改 `package.yaml` 调整 `source-dirs`，添加 TUI 依赖
-2. 迁移 CLI 代码：将 `app/Main.hs` 移动到 `cli/Main.hs`
-3. 创建 `tui/Main.hs` Brick 骨架，实现基本布局渲染
-4. 集成 `Oasis.Config` 加载 providers，显示在左侧列表
+1. 集成 `Oasis.Config` 加载 providers，显示在左侧列表
 
 **交付物**：可运行的空 TUI，显示基本布局和 provider 列表
 

@@ -35,6 +35,8 @@ dependencies:
 - time
 - vector
 - brick
+- brick-panes
+- brick-skylighting
 
 default-extensions:
 - NoImplicitPrelude
