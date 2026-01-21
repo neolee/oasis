@@ -69,6 +69,7 @@ library
       DerivingVia
   build-depends:
       aeson
+    , aeson-pretty
     , base >=4.7 && <5
     , brick
     , brick-panes
@@ -115,6 +116,7 @@ executable oasis-cli
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
+    , aeson-pretty
     , base >=4.7 && <5
     , brick
     , brick-panes
@@ -167,6 +169,7 @@ executable oasis-tui
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
+    , aeson-pretty
     , base >=4.7 && <5
     , brick
     , brick-panes

@@ -8,6 +8,9 @@ import Brick.BChan (writeBChan)
 import Brick.Types (EventM)
 import Control.Concurrent (forkIO)
 import Control.Monad.State.Class (get, modify)
+import Data.Aeson (Value, eitherDecodeStrict)
+import Data.Aeson.Encode.Pretty (encodePretty)
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.List as List
 import qualified Data.Map.Strict as M
 import Oasis.Client.OpenAI.Param (emptyChatParams)
@@ -42,8 +45,16 @@ runBasicAction = do
                     Left err ->
                       ("Basic runner failed.", "Error:\n" <> err)
                     Right rr ->
-                      ("Basic runner completed.", "Request:\n" <> requestJson rr <> "\n\nResponse:\n" <> responseJson rr)
+                      let prettyRequest = prettyJson (requestJson rr)
+                          prettyResponse = prettyJson (responseJson rr)
+                      in ("Basic runner completed.", "Request:\n" <> prettyRequest <> "\n\nResponse:\n" <> prettyResponse)
             writeBChan chan (BasicCompleted statusMsg outputMsg)
+
+prettyJson :: Text -> Text
+prettyJson input =
+  case eitherDecodeStrict (encodeUtf8 input) :: Either String Value of
+    Left _ -> input
+    Right val -> decodeUtf8 (LBS.toStrict (encodePretty val))
 
 providerModels :: Config -> Text -> [Text]
 providerModels cfg providerName =
