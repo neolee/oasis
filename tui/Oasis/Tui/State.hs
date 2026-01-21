@@ -14,6 +14,7 @@ data Name
   = ProviderList
   | ModelList
   | RunnerList
+  | MainViewport
   deriving (Eq, Ord, Show)
 
 data AppState = AppState
@@ -25,11 +26,12 @@ data AppState = AppState
   , selectedProvider :: Maybe Text
   , selectedModel :: Maybe Text
   , selectedRunner :: Maybe Text
+  , outputText :: Text
   , statusText :: Text
   }
 
-mkState :: Config -> [Text] -> [Text] -> [Text] -> Text -> AppState
-mkState cfg providers models runners statusText =
+mkState :: Config -> [Text] -> [Text] -> [Text] -> Text -> Text -> AppState
+mkState cfg providers models runners outputText statusText =
   AppState
     { config = cfg
     , providerList = L.list ProviderList (V.fromList providers) 1
@@ -39,5 +41,6 @@ mkState cfg providers models runners statusText =
     , selectedProvider = Nothing
     , selectedModel = Nothing
     , selectedRunner = Nothing
+    , outputText
     , statusText
     }

@@ -2,8 +2,8 @@ module Main where
 
 import Relude
 import Brick.AttrMap (attrMap, attrName)
-import Brick.Main (App(..), defaultMain, halt, showFirstCursor)
-import Brick.Types (BrickEvent(..), EventM, Widget, nestEventM)
+import Brick.Main (App(..), defaultMain, halt, showFirstCursor, viewportScroll, vScrollBy)
+import Brick.Types (BrickEvent(..), EventM, Widget, nestEventM, ViewportType(..))
 import Brick.Widgets.Border
 import Brick.Widgets.Core
 import qualified Brick.Widgets.List as L
@@ -32,30 +32,33 @@ drawUI st =
       hLimit 28 $
         vBox
           [ focusBorder (activeList st == ProviderList) $
-              borderWithLabel (txt "Providers [P]") $
+              borderWithLabel (txt ("Providers [" <> keyProvider <> "]")) $
               padAll 1 $
                 L.renderList drawProvider (activeList st == ProviderList) (providerList st)
           , focusBorder (activeList st == ModelList) $
-              borderWithLabel (txt "Models [M]") $
+              borderWithLabel (txt ("Models [" <> keyModel <> "]")) $
               padAll 1 $
                 L.renderList drawProvider (activeList st == ModelList) (modelList st)
           , focusBorder (activeList st == RunnerList) $
-              borderWithLabel (txt "Runners [R]") $
+              borderWithLabel (txt ("Runners [" <> keyRunner <> "]")) $
               padAll 1 $
                 L.renderList drawProvider (activeList st == RunnerList) (runnerList st)
           ]
     centerPane =
-      borderWithLabel (txt "Main [V]") $
+      focusBorder (activeList st == MainViewport) $
+        borderWithLabel (txt ("Main [" <> keyMain <> "]")) $
         padAll 1 $
           vBox
             [ txt ("Provider: " <> fromMaybe "-" (selectedProvider st))
             , txt ("Model: " <> fromMaybe "-" (selectedModel st))
             , txt ("Runner: " <> fromMaybe "-" (selectedRunner st))
-            , padTop (Pad 1) (txt "Stage 2: left panels interactive")
+            , padTop (Pad 1) (txt "Output:")
+            , vLimit 12 $
+                viewport MainViewport Vertical (txtWrap (outputText st))
             ]
     rightPane =
       hLimit 28 $
-        borderWithLabel (txt "Sidebar [L/D]") $
+        borderWithLabel (txt ("Sidebar [" <> keySidebar <> "]")) $
           padAll 1 $
             txt ""
     statusBar =
@@ -78,7 +81,11 @@ appEvent (VtyEvent ev) =
     Vty.EvKey (Vty.KChar 'M') [] -> setActive ModelList
     Vty.EvKey (Vty.KChar 'r') [] -> setActive RunnerList
     Vty.EvKey (Vty.KChar 'R') [] -> setActive RunnerList
+    Vty.EvKey (Vty.KChar 'v') [] -> setActive MainViewport
+    Vty.EvKey (Vty.KChar 'V') [] -> setActive MainViewport
     Vty.EvKey Vty.KEnter [] -> applySelection
+    Vty.EvKey Vty.KPageUp [] -> vScrollBy (viewportScroll MainViewport) (-3)
+    Vty.EvKey Vty.KPageDown [] -> vScrollBy (viewportScroll MainViewport) 3
     _ -> handleActiveListEvent ev
 appEvent _ = pure ()
 
@@ -98,6 +105,7 @@ handleActiveListEvent ev = do
     RunnerList -> do
       (lst, _) <- nestEventM (runnerList st) (L.handleListEvent ev)
       modify (\s -> s { runnerList = lst })
+    MainViewport -> pure ()
 
 applySelection :: EventM Name AppState ()
 applySelection = do
@@ -159,18 +167,18 @@ main = do
   case mPath of
     Nothing -> do
       let emptyCfg = Config mempty (Defaults "" "") mempty
-      let st = mkState emptyCfg [] [] defaultRunners "providers.toml not found"
+      let st = mkState emptyCfg [] [] defaultRunners "Output will appear here." "providers.toml not found"
       void $ defaultMain app st
     Just path -> do
       cfgResult <- loadConfig path
       case cfgResult of
         Left err -> do
           let emptyCfg = Config mempty (Defaults "" "") mempty
-          let st = mkState emptyCfg [] [] defaultRunners ("Failed to load config: " <> err)
+          let st = mkState emptyCfg [] [] defaultRunners "Output will appear here." ("Failed to load config: " <> err)
           void $ defaultMain app st
         Right cfg -> do
           let providerNames = sort (M.keys (providers cfg))
-          let st = mkState cfg providerNames [] defaultRunners ("Loaded providers from " <> toText path)
+          let st = mkState cfg providerNames [] defaultRunners "Output will appear here." ("Loaded providers from " <> toText path)
           void $ defaultMain app st
 
 defaultRunners :: [Text]
@@ -185,6 +193,21 @@ defaultRunners =
   , "fim"
   , "get-models"
   ]
+
+keyProvider :: Text
+keyProvider = "P"
+
+keyModel :: Text
+keyModel = "M"
+
+keyRunner :: Text
+keyRunner = "R"
+
+keyMain :: Text
+keyMain = "V"
+
+keySidebar :: Text
+keySidebar = "L/D"
 
 focusBorder :: Bool -> Widget Name -> Widget Name
 focusBorder isActive =
