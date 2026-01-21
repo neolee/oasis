@@ -9,6 +9,7 @@ import Brick.Widgets.Border
 import Brick.Widgets.Core
 import qualified Brick.Widgets.List as L
 import Oasis.Tui.Keymap (keyMain, keyModel, keyProvider, keyRunner, tipsFor)
+import Oasis.Tui.Render.Markdown (renderMarkdown)
 import Oasis.Tui.State (AppState(..), Name(..))
 
 drawUI :: AppState -> [Widget Name]
@@ -52,11 +53,11 @@ drawUI st =
                 , txt ("Model: " <> fromMaybe "-" (selectedModel st))
                 , txt ("Runner: " <> fromMaybe "-" (selectedRunner st))
                 , padTop (Pad 1) hBorder
-                , viewport MainViewport Vertical (txtWrap (outputText st))
+                , viewport MainViewport Vertical (renderMarkdown (outputText st))
                 ]
     rightPane =
       hLimit 25 $
-        borderWithLabel (txt ("sidebar")) $
+        borderWithLabel (txt "sidebar") $
           withAttr (attrName "paneContent") $
             padAll 1 $
               txt ""

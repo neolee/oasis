@@ -1,4 +1,4 @@
-module Oasis.Render.Text
+module Oasis.CLI.Render.Text
   ( renderRunnerResultText
   , renderResponseOnlyText
   ) where

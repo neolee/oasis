@@ -38,6 +38,7 @@ dependencies:
 - brick
 - brick-panes
 - brick-skylighting
+- skylighting
 - vty
 
 default-extensions:
@@ -59,7 +60,6 @@ library:
   - Oasis.Types
   - Oasis.Config
   - Oasis.Model
-  - Oasis.Render.Text
   - Oasis.Client.OpenAI
   - Oasis.Client.OpenAI.Param
   - Oasis.Chat.History

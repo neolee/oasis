@@ -16,7 +16,7 @@ import Oasis.Runner.PrefixCompletion
 import Oasis.Runner.FIMCompletion
 import Oasis.Model (resolveModelId)
 import Oasis.Client.OpenAI.Param (parseChatParams)
-import Oasis.Render.Text (renderRunnerResultText, renderResponseOnlyText)
+import Oasis.CLI.Render.Text (renderRunnerResultText, renderResponseOnlyText)
 import qualified Data.Text as T
 import qualified Data.List as L
 import qualified Data.Text.Encoding as TE

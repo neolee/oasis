@@ -26,7 +26,6 @@ library
       Oasis.Types
       Oasis.Config
       Oasis.Model
-      Oasis.Render.Text
       Oasis.Client.OpenAI
       Oasis.Client.OpenAI.Param
       Oasis.Chat.History
@@ -86,6 +85,7 @@ library
     , http-types
     , mtl
     , relude
+    , skylighting
     , text
     , time
     , toml-parser >=2.0.0.0
@@ -98,6 +98,7 @@ library
 executable oasis-cli
   main-is: Main.hs
   other-modules:
+      Oasis.CLI.Render.Text
       Paths_oasis
   hs-source-dirs:
       cli
@@ -134,6 +135,7 @@ executable oasis-cli
     , mtl
     , oasis
     , relude
+    , skylighting
     , text
     , time
     , toml-parser >=2.0.0.0
@@ -149,6 +151,7 @@ executable oasis-tui
       Oasis.Tui.Actions
       Oasis.Tui.Event
       Oasis.Tui.Keymap
+      Oasis.Tui.Render.Markdown
       Oasis.Tui.State
       Oasis.Tui.View
       Paths_oasis
@@ -187,6 +190,7 @@ executable oasis-tui
     , mtl
     , oasis
     , relude
+    , skylighting
     , text
     , time
     , toml-parser >=2.0.0.0

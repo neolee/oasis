@@ -5,6 +5,7 @@ import Brick.AttrMap (attrMap, attrName)
 import Brick.BChan (newBChan)
 import Brick.Main (App(..), customMainWithDefaultVty, showFirstCursor)
 import qualified Brick.Widgets.List as L
+import Brick.Widgets.Skylighting (attrMappingsForStyle, highlightedCodeBlockAttr)
 import qualified Graphics.Vty as Vty
 import Oasis.Config
 import Oasis.Tui.Event (appEvent)
@@ -12,6 +13,7 @@ import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..), mkState)
 import qualified Data.Map.Strict as M
 import Oasis.Tui.View (drawUI)
 import Oasis.Types (Config(..), Defaults(..))
+import Skylighting.Styles (pygments)
 
 app :: App AppState TuiEvent Name
 app =
@@ -21,11 +23,14 @@ app =
     , appHandleEvent = appEvent
     , appStartEvent = pure ()
     , appAttrMap = const (attrMap Vty.defAttr
-      [ (L.listAttr, Vty.defAttr)
-      , (L.listSelectedAttr, Vty.defAttr `Vty.withStyle` Vty.reverseVideo)
-      , (attrName "focusBorder", Vty.defAttr `Vty.withForeColor` Vty.cyan)
-      , (attrName "paneContent", Vty.defAttr)
-      ])
+      ( [ (L.listAttr, Vty.defAttr)
+        , (L.listSelectedAttr, Vty.defAttr `Vty.withStyle` Vty.reverseVideo)
+        , (attrName "focusBorder", Vty.defAttr `Vty.withForeColor` Vty.cyan)
+        , (attrName "paneContent", Vty.defAttr)
+        , (attrName "mdHeading", Vty.defAttr `Vty.withStyle` Vty.bold)
+        , (highlightedCodeBlockAttr, Vty.defAttr)
+        ] <> attrMappingsForStyle pygments
+      ))
     }
 
 main :: IO ()

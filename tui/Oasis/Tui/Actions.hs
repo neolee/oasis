@@ -47,7 +47,10 @@ runBasicAction = do
                     Right rr ->
                       let prettyRequest = prettyJson (requestJson rr)
                           prettyResponse = prettyJson (responseJson rr)
-                      in ("Basic runner completed.", "Request:\n" <> prettyRequest <> "\n\nResponse:\n" <> prettyResponse)
+                          output =
+                            "## Request\n" <> codeBlock "json" prettyRequest <>
+                            "\n\n## Response\n" <> codeBlock "json" prettyResponse
+                      in ("Basic runner completed.", output)
             writeBChan chan (BasicCompleted statusMsg outputMsg)
 
 prettyJson :: Text -> Text
@@ -55,6 +58,10 @@ prettyJson input =
   case eitherDecodeStrict (encodeUtf8 input) :: Either String Value of
     Left _ -> input
     Right val -> decodeUtf8 (LBS.toStrict (encodePretty val))
+
+codeBlock :: Text -> Text -> Text
+codeBlock lang content =
+  "```" <> lang <> "\n" <> content <> "\n```"
 
 providerModels :: Config -> Text -> [Text]
 providerModels cfg providerName =
