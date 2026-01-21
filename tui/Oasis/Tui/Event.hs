@@ -33,24 +33,17 @@ appEvent (VtyEvent ev) =
       then handlePromptEvent ev
       else case ev of
         Vty.EvKey (Vty.KChar 'q') [] -> halt
-        Vty.EvKey (Vty.KChar 'Q') [] -> halt
         Vty.EvKey (Vty.KChar 'p') [] -> setActive ProviderList
-        Vty.EvKey (Vty.KChar 'P') [] -> setActive ProviderList
         Vty.EvKey (Vty.KChar 'm') [] -> setActive ModelList
-        Vty.EvKey (Vty.KChar 'M') [] -> setActive ModelList
         Vty.EvKey (Vty.KChar 'r') [] -> setActive RunnerList
-        Vty.EvKey (Vty.KChar 'R') [] -> setActive RunnerList
         Vty.EvKey (Vty.KChar 'v') [] -> setActive MainViewport
-        Vty.EvKey (Vty.KChar 'V') [] -> setActive MainViewport
         Vty.EvKey Vty.KEnter [] -> applySelection
         Vty.EvKey Vty.KUp [] -> handleUpDown (-1)
         Vty.EvKey Vty.KDown [] -> handleUpDown 1
         Vty.EvKey Vty.KLeft [] -> handleLeftRight (-1)
         Vty.EvKey Vty.KRight [] -> handleLeftRight 1
         Vty.EvKey (Vty.KChar 'v') [Vty.MCtrl] -> vScrollBy (viewportScroll MainViewport) 6
-        Vty.EvKey (Vty.KChar 'V') [Vty.MCtrl] -> vScrollBy (viewportScroll MainViewport) 6
         Vty.EvKey (Vty.KChar 'v') [Vty.MMeta] -> vScrollBy (viewportScroll MainViewport) (-6)
-        Vty.EvKey (Vty.KChar 'V') [Vty.MMeta] -> vScrollBy (viewportScroll MainViewport) (-6)
         Vty.EvKey (Vty.KChar '.') [Vty.MMeta] -> hScrollBy (viewportScroll MainViewport) 6
         Vty.EvKey (Vty.KChar ',') [Vty.MMeta] -> hScrollBy (viewportScroll MainViewport) (-6)
         _ -> handleActiveListEvent ev
