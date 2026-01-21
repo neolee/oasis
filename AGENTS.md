@@ -36,6 +36,7 @@ To leverage Haskell's powerful type system for building a reliable, unified LLM 
 2.  **Observability Ready**: Architect the request pipeline to allow for easy insertion of logging, tracing, and metric collection for debugging and profiling.
 3.  **Context Middleware**: Design the `Model` abstraction to support interceptors that can monitor or modify the message context (history) before it reaches the provider.
 4.  **Verifiable Iterations**: Each development step must produce a human-verifiable result (e.g., a CLI output or a passing test suite).
+5.  **TUI Concurrency**: Use `BChan` + `forkIO` to keep the UI responsive while running LLM requests; UI updates must be delivered via async events.
 
 ## OpenAI-Compatible Client Interface Design
 

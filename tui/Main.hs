@@ -2,18 +2,20 @@ module Main where
 
 import Relude
 import Brick.AttrMap (attrMap, attrName)
-import Brick.Main (App(..), defaultMain, halt, showFirstCursor, viewportScroll, vScrollBy)
+import Brick.BChan (newBChan, writeBChan)
+import Brick.Main (App(..), customMainWithDefaultVty, halt, showFirstCursor, viewportScroll, vScrollBy)
 import Brick.Types (BrickEvent(..), EventM, Widget, nestEventM, ViewportType(..))
 import Brick.Widgets.Border
 import Brick.Widgets.Core
 import qualified Brick.Widgets.List as L
+import Control.Concurrent (forkIO)
 import Control.Monad.State.Class (get, modify)
 import qualified Data.Map.Strict as M
 import qualified Data.List as List
 import qualified Data.Vector as V
 import qualified Graphics.Vty as Vty
 import Oasis.Config
-import Oasis.Tui.State (AppState(..), Name(..), mkState)
+import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..), mkState)
 import Oasis.Types (Config(..), Defaults(..), Provider(..), RequestResponse(..))
 import Oasis.Client.OpenAI.Param (emptyChatParams)
 import Oasis.Runner.Basic (runBasic)
@@ -72,7 +74,12 @@ drawProvider :: Bool -> Text -> Widget Name
 drawProvider _ = txt
 
 
-appEvent :: BrickEvent Name e -> EventM Name AppState ()
+appEvent :: BrickEvent Name TuiEvent -> EventM Name AppState ()
+appEvent (AppEvent evt) =
+  modify (\s -> s
+    { statusText = eventStatus evt
+    , outputText = eventOutput evt
+    })
 appEvent (VtyEvent ev) =
   case ev of
     Vty.EvKey (Vty.KChar 'q') [] -> halt
@@ -170,18 +177,16 @@ runBasicAction = do
             { statusText = "Running basic runner..."
             , outputText = ""
             })
-          result <- liftIO (runBasic provider apiKey modelOverride emptyChatParams prompt False)
-          case result of
-            Left err ->
-              modify (\s -> s
-                { statusText = "Basic runner failed."
-                , outputText = "Error:\n" <> err
-                })
-            Right rr ->
-              modify (\s -> s
-                { statusText = "Basic runner completed."
-                , outputText = "Request:\n" <> requestJson rr <> "\n\nResponse:\n" <> responseJson rr
-                })
+          let chan = eventChan st
+          void $ liftIO $ forkIO $ do
+            result <- runBasic provider apiKey modelOverride emptyChatParams prompt False
+            let (statusMsg, outputMsg) =
+                  case result of
+                    Left err ->
+                      ("Basic runner failed.", "Error:\n" <> err)
+                    Right rr ->
+                      ("Basic runner completed.", "Request:\n" <> requestJson rr <> "\n\nResponse:\n" <> responseJson rr)
+            writeBChan chan (BasicCompleted statusMsg outputMsg)
 
 providerModels :: Config -> Text -> [Text]
 providerModels cfg providerName =
@@ -190,7 +195,7 @@ providerModels cfg providerName =
     Just Provider{chat_model_id, coder_model_id, reasoner_model_id} ->
       List.nub [chat_model_id, coder_model_id, reasoner_model_id]
 
-app :: App AppState e Name
+app :: App AppState TuiEvent Name
 app =
   App
     { appDraw = drawUI
@@ -206,23 +211,24 @@ app =
 
 main :: IO ()
 main = do
+  chan <- newBChan 10
   mPath <- findConfig
   case mPath of
     Nothing -> do
       let emptyCfg = Config mempty (Defaults "" "") mempty
-      let st = mkState emptyCfg [] [] defaultRunners "Output will appear here." "providers.toml not found"
-      void $ defaultMain app st
+      let st = mkState chan emptyCfg [] [] defaultRunners "Output will appear here." "providers.toml not found"
+      void $ customMainWithDefaultVty (Just chan) app st
     Just path -> do
       cfgResult <- loadConfig path
       case cfgResult of
         Left err -> do
           let emptyCfg = Config mempty (Defaults "" "") mempty
-          let st = mkState emptyCfg [] [] defaultRunners "Output will appear here." ("Failed to load config: " <> err)
-          void $ defaultMain app st
+          let st = mkState chan emptyCfg [] [] defaultRunners "Output will appear here." ("Failed to load config: " <> err)
+          void $ customMainWithDefaultVty (Just chan) app st
         Right cfg -> do
           let providerNames = sort (M.keys (providers cfg))
-          let st = mkState cfg providerNames [] defaultRunners "Output will appear here." ("Loaded providers from " <> toText path)
-          void $ defaultMain app st
+          let st = mkState chan cfg providerNames [] defaultRunners "Output will appear here." ("Loaded providers from " <> toText path)
+          void $ customMainWithDefaultVty (Just chan) app st
 
 defaultRunners :: [Text]
 defaultRunners =
