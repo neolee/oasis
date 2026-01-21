@@ -6,23 +6,29 @@ import Relude
 import Brick.AttrMap (attrName)
 import Brick.Types (Widget, ViewportType(..))
 import Brick.Widgets.Border
+import Brick.Widgets.Center (centerLayer)
 import Brick.Widgets.Core
 import qualified Brick.Widgets.List as L
+import Brick.Widgets.Edit (renderEditor)
+import qualified Data.Text as T
 import Oasis.Tui.Keymap (keyMain, keyModel, keyProvider, keyRunner, tipsFor)
 import Oasis.Tui.Render.Markdown (renderMarkdown)
 import Oasis.Tui.State (AppState(..), Name(..))
 
 drawUI :: AppState -> [Widget Name]
 drawUI st =
-  [ vBox
-      [ hBox
-          [ leftPane
-          , centerPane
-          , rightPane
+  let baseUi =
+        vBox
+          [ hBox
+              [ leftPane
+              , centerPane
+              , rightPane
+              ]
+          , statusBar
           ]
-      , statusBar
-      ]
-  ]
+  in if promptDialogOpen st
+       then [promptDialog st, baseUi]
+       else [baseUi]
   where
     leftPane =
       hLimit 25 $
@@ -52,6 +58,7 @@ drawUI st =
                 [ txt ("Provider: " <> fromMaybe "-" (selectedProvider st))
                 , txt ("Model: " <> fromMaybe "-" (selectedModel st))
                 , txt ("Runner: " <> fromMaybe "-" (selectedRunner st))
+                , txt ("Prompt: " <> promptSummary st)
                 , padTop (Pad 1) hBorder
                 , viewport MainViewport Both (renderMarkdown (outputText st))
                 ]
@@ -73,6 +80,33 @@ drawUI st =
                 withAttr (attrName "paneContent") $
                   padLeftRight 1 (txt (tipsFor st))
           ]
+
+    promptDialog st' =
+      centerLayer $
+        hLimit 80 $
+          vLimit 12 $
+            withAttr (attrName "promptDialog") $
+              overrideAttr borderAttr (attrName "promptDialogBorder") $
+                borderWithLabel (txt "basic prompt") $
+                  padAll 1 $
+                    vBox
+                      [ withAttr (attrName "promptEditor") $
+                        renderEditor (txt . unlines) True (promptEditor st')
+                      , padTop (Pad 1) $
+                        txt "[Enter] Run  [Esc] Cancel"
+                      ]
+
+promptSummary :: AppState -> Text
+promptSummary st =
+  let raw = lastPrompt st
+      cleaned = if T.null (T.strip raw) then "-" else raw
+  in truncateText 80 cleaned
+
+truncateText :: Int -> Text -> Text
+truncateText maxLen t =
+  if T.length t > maxLen
+    then T.take (maxLen - 1) t <> "…"
+    else t
 
 drawProvider :: Bool -> Text -> Widget Name
 drawProvider _ = txt

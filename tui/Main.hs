@@ -6,6 +6,7 @@ import Brick.BChan (newBChan)
 import Brick.Main (App(..), customMainWithDefaultVty, showFirstCursor)
 import qualified Brick.Widgets.List as L
 import Brick.Widgets.Skylighting (attrMappingsForStyle, highlightedCodeBlockAttr)
+import qualified Brick.Widgets.Edit as E
 import qualified Graphics.Vty as Vty
 import Oasis.Config
 import Oasis.Tui.Event (appEvent)
@@ -28,7 +29,12 @@ app =
         , (attrName "focusBorder", Vty.defAttr `Vty.withForeColor` Vty.cyan)
         , (attrName "paneContent", Vty.defAttr)
         , (attrName "mdHeading", Vty.defAttr `Vty.withStyle` Vty.bold)
+        , (attrName "promptDialog", Vty.defAttr `Vty.withBackColor` Vty.black `Vty.withForeColor` Vty.white)
+        , (attrName "promptDialogBorder", Vty.defAttr `Vty.withBackColor` Vty.black `Vty.withForeColor` Vty.white)
+        , (attrName "promptEditor", Vty.defAttr `Vty.withBackColor` Vty.black `Vty.withForeColor` Vty.white)
         , (highlightedCodeBlockAttr, Vty.defAttr)
+        , (E.editAttr, Vty.defAttr `Vty.withBackColor` Vty.black `Vty.withForeColor` Vty.white)
+        , (E.editFocusedAttr, Vty.defAttr `Vty.withBackColor` Vty.white `Vty.withForeColor` Vty.black)
         ] <> attrMappingsForStyle pygments
       ))
     }

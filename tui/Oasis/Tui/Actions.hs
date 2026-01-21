@@ -19,8 +19,8 @@ import Oasis.Runner.Basic (runBasic)
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
 import Oasis.Types (Config(..), Provider(..), RequestResponse(..))
 
-runBasicAction :: EventM Name AppState ()
-runBasicAction = do
+runBasicAction :: Text -> EventM Name AppState ()
+runBasicAction prompt = do
   st <- get
   case selectedProvider st of
     Nothing ->
@@ -32,7 +32,6 @@ runBasicAction = do
           modify (\s -> s { statusText = "Provider not found: " <> providerName })
         Just (provider, apiKey) -> do
           let modelOverride = selectedModel st
-          let prompt = "Hello from oasis-tui basic runner."
           modify (\s -> s
             { statusText = "Running basic runner..."
             , outputText = ""

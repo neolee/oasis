@@ -7,6 +7,7 @@ module Oasis.Tui.State
 
 import Relude
 import Brick.BChan (BChan)
+import Brick.Widgets.Edit (Editor, editor)
 import qualified Brick.Widgets.List as L
 import qualified Data.Vector as V
 import Oasis.Types (Config)
@@ -23,6 +24,7 @@ data Name
   | ModelList
   | RunnerList
   | MainViewport
+  | PromptEditor
   deriving (Eq, Ord, Show)
 
 data AppState = AppState
@@ -35,6 +37,11 @@ data AppState = AppState
   , selectedProvider :: Maybe Text
   , selectedModel :: Maybe Text
   , selectedRunner :: Maybe Text
+  , promptEditor :: Editor Text Name
+  , promptDialogOpen :: Bool
+  , promptDefault :: Text
+  , promptPristine :: Bool
+  , lastPrompt :: Text
   , outputText :: Text
   , statusText :: Text
   }
@@ -51,6 +58,14 @@ mkState chan cfg providers models runners outputText statusText =
     , selectedProvider = Nothing
     , selectedModel = Nothing
     , selectedRunner = Nothing
+    , promptEditor = editor PromptEditor (Just 5) defaultPrompt
+    , promptDialogOpen = False
+    , promptDefault = defaultPrompt
+    , promptPristine = False
+    , lastPrompt = defaultPrompt
     , outputText
     , statusText
     }
+
+defaultPrompt :: Text
+defaultPrompt = "Hello from oasis-tui basic runner."

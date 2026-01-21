@@ -9,8 +9,10 @@ module Oasis.Tui.Event
 import Relude
 import Brick.Main (halt, viewportScroll, vScrollBy, hScrollBy)
 import Brick.Types (BrickEvent(..), EventM, nestEventM)
+import Brick.Widgets.Edit (editor, getEditContents, handleEditorEvent)
 import qualified Brick.Widgets.List as L
 import Control.Monad.State.Class (get, modify)
+import Data.Char (isSpace)
 import qualified Data.Vector as V
 import qualified Graphics.Vty as Vty
 import Oasis.Tui.Actions (providerModels, runBasicAction)
@@ -21,31 +23,37 @@ appEvent (AppEvent evt) =
   modify (\s -> s
     { statusText = eventStatus evt
     , outputText = eventOutput evt
+    , promptDialogOpen = False
+    , activeList = MainViewport
     })
 appEvent (VtyEvent ev) =
-  case ev of
-    Vty.EvKey (Vty.KChar 'q') [] -> halt
-    Vty.EvKey (Vty.KChar 'Q') [] -> halt
-    Vty.EvKey (Vty.KChar 'p') [] -> setActive ProviderList
-    Vty.EvKey (Vty.KChar 'P') [] -> setActive ProviderList
-    Vty.EvKey (Vty.KChar 'm') [] -> setActive ModelList
-    Vty.EvKey (Vty.KChar 'M') [] -> setActive ModelList
-    Vty.EvKey (Vty.KChar 'r') [] -> setActive RunnerList
-    Vty.EvKey (Vty.KChar 'R') [] -> setActive RunnerList
-    Vty.EvKey (Vty.KChar 'v') [] -> setActive MainViewport
-    Vty.EvKey (Vty.KChar 'V') [] -> setActive MainViewport
-    Vty.EvKey Vty.KEnter [] -> applySelection
-    Vty.EvKey Vty.KUp [] -> handleUpDown (-1)
-    Vty.EvKey Vty.KDown [] -> handleUpDown 1
-    Vty.EvKey Vty.KLeft [] -> handleLeftRight (-1)
-    Vty.EvKey Vty.KRight [] -> handleLeftRight 1
-    Vty.EvKey (Vty.KChar 'v') [Vty.MCtrl] -> vScrollBy (viewportScroll MainViewport) 6
-    Vty.EvKey (Vty.KChar 'V') [Vty.MCtrl] -> vScrollBy (viewportScroll MainViewport) 6
-    Vty.EvKey (Vty.KChar 'v') [Vty.MMeta] -> vScrollBy (viewportScroll MainViewport) (-6)
-    Vty.EvKey (Vty.KChar 'V') [Vty.MMeta] -> vScrollBy (viewportScroll MainViewport) (-6)
-    Vty.EvKey (Vty.KChar '.') [Vty.MMeta] -> hScrollBy (viewportScroll MainViewport) 6
-    Vty.EvKey (Vty.KChar ',') [Vty.MMeta] -> hScrollBy (viewportScroll MainViewport) (-6)
-    _ -> handleActiveListEvent ev
+  do
+    st <- get
+    if promptDialogOpen st
+      then handlePromptEvent ev
+      else case ev of
+        Vty.EvKey (Vty.KChar 'q') [] -> halt
+        Vty.EvKey (Vty.KChar 'Q') [] -> halt
+        Vty.EvKey (Vty.KChar 'p') [] -> setActive ProviderList
+        Vty.EvKey (Vty.KChar 'P') [] -> setActive ProviderList
+        Vty.EvKey (Vty.KChar 'm') [] -> setActive ModelList
+        Vty.EvKey (Vty.KChar 'M') [] -> setActive ModelList
+        Vty.EvKey (Vty.KChar 'r') [] -> setActive RunnerList
+        Vty.EvKey (Vty.KChar 'R') [] -> setActive RunnerList
+        Vty.EvKey (Vty.KChar 'v') [] -> setActive MainViewport
+        Vty.EvKey (Vty.KChar 'V') [] -> setActive MainViewport
+        Vty.EvKey Vty.KEnter [] -> applySelection
+        Vty.EvKey Vty.KUp [] -> handleUpDown (-1)
+        Vty.EvKey Vty.KDown [] -> handleUpDown 1
+        Vty.EvKey Vty.KLeft [] -> handleLeftRight (-1)
+        Vty.EvKey Vty.KRight [] -> handleLeftRight 1
+        Vty.EvKey (Vty.KChar 'v') [Vty.MCtrl] -> vScrollBy (viewportScroll MainViewport) 6
+        Vty.EvKey (Vty.KChar 'V') [Vty.MCtrl] -> vScrollBy (viewportScroll MainViewport) 6
+        Vty.EvKey (Vty.KChar 'v') [Vty.MMeta] -> vScrollBy (viewportScroll MainViewport) (-6)
+        Vty.EvKey (Vty.KChar 'V') [Vty.MMeta] -> vScrollBy (viewportScroll MainViewport) (-6)
+        Vty.EvKey (Vty.KChar '.') [Vty.MMeta] -> hScrollBy (viewportScroll MainViewport) 6
+        Vty.EvKey (Vty.KChar ',') [Vty.MMeta] -> hScrollBy (viewportScroll MainViewport) (-6)
+        _ -> handleActiveListEvent ev
 appEvent _ = pure ()
 
 setActive :: Name -> EventM Name AppState ()
@@ -65,6 +73,7 @@ handleActiveListEvent ev = do
       (lst, _) <- nestEventM (runnerList st) (L.handleListEvent ev)
       modify (\s -> s { runnerList = lst })
     MainViewport -> pure ()
+    PromptEditor -> pure ()
 
 scrollMain :: Int -> EventM Name AppState ()
 scrollMain amount = do
@@ -87,6 +96,52 @@ handleLeftRight :: Int -> EventM Name AppState ()
 handleLeftRight amount = do
   st <- get
   when (activeList st == MainViewport) $ scrollMainHoriz amount
+
+handlePromptEvent :: Vty.Event -> EventM Name AppState ()
+handlePromptEvent ev =
+  case ev of
+    Vty.EvKey Vty.KEnter [] -> submitPrompt
+    Vty.EvKey Vty.KEsc [] -> cancelPrompt
+    _ -> do
+      st <- get
+      let shouldClear = promptPristine st && isPromptInputStart ev
+          baseEditor = if shouldClear
+            then editor PromptEditor (Just 5) ""
+            else promptEditor st
+      (editor', _) <- nestEventM baseEditor (handleEditorEvent (VtyEvent ev))
+      let pristine' = not (isPromptInputStart ev) && promptPristine st
+      modify (\s -> s { promptEditor = editor', promptPristine = pristine' })
+
+submitPrompt :: EventM Name AppState ()
+submitPrompt = do
+  st <- get
+  let rawPrompt = unlines (getEditContents (promptEditor st))
+      prompt = if isBlank rawPrompt then promptDefault st else rawPrompt
+  modify (\s -> s
+    { promptDialogOpen = False
+    , activeList = RunnerList
+    , lastPrompt = prompt
+    , promptPristine = False
+    })
+  runBasicAction prompt
+
+cancelPrompt :: EventM Name AppState ()
+cancelPrompt =
+  modify (\s -> s
+    { promptDialogOpen = False
+    , activeList = RunnerList
+    , statusText = "Prompt cancelled."
+    })
+
+isBlank :: Text -> Bool
+isBlank = all isSpace . toString
+
+isPromptInputStart :: Vty.Event -> Bool
+isPromptInputStart = \case
+  Vty.EvKey (Vty.KChar _) _ -> True
+  Vty.EvKey Vty.KBS _ -> True
+  Vty.EvKey Vty.KDel _ -> True
+  _ -> False
 
 applySelection :: EventM Name AppState ()
 applySelection = do
@@ -119,13 +174,15 @@ applySelection = do
         Nothing -> pure ()
         Just (_, runnerName) ->
           if runnerName == "basic"
-            then do
+            then
               modify (\s -> s
                 { selectedRunner = Just runnerName
-                , activeList = MainViewport
-                , statusText = "Selected runner: " <> runnerName
+                , activeList = PromptEditor
+                , promptDialogOpen = True
+                , promptEditor = editor PromptEditor (Just 5) (promptDefault s)
+                , promptPristine = True
+                , statusText = "Enter prompt for basic runner."
                 })
-              runBasicAction
             else
               modify (\s -> s
                 { selectedRunner = Just runnerName
