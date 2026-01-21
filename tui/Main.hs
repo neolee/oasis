@@ -67,8 +67,14 @@ drawUI st =
             txt ""
     statusBar =
       vLimit 3 $
-        borderWithLabel (txt "Status") $
-          padLeftRight 1 (txt (statusText st))
+        hBox
+          [ hLimitPercent 50 $
+              borderWithLabel (txt "status") $
+                padLeftRight 1 (txt (statusText st))
+          , hLimitPercent 100 $
+              borderWithLabel (txt "info") $
+                padLeftRight 1 (txt (tipsFor st))
+          ]
 
 drawProvider :: Bool -> Text -> Widget Name
 drawProvider _ = txt
@@ -93,8 +99,12 @@ appEvent (VtyEvent ev) =
     Vty.EvKey (Vty.KChar 'v') [] -> setActive MainViewport
     Vty.EvKey (Vty.KChar 'V') [] -> setActive MainViewport
     Vty.EvKey Vty.KEnter [] -> applySelection
-    Vty.EvKey Vty.KPageUp [] -> vScrollBy (viewportScroll MainViewport) (-3)
-    Vty.EvKey Vty.KPageDown [] -> vScrollBy (viewportScroll MainViewport) 3
+    Vty.EvKey Vty.KUp [] -> handleUpDown (-1)
+    Vty.EvKey Vty.KDown [] -> handleUpDown 1
+    Vty.EvKey (Vty.KChar 'v') [Vty.MCtrl] -> vScrollBy (viewportScroll MainViewport) 6
+    Vty.EvKey (Vty.KChar 'V') [Vty.MCtrl] -> vScrollBy (viewportScroll MainViewport) 6
+    Vty.EvKey (Vty.KChar 'v') [Vty.MMeta] -> vScrollBy (viewportScroll MainViewport) (-6)
+    Vty.EvKey (Vty.KChar 'V') [Vty.MMeta] -> vScrollBy (viewportScroll MainViewport) (-6)
     _ -> handleActiveListEvent ev
 appEvent _ = pure ()
 
@@ -115,6 +125,18 @@ handleActiveListEvent ev = do
       (lst, _) <- nestEventM (runnerList st) (L.handleListEvent ev)
       modify (\s -> s { runnerList = lst })
     MainViewport -> pure ()
+
+scrollMain :: Int -> EventM Name AppState ()
+scrollMain amount = do
+  st <- get
+  when (activeList st == MainViewport) $ vScrollBy (viewportScroll MainViewport) amount
+
+handleUpDown :: Int -> EventM Name AppState ()
+handleUpDown amount = do
+  st <- get
+  if activeList st == MainViewport
+    then scrollMain amount
+    else handleActiveListEvent (if amount < 0 then Vty.EvKey Vty.KUp [] else Vty.EvKey Vty.KDown [])
 
 applySelection :: EventM Name AppState ()
 applySelection = do
@@ -242,6 +264,25 @@ defaultRunners =
   , "fim"
   , "get-models"
   ]
+
+data PaneKind
+  = ListPane
+  | OutputPane
+  | InputPane
+
+tipsFor :: AppState -> Text
+tipsFor st =
+  case paneKind (activeList st) of
+    ListPane -> "[↑/↓] Move  [Enter] Select"
+    OutputPane -> "[↑/↓] Scroll  [Ctrl+V/Alt+V] Page"
+    InputPane -> "[Enter] Submit  [Esc] Cancel"
+
+paneKind :: Name -> PaneKind
+paneKind = \case
+  ProviderList -> ListPane
+  ModelList -> ListPane
+  RunnerList -> ListPane
+  MainViewport -> OutputPane
 
 keyProvider :: Text
 keyProvider = "P"
