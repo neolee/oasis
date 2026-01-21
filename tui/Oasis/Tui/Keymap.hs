@@ -32,7 +32,7 @@ tipsFor :: AppState -> Text
 tipsFor st =
   case paneKind (activeList st) of
     ListPane -> "[↑/↓] Move  [Enter] Select"
-    OutputPane -> "[↑/↓] Scroll  [Ctrl+V/Alt+V] Page"
+    OutputPane -> "[↓/↑/→/←] Scroll  [Ctrl+V/Alt+V/Alt+,/Alt+.] Page"
     InputPane -> "[Enter] Submit  [Esc] Cancel"
 
 paneKind :: Name -> PaneKind
@@ -41,3 +41,4 @@ paneKind = \case
   ModelList -> ListPane
   RunnerList -> ListPane
   MainViewport -> OutputPane
+  PromptEditor -> InputPane

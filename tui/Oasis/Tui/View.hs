@@ -53,7 +53,7 @@ drawUI st =
                 , txt ("Model: " <> fromMaybe "-" (selectedModel st))
                 , txt ("Runner: " <> fromMaybe "-" (selectedRunner st))
                 , padTop (Pad 1) hBorder
-                , viewport MainViewport Vertical (renderMarkdown (outputText st))
+                , viewport MainViewport Both (renderMarkdown (outputText st))
                 ]
     rightPane =
       hLimit 25 $
