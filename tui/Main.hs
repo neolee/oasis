@@ -9,26 +9,10 @@ import Brick.Widgets.Core
 import qualified Brick.Widgets.List as L
 import Control.Monad.State.Class (get, modify)
 import qualified Data.Map.Strict as M
-import qualified Data.Vector as V
 import qualified Graphics.Vty as Vty
 import Oasis.Config
+import Oasis.Tui.State (AppState(..), Name(..), mkState)
 import Oasis.Types (Config(..))
-
-data Name
-  = ProviderList
-  deriving (Eq, Ord, Show)
-
-data AppState = AppState
-  { providerList :: L.List Name Text
-  , statusText :: Text
-  }
-
-mkState :: [Text] -> Text -> AppState
-mkState providers statusText =
-  AppState
-    { providerList = L.list ProviderList (V.fromList providers) 1
-    , statusText
-    }
 
 drawUI :: AppState -> [Widget Name]
 drawUI st =

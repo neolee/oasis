@@ -144,6 +144,7 @@ executable oasis-cli
 executable oasis-tui
   main-is: Main.hs
   other-modules:
+      Oasis.Tui.State
       Paths_oasis
   hs-source-dirs:
       tui
