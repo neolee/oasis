@@ -42,3 +42,8 @@ paneKind = \case
   RunnerList -> ListPane
   MainViewport -> OutputPane
   PromptEditor -> InputPane
+  ParamBetaUrlEditor -> InputPane
+  ParamTemperatureEditor -> InputPane
+  ParamTopPEditor -> InputPane
+  ParamMaxCompletionTokensEditor -> InputPane
+  ParamStopEditor -> InputPane

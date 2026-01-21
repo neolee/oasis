@@ -1,5 +1,6 @@
 module Oasis.Tui.State
   ( Name(..)
+  , ParamField(..)
   , TuiEvent(..)
   , AppState(..)
   , mkState
@@ -10,6 +11,7 @@ import Brick.BChan (BChan)
 import Brick.Widgets.Edit (Editor, editor)
 import qualified Brick.Widgets.List as L
 import qualified Data.Vector as V
+import Oasis.Client.OpenAI.Param (ChatParams, emptyChatParams)
 import Oasis.Types (Config)
 
 data TuiEvent
@@ -25,7 +27,20 @@ data Name
   | RunnerList
   | MainViewport
   | PromptEditor
+  | ParamBetaUrlEditor
+  | ParamTemperatureEditor
+  | ParamTopPEditor
+  | ParamMaxCompletionTokensEditor
+  | ParamStopEditor
   deriving (Eq, Ord, Show)
+
+data ParamField
+  = ParamBetaUrl
+  | ParamTemperature
+  | ParamTopP
+  | ParamMaxCompletionTokens
+  | ParamStop
+  deriving (Eq, Ord, Show, Enum, Bounded)
 
 data AppState = AppState
   { config :: Config
@@ -43,6 +58,16 @@ data AppState = AppState
   , promptDefault :: Text
   , promptPristine :: Bool
   , lastPrompt :: Text
+  , chatParams :: ChatParams
+  , betaUrlSetting :: Bool
+  , paramDialogOpen :: Bool
+  , paramDialogFocus :: ParamField
+  , paramDialogError :: Maybe Text
+  , paramDialogBetaValue :: Bool
+  , paramTemperatureEditor :: Editor Text Name
+  , paramTopPEditor :: Editor Text Name
+  , paramMaxCompletionTokensEditor :: Editor Text Name
+  , paramStopEditor :: Editor Text Name
   , outputText :: Text
   , statusText :: Text
   }
@@ -65,6 +90,16 @@ mkState chan cfg providers models runners outputText statusText =
     , promptDefault = defaultPrompt
     , promptPristine = False
     , lastPrompt = defaultPrompt
+    , chatParams = emptyChatParams
+    , betaUrlSetting = False
+    , paramDialogOpen = False
+    , paramDialogFocus = ParamBetaUrl
+    , paramDialogError = Nothing
+    , paramDialogBetaValue = False
+    , paramTemperatureEditor = editor ParamTemperatureEditor (Just 1) ""
+    , paramTopPEditor = editor ParamTopPEditor (Just 1) ""
+    , paramMaxCompletionTokensEditor = editor ParamMaxCompletionTokensEditor (Just 1) ""
+    , paramStopEditor = editor ParamStopEditor (Just 1) ""
     , outputText
     , statusText
     }

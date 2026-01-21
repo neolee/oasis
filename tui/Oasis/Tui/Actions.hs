@@ -13,7 +13,6 @@ import Data.Aeson.Encode.Pretty (encodePretty)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.List as List
 import qualified Data.Map.Strict as M
-import Oasis.Client.OpenAI.Param (emptyChatParams)
 import Oasis.Config (resolveProvider)
 import Oasis.Runner.Basic (runBasic)
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
@@ -32,6 +31,8 @@ runBasicAction prompt = do
           modify (\s -> s { statusText = "Provider not found: " <> providerName })
         Just (provider, apiKey) -> do
           let modelOverride = selectedModel st
+              params = chatParams st
+              useBeta = betaUrlSetting st
           modify (\s -> s
             { statusText = "Running basic runner..."
             , outputText = ""
@@ -39,7 +40,7 @@ runBasicAction prompt = do
             })
           let chan = eventChan st
           void $ liftIO $ forkIO $ do
-            result <- runBasic provider apiKey modelOverride emptyChatParams prompt False
+            result <- runBasic provider apiKey modelOverride params prompt useBeta
             let (statusMsg, outputMsg) =
                   case result of
                     Left err ->

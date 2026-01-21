@@ -10,10 +10,11 @@ import Brick.Widgets.Center (centerLayer)
 import Brick.Widgets.Core
 import qualified Brick.Widgets.List as L
 import Brick.Widgets.Edit (renderEditor)
+import qualified Brick.Widgets.Edit as E
 import qualified Data.Text as T
 import Oasis.Tui.Keymap (keyMain, keyModel, keyProvider, keyRunner, tipsFor)
 import Oasis.Tui.Render.Markdown (renderMarkdown)
-import Oasis.Tui.State (AppState(..), Name(..))
+import Oasis.Tui.State (AppState(..), Name(..), ParamField(..))
 
 drawUI :: AppState -> [Widget Name]
 drawUI st =
@@ -26,9 +27,11 @@ drawUI st =
               ]
           , statusBar
           ]
-  in if promptDialogOpen st
-       then [promptDialog st, baseUi]
-       else [baseUi]
+  in if paramDialogOpen st
+       then [paramDialog st, baseUi]
+       else if promptDialogOpen st
+         then [promptDialog st, baseUi]
+         else [baseUi]
   where
     leftPane =
       hLimit 25 $
@@ -96,6 +99,58 @@ drawUI st =
                       , padTop (Pad 1) $
                         txt "[Enter] Run  [Esc] Cancel"
                       ]
+
+    paramDialog st' =
+      centerLayer $
+        hLimit 90 $
+          vLimit 18 $
+            withAttr (attrName "promptDialog") $
+              overrideAttr borderAttr (attrName "promptDialogBorder") $
+                borderWithLabel (txt "chat params") $
+                  padAll 1 $
+                    vBox
+                      ( [ renderParamCheckbox "beta_url" ParamBetaUrl (paramDialogBetaValue st')
+                        , renderParamLine "temperature" ParamTemperature (paramTemperatureEditor st')
+                        , renderParamLine "top_p" ParamTopP (paramTopPEditor st')
+                        , renderParamLine "max_completion_tokens" ParamMaxCompletionTokens (paramMaxCompletionTokensEditor st')
+                        , renderParamLine "stop" ParamStop (paramStopEditor st')
+                        , padTop (Pad 1) $
+                          txt "stop format: \"a\", \"b\""
+                        , txt "beta_url: press Space to toggle"
+                        ]
+                        <> paramErrorLine st'
+                        <>
+                        [ padTop (Pad 1) $
+                          txt "[Enter] Save  [Esc] Cancel  [Tab] Next"
+                        ]
+                      )
+
+    renderParamLine label field editorWidget =
+      let isFocused = paramDialogFocus st == field
+          labelWidget = hLimit 24 (txt (label <> ":"))
+      in hBox
+          [ labelWidget
+          , padLeft (Pad 1) $
+              withAttr (attrName "promptEditor") $
+                renderEditor (txt . unlines) isFocused editorWidget
+          ]
+
+    renderParamCheckbox label field isChecked =
+      let isFocused = paramDialogFocus st == field
+          labelWidget = hLimit 24 (txt (label <> ":"))
+          box = if isChecked then "[x]" else "[ ]"
+          boxWidget = if isFocused
+            then withAttr E.editFocusedAttr (txt box)
+            else txt box
+      in hBox
+          [ labelWidget
+          , padLeft (Pad 1) boxWidget
+          ]
+
+    paramErrorLine st' =
+      case paramDialogError st' of
+        Nothing -> []
+        Just err -> [ padTop (Pad 1) $ txt ("Error: " <> err) ]
 
 promptSummary :: AppState -> Text
 promptSummary st =
