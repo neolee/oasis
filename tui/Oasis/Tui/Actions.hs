@@ -35,6 +35,7 @@ runBasicAction prompt = do
           modify (\s -> s
             { statusText = "Running basic runner..."
             , outputText = ""
+            , runnerStarted = True
             })
           let chan = eventChan st
           void $ liftIO $ forkIO $ do

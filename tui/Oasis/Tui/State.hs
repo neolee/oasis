@@ -37,6 +37,7 @@ data AppState = AppState
   , selectedProvider :: Maybe Text
   , selectedModel :: Maybe Text
   , selectedRunner :: Maybe Text
+  , runnerStarted :: Bool
   , promptEditor :: Editor Text Name
   , promptDialogOpen :: Bool
   , promptDefault :: Text
@@ -58,6 +59,7 @@ mkState chan cfg providers models runners outputText statusText =
     , selectedProvider = Nothing
     , selectedModel = Nothing
     , selectedRunner = Nothing
+    , runnerStarted = False
     , promptEditor = editor PromptEditor (Just 5) defaultPrompt
     , promptDialogOpen = False
     , promptDefault = defaultPrompt

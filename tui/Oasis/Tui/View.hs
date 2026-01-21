@@ -55,13 +55,14 @@ drawUI st =
           withAttr (attrName "paneContent") $
             padAll 1 $
               vBox
-                [ txt ("Provider: " <> fromMaybe "-" (selectedProvider st))
-                , txt ("Model: " <> fromMaybe "-" (selectedModel st))
-                , txt ("Runner: " <> fromMaybe "-" (selectedRunner st))
-                , txt ("Prompt: " <> promptSummary st)
-                , padTop (Pad 1) hBorder
-                , viewport MainViewport Both (renderMarkdown (outputText st))
-                ]
+                ( [ txt ("Provider: " <> fromMaybe "-" (selectedProvider st))
+                  , txt ("Model: " <> fromMaybe "-" (selectedModel st))
+                  ]
+                  <> runnerPromptLines st
+                  <> [ padTop (Pad 1) hBorder
+                     , viewport MainViewport Both (renderMarkdown (outputText st))
+                     ]
+                )
     rightPane =
       hLimit 25 $
         borderWithLabel (txt "sidebar") $
@@ -101,6 +102,15 @@ promptSummary st =
   let raw = lastPrompt st
       cleaned = if T.null (T.strip raw) then "-" else raw
   in truncateText 80 cleaned
+
+runnerPromptLines :: AppState -> [Widget Name]
+runnerPromptLines st =
+  if runnerStarted st
+    then
+      [ txt ("Runner: " <> fromMaybe "-" (selectedRunner st))
+      , txt ("Prompt: " <> promptSummary st)
+      ]
+    else []
 
 truncateText :: Int -> Text -> Text
 truncateText maxLen t =
