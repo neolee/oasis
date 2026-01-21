@@ -3,7 +3,6 @@ module Oasis.Tui.Keymap
   , keyModel
   , keyRunner
   , keyMain
-  , keySidebar
   , PaneKind(..)
   , paneKind
   , tipsFor
@@ -18,19 +17,16 @@ data PaneKind
   | InputPane
 
 keyProvider :: Text
-keyProvider = "P"
+keyProvider = "p"
 
 keyModel :: Text
-keyModel = "M"
+keyModel = "m"
 
 keyRunner :: Text
-keyRunner = "R"
+keyRunner = "r"
 
 keyMain :: Text
-keyMain = "V"
-
-keySidebar :: Text
-keySidebar = "L/D"
+keyMain = "v"
 
 tipsFor :: AppState -> Text
 tipsFor st =

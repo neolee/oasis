@@ -8,7 +8,7 @@ import Brick.Types (Widget, ViewportType(..))
 import Brick.Widgets.Border
 import Brick.Widgets.Core
 import qualified Brick.Widgets.List as L
-import Oasis.Tui.Keymap (keyMain, keyModel, keyProvider, keyRunner, keySidebar, tipsFor)
+import Oasis.Tui.Keymap (keyMain, keyModel, keyProvider, keyRunner, tipsFor)
 import Oasis.Tui.State (AppState(..), Name(..))
 
 drawUI :: AppState -> [Widget Name]
@@ -27,24 +27,24 @@ drawUI st =
       hLimit 25 $
         vBox
           [ focusBorder (activeList st == ProviderList) $
-              borderWithLabel (txt ("Providers [" <> keyProvider <> "]")) $
+              borderWithLabel (txt ("providers [" <> keyProvider <> "]")) $
                 withAttr (attrName "paneContent") $
                   padAll 1 $
                     L.renderList drawProvider (activeList st == ProviderList) (providerList st)
           , focusBorder (activeList st == ModelList) $
-              borderWithLabel (txt ("Models [" <> keyModel <> "]")) $
+              borderWithLabel (txt ("models [" <> keyModel <> "]")) $
                 withAttr (attrName "paneContent") $
                   padAll 1 $
                     L.renderList drawProvider (activeList st == ModelList) (modelList st)
           , focusBorder (activeList st == RunnerList) $
-              borderWithLabel (txt ("Runners [" <> keyRunner <> "]")) $
+              borderWithLabel (txt ("runners [" <> keyRunner <> "]")) $
                 withAttr (attrName "paneContent") $
                   padAll 1 $
                     L.renderList drawProvider (activeList st == RunnerList) (runnerList st)
           ]
     centerPane =
       focusBorder (activeList st == MainViewport) $
-        borderWithLabel (txt ("Main [" <> keyMain <> "]")) $
+        borderWithLabel (txt ("main [" <> keyMain <> "]")) $
           withAttr (attrName "paneContent") $
             padAll 1 $
               vBox
@@ -56,7 +56,7 @@ drawUI st =
                 ]
     rightPane =
       hLimit 25 $
-        borderWithLabel (txt ("Sidebar [" <> keySidebar <> "]")) $
+        borderWithLabel (txt ("sidebar")) $
           withAttr (attrName "paneContent") $
             padAll 1 $
               txt ""
