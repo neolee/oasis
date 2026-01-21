@@ -48,18 +48,22 @@ main = do
     Nothing -> do
       let emptyCfg = Config mempty (Defaults "" "") mempty
       let st = mkState chan emptyCfg [] [] defaultRunners "Output will appear here." "providers.toml not found"
-      void $ customMainWithDefaultVty (Just chan) app st
+      runTui chan st
     Just path -> do
       cfgResult <- loadConfig path
       case cfgResult of
         Left err -> do
           let emptyCfg = Config mempty (Defaults "" "") mempty
           let st = mkState chan emptyCfg [] [] defaultRunners "Output will appear here." ("Failed to load config: " <> err)
-          void $ customMainWithDefaultVty (Just chan) app st
+          runTui chan st
         Right cfg -> do
           let providerNames = sort (M.keys (providers cfg))
           let st = mkState chan cfg providerNames [] defaultRunners "Output will appear here." ("Loaded providers from " <> toText path)
-          void $ customMainWithDefaultVty (Just chan) app st
+          runTui chan st
+  where
+    runTui chan st = do
+      (_, vty) <- customMainWithDefaultVty (Just chan) app st
+      Vty.shutdown vty
 
 defaultRunners :: [Text]
 defaultRunners =
