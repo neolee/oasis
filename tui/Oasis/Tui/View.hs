@@ -94,10 +94,7 @@ drawUI st =
                 borderWithLabel (txt "basic prompt") $
                   padAll 1 $
                     vBox
-                      [ withAttr (attrName "promptEditor") $
-                        renderEditor (txt . unlines) True (promptEditor st')
-                      , padTop (Pad 1) $
-                        txt "[Enter] Run  [Esc] Cancel"
+                      [ renderEditor (txt . unlines) True (promptEditor st')
                       ]
 
     paramDialog st' =
@@ -113,31 +110,27 @@ drawUI st =
                         , renderParamLine "temperature" ParamTemperature (paramTemperatureEditor st')
                         , renderParamLine "top_p" ParamTopP (paramTopPEditor st')
                         , renderParamLine "max_completion_tokens" ParamMaxCompletionTokens (paramMaxCompletionTokensEditor st')
-                        , renderParamLine "stop" ParamStop (paramStopEditor st')
+                        , renderParamLine "stop *" ParamStop (paramStopEditor st')
                         , padTop (Pad 1) $
-                          txt "stop format: \"a\", \"b\""
-                        , txt "beta_url: press Space to toggle"
+                          txt "* stop input format: \"a\", \"b\""
                         ]
                         <> paramErrorLine st'
-                        <>
-                        [ padTop (Pad 1) $
-                          txt "[Enter] Save  [Esc] Cancel  [Tab] Next"
-                        ]
                       )
 
     renderParamLine label field editorWidget =
       let isFocused = paramDialogFocus st == field
-          labelWidget = hLimit 24 (txt (label <> ":"))
+          labelText = txt (label <> ":")
+          labelWidget = hLimit 24 (if isFocused then withAttr (attrName "paramLabelFocus") labelText else labelText)
       in hBox
           [ labelWidget
-          , padLeft (Pad 1) $
-              withAttr (attrName "promptEditor") $
-                renderEditor (txt . unlines) isFocused editorWidget
+            , padLeft (Pad 1) $
+              renderEditor (txt . unlines) isFocused editorWidget
           ]
 
     renderParamCheckbox label field isChecked =
       let isFocused = paramDialogFocus st == field
-          labelWidget = hLimit 24 (txt (label <> ":"))
+          labelText = txt (label <> ":")
+          labelWidget = hLimit 24 (if isFocused then withAttr (attrName "paramLabelFocus") labelText else labelText)
           box = if isChecked then "[x]" else "[ ]"
           boxWidget = if isFocused
             then withAttr E.editFocusedAttr (txt box)

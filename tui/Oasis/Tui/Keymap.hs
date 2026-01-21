@@ -30,10 +30,12 @@ keyMain = "v"
 
 tipsFor :: AppState -> Text
 tipsFor st =
-  case paneKind (activeList st) of
-    ListPane -> "[↑/↓] Move  [Enter] Select"
-    OutputPane -> "[↓/↑/→/←] Scroll  [Ctrl+V/Alt+V/Alt+,/Alt+.] Page"
-    InputPane -> "[Enter] Submit  [Esc] Cancel"
+  if paramDialogOpen st
+    then "[Tab/Shift+Tab] Next/Prev  [Space] Toggle  [Enter] Save  [Esc] Cancel"
+    else case paneKind (activeList st) of
+      ListPane -> "[↑/↓] Move  [Enter] Select"
+      OutputPane -> "[↓/↑/→/←] Scroll  [Ctrl+V/Alt+V/Alt+,/Alt+.] Page"
+      InputPane -> "[Enter] Submit  [Esc] Cancel"
 
 paneKind :: Name -> PaneKind
 paneKind = \case

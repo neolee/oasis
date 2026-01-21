@@ -3,7 +3,7 @@ module Main where
 import Relude
 import Brick.AttrMap (attrMap, attrName)
 import Brick.BChan (newBChan)
-import Brick.Main (App(..), customMainWithDefaultVty, showFirstCursor)
+import Brick.Main (App(..), customMainWithDefaultVty, showCursorNamed)
 import qualified Brick.Widgets.List as L
 import Brick.Widgets.Skylighting (attrMappingsForStyle, highlightedCodeBlockAttr)
 import qualified Brick.Widgets.Edit as E
@@ -20,7 +20,7 @@ app :: App AppState TuiEvent Name
 app =
   App
     { appDraw = drawUI
-    , appChooseCursor = showFirstCursor
+    , appChooseCursor = showCursorNamed . activeList
     , appHandleEvent = appEvent
     , appStartEvent = pure ()
     , appAttrMap = const (attrMap Vty.defAttr
@@ -29,12 +29,13 @@ app =
         , (attrName "focusBorder", Vty.defAttr `Vty.withForeColor` Vty.cyan)
         , (attrName "paneContent", Vty.defAttr)
         , (attrName "mdHeading", Vty.defAttr `Vty.withStyle` Vty.bold)
-        , (attrName "promptDialog", Vty.defAttr `Vty.withBackColor` Vty.black `Vty.withForeColor` Vty.white)
-        , (attrName "promptDialogBorder", Vty.defAttr `Vty.withBackColor` Vty.black `Vty.withForeColor` Vty.white)
-        , (attrName "promptEditor", Vty.defAttr `Vty.withBackColor` Vty.black `Vty.withForeColor` Vty.white)
+        , (attrName "promptDialog", Vty.defAttr)
+        , (attrName "promptDialogBorder", Vty.defAttr)
+        , (attrName "promptEditor", Vty.defAttr)
         , (highlightedCodeBlockAttr, Vty.defAttr)
-        , (E.editAttr, Vty.defAttr `Vty.withBackColor` Vty.black `Vty.withForeColor` Vty.white)
-        , (E.editFocusedAttr, Vty.defAttr `Vty.withBackColor` Vty.white `Vty.withForeColor` Vty.black)
+        , (E.editAttr, Vty.defAttr)
+        , (E.editFocusedAttr, Vty.defAttr)
+        , (attrName "paramLabelFocus", Vty.defAttr `Vty.withBackColor` Vty.white `Vty.withForeColor` Vty.black)
         ] <> attrMappingsForStyle pygments
       ))
     }

@@ -186,6 +186,7 @@ openParamDialog = do
     { paramDialogOpen = True
     , paramDialogError = Nothing
     , paramDialogFocus = ParamBetaUrl
+    , paramDialogReturnFocus = activeList s
     , activeList = ParamBetaUrlEditor
     , promptDialogOpen = False
     , paramDialogBetaValue = betaUrlSetting s
@@ -246,7 +247,7 @@ submitParamDialog = do
         , betaUrlSetting = paramDialogBetaValue s
         , paramDialogOpen = False
         , paramDialogError = Nothing
-        , activeList = RunnerList
+        , activeList = paramDialogReturnFocus s
         , statusText = "Chat parameters updated."
         })
 
@@ -255,7 +256,7 @@ cancelParamDialog =
   modify (\s -> s
     { paramDialogOpen = False
     , paramDialogError = Nothing
-    , activeList = RunnerList
+    , activeList = paramDialogReturnFocus s
     , statusText = "Chat parameter update cancelled."
     })
 

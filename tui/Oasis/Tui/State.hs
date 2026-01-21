@@ -63,6 +63,7 @@ data AppState = AppState
   , paramDialogOpen :: Bool
   , paramDialogFocus :: ParamField
   , paramDialogError :: Maybe Text
+  , paramDialogReturnFocus :: Name
   , paramDialogBetaValue :: Bool
   , paramTemperatureEditor :: Editor Text Name
   , paramTopPEditor :: Editor Text Name
@@ -95,6 +96,7 @@ mkState chan cfg providers models runners outputText statusText =
     , paramDialogOpen = False
     , paramDialogFocus = ParamBetaUrl
     , paramDialogError = Nothing
+    , paramDialogReturnFocus = ProviderList
     , paramDialogBetaValue = False
     , paramTemperatureEditor = editor ParamTemperatureEditor (Just 1) ""
     , paramTopPEditor = editor ParamTopPEditor (Just 1) ""
