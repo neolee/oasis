@@ -14,7 +14,9 @@ import qualified Data.Vector as V
 import qualified Graphics.Vty as Vty
 import Oasis.Config
 import Oasis.Tui.State (AppState(..), Name(..), mkState)
-import Oasis.Types (Config(..), Defaults(..), Provider(..))
+import Oasis.Types (Config(..), Defaults(..), Provider(..), RequestResponse(..))
+import Oasis.Client.OpenAI.Param (emptyChatParams)
+import Oasis.Runner.Basic (runBasic)
 
 drawUI :: AppState -> [Widget Name]
 drawUI st =
@@ -52,7 +54,7 @@ drawUI st =
             [ txt ("Provider: " <> fromMaybe "-" (selectedProvider st))
             , txt ("Model: " <> fromMaybe "-" (selectedModel st))
             , txt ("Runner: " <> fromMaybe "-" (selectedRunner st))
-            , padTop (Pad 1) (txt "Output:")
+            , padTop (Pad 1) (hBorder)
             , vLimit 12 $
                 viewport MainViewport Vertical (txtWrap (outputText st))
             ]
@@ -121,6 +123,7 @@ applySelection = do
             { selectedProvider = Just providerName
             , selectedModel = listToMaybe models
             , modelList = modelList'
+            , activeList = ModelList
             , statusText = "Selected provider: " <> providerName
             })
     ModelList ->
@@ -129,16 +132,56 @@ applySelection = do
         Just (_, modelName) ->
           modify (\s -> s
             { selectedModel = Just modelName
+            , activeList = RunnerList
             , statusText = "Selected model: " <> modelName
             })
     RunnerList ->
       case L.listSelectedElement (runnerList st) of
         Nothing -> pure ()
         Just (_, runnerName) ->
+          if runnerName == "basic"
+            then do
+              modify (\s -> s
+                { selectedRunner = Just runnerName
+                , statusText = "Selected runner: " <> runnerName
+                })
+              runBasicAction
+            else
+              modify (\s -> s
+                { selectedRunner = Just runnerName
+                , statusText = "Selected runner: " <> runnerName
+                })
+
+runBasicAction :: EventM Name AppState ()
+runBasicAction = do
+  st <- get
+  case selectedProvider st of
+    Nothing ->
+      modify (\s -> s { statusText = "Select a provider first." })
+    Just providerName -> do
+      resolved <- liftIO (resolveProvider (config st) providerName)
+      case resolved of
+        Nothing ->
+          modify (\s -> s { statusText = "Provider not found: " <> providerName })
+        Just (provider, apiKey) -> do
+          let modelOverride = selectedModel st
+          let prompt = "Hello from oasis-tui basic runner."
           modify (\s -> s
-            { selectedRunner = Just runnerName
-            , statusText = "Selected runner: " <> runnerName
+            { statusText = "Running basic runner..."
+            , outputText = ""
             })
+          result <- liftIO (runBasic provider apiKey modelOverride emptyChatParams prompt False)
+          case result of
+            Left err ->
+              modify (\s -> s
+                { statusText = "Basic runner failed."
+                , outputText = "Error:\n" <> err
+                })
+            Right rr ->
+              modify (\s -> s
+                { statusText = "Basic runner completed."
+                , outputText = "Request:\n" <> requestJson rr <> "\n\nResponse:\n" <> responseJson rr
+                })
 
 providerModels :: Config -> Text -> [Text]
 providerModels cfg providerName =
