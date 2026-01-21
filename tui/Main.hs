@@ -24,6 +24,7 @@ app =
       [ (L.listAttr, Vty.defAttr)
       , (L.listSelectedAttr, Vty.defAttr `Vty.withStyle` Vty.reverseVideo)
       , (attrName "focusBorder", Vty.defAttr `Vty.withForeColor` Vty.cyan)
+      , (attrName "paneContent", Vty.defAttr)
       ])
     }
 

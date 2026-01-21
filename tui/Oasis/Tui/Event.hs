@@ -108,12 +108,14 @@ applySelection = do
             then do
               modify (\s -> s
                 { selectedRunner = Just runnerName
+                , activeList = MainViewport
                 , statusText = "Selected runner: " <> runnerName
                 })
               runBasicAction
             else
               modify (\s -> s
                 { selectedRunner = Just runnerName
+                , activeList = MainViewport
                 , statusText = "Selected runner: " <> runnerName
                 })
     MainViewport -> pure ()
