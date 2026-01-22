@@ -24,13 +24,17 @@ import Oasis.Types (StopParam(..))
 
 appEvent :: BrickEvent Name TuiEvent -> EventM Name AppState ()
 appEvent (AppEvent evt) =
-  modify (\s -> s
-    { statusText = eventStatus evt
-    , outputText = eventOutput evt
-    , promptDialogOpen = False
-    , paramDialogOpen = False
-    , activeList = MainViewport
-    })
+  case evt of
+    StructuredStreaming{eventOutput} ->
+      modify (\s -> s { outputText = eventOutput })
+    _ ->
+      modify (\s -> s
+        { statusText = eventStatus evt
+        , outputText = eventOutput evt
+        , promptDialogOpen = False
+        , paramDialogOpen = False
+        , activeList = MainViewport
+        })
 appEvent (VtyEvent ev) =
   do
     st <- get

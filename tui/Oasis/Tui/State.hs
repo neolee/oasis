@@ -40,6 +40,9 @@ data TuiEvent
     { eventStatus :: Text
     , eventOutput :: Text
     }
+  | StructuredStreaming
+    { eventOutput :: Text
+    }
 
 
 data Name

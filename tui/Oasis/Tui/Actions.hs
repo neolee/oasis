@@ -10,7 +10,7 @@ module Oasis.Tui.Actions
   ) where
 
 import Relude
-import Brick.BChan (writeBChan)
+import Brick.BChan (BChan, writeBChan)
 import Brick.Types (EventM)
 import Control.Concurrent (forkIO)
 import Control.Monad.State.Class (get, modify)
@@ -416,7 +416,7 @@ runStructuredAction responseFormat runnerLabel = do
                   , ..
                   }
             accumRef <- IORef.newIORef ""
-            result <- streamChatCompletionWithRequestWithHooks emptyClientHooks provider apiKey reqBody (handleStructuredChunk accumRef) useBeta
+            result <- streamChatCompletionWithRequestWithHooks emptyClientHooks provider apiKey reqBody (handleStructuredChunk chan accumRef) useBeta
             rawText <- IORef.readIORef accumRef
             let (statusMsg, outputMsg) =
                   case result of
@@ -438,10 +438,12 @@ runStructuredAction responseFormat runnerLabel = do
                       in (runnerLabel <> " runner completed.", output)
             writeBChan chan (StructuredCompleted statusMsg outputMsg)
 
-handleStructuredChunk :: IORef.IORef Text -> ChatCompletionStreamChunk -> IO ()
-handleStructuredChunk accumRef chunk =
-  forEachDeltaContentLocal chunk $ \t ->
+handleStructuredChunk :: BChan TuiEvent -> IORef.IORef Text -> ChatCompletionStreamChunk -> IO ()
+handleStructuredChunk chan accumRef chunk =
+  forEachDeltaContentLocal chunk $ \t -> do
     IORef.modifyIORef' accumRef (<> t)
+    rawText <- IORef.readIORef accumRef
+    writeBChan chan (StructuredStreaming (streamingOutput rawText))
 
 forEachDeltaContentLocal :: ChatCompletionStreamChunk -> (Text -> IO ()) -> IO ()
 forEachDeltaContentLocal ChatCompletionStreamChunk{choices} f =
@@ -456,6 +458,13 @@ parseJsonText raw =
   case eitherDecodeStrict (encodeUtf8 raw) :: Either String Value of
     Left err -> Left (T.pack err)
     Right _ -> Right (prettyJson raw)
+
+streamingOutput :: Text -> Text
+streamingOutput rawText =
+  mdConcat
+    [ mdTextSection "Raw Stream" rawText
+    , mdTextSection "Parsed JSON" "Streaming..."
+    ]
 
 structuredSystemMessage :: Text
 structuredSystemMessage = T.unlines
