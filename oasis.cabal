@@ -152,6 +152,7 @@ executable oasis-tui
       Oasis.Tui.Event
       Oasis.Tui.Keymap
       Oasis.Tui.Render.Markdown
+      Oasis.Tui.Render.Output
       Oasis.Tui.State
       Oasis.Tui.View
       Paths_oasis

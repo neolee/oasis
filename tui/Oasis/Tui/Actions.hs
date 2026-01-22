@@ -8,13 +8,11 @@ import Brick.BChan (writeBChan)
 import Brick.Types (EventM)
 import Control.Concurrent (forkIO)
 import Control.Monad.State.Class (get, modify)
-import Data.Aeson (Value, eitherDecodeStrict)
-import Data.Aeson.Encode.Pretty (encodePretty)
-import qualified Data.ByteString.Lazy as LBS
 import qualified Data.List as List
 import qualified Data.Map.Strict as M
 import Oasis.Config (resolveProvider)
 import Oasis.Runner.Basic (runBasic)
+import Oasis.Tui.Render.Output (prettyJson, mdCodeSection, mdConcat)
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
 import Oasis.Types (Config(..), Provider(..), RequestResponse(..))
 
@@ -48,21 +46,12 @@ runBasicAction prompt = do
                     Right rr ->
                       let prettyRequest = prettyJson (requestJson rr)
                           prettyResponse = prettyJson (responseJson rr)
-                          output =
-                            "## Request\n" <> codeBlock "json" prettyRequest <>
-                            "\n\n## Response\n" <> codeBlock "json" prettyResponse
+                          output = mdConcat
+                            [ mdCodeSection "Request" "json" prettyRequest
+                            , mdCodeSection "Response" "json" prettyResponse
+                            ]
                       in ("Basic runner completed.", output)
             writeBChan chan (BasicCompleted statusMsg outputMsg)
-
-prettyJson :: Text -> Text
-prettyJson input =
-  case eitherDecodeStrict (encodeUtf8 input) :: Either String Value of
-    Left _ -> input
-    Right val -> decodeUtf8 (LBS.toStrict (encodePretty val))
-
-codeBlock :: Text -> Text -> Text
-codeBlock lang content =
-  "```" <> lang <> "\n" <> content <> "\n```"
 
 providerModels :: Config -> Text -> [Text]
 providerModels cfg providerName =
