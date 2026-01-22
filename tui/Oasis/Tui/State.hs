@@ -4,6 +4,7 @@ module Oasis.Tui.State
   , TuiEvent(..)
   , AppState(..)
   , mkState
+  , defaultOutputText
   ) where
 
 import Relude
@@ -123,4 +124,7 @@ mkState chan cfg providers models runners outputText statusText =
     }
 
 defaultPrompt :: Text
-defaultPrompt = "Hello from oasis-tui basic runner."
+defaultPrompt = "I'm Neo and how are you?"
+
+defaultOutputText :: Text
+defaultOutputText = "Select provider, model and runner, the output will appear here."

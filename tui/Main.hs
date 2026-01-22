@@ -10,7 +10,7 @@ import qualified Brick.Widgets.Edit as E
 import qualified Graphics.Vty as Vty
 import Oasis.Config
 import Oasis.Tui.Event (appEvent)
-import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..), mkState)
+import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..), mkState, defaultOutputText)
 import qualified Data.Map.Strict as M
 import Oasis.Tui.View (drawUI)
 import Oasis.Types (Config(..), Defaults(..))
@@ -47,18 +47,18 @@ main = do
   case mPath of
     Nothing -> do
       let emptyCfg = Config mempty (Defaults "" "") mempty
-      let st = mkState chan emptyCfg [] [] defaultRunners "Output will appear here." "providers.toml not found"
+      let st = mkState chan emptyCfg [] [] defaultRunners defaultOutputText "providers.toml not found"
       runTui chan st
     Just path -> do
       cfgResult <- loadConfig path
       case cfgResult of
         Left err -> do
           let emptyCfg = Config mempty (Defaults "" "") mempty
-          let st = mkState chan emptyCfg [] [] defaultRunners "Output will appear here." ("Failed to load config: " <> err)
+          let st = mkState chan emptyCfg [] [] defaultRunners defaultOutputText ("Failed to load config: " <> err)
           runTui chan st
         Right cfg -> do
           let providerNames = sort (M.keys (providers cfg))
-          let st = mkState chan cfg providerNames [] defaultRunners "Output will appear here." ("Loaded providers from " <> toText path)
+          let st = mkState chan cfg providerNames [] defaultRunners defaultOutputText ("Loaded providers from " <> toText path)
           runTui chan st
   where
     runTui chan st = do
