@@ -157,10 +157,21 @@ runnerPromptLines :: AppState -> [Widget Name]
 runnerPromptLines st =
   if runnerStarted st
     then
-      [ txt ("Runner: " <> fromMaybe "-" (selectedRunner st))
-      , txt ("Prompt: " <> promptSummary st)
-      ]
+      let runnerName = fromMaybe "-" (selectedRunner st)
+          promptLines =
+            if runnerUsesPrompt (selectedRunner st)
+              then [txt ("Prompt: " <> promptSummary st)]
+              else []
+      in [txt ("Runner: " <> runnerName)] <> promptLines
     else []
+
+runnerUsesPrompt :: Maybe Text -> Bool
+runnerUsesPrompt = \case
+  Just "basic" -> True
+  Just "responses" -> True
+  Just "embeddings" -> True
+  Just "hooks" -> True
+  _ -> False
 
 truncateText :: Int -> Text -> Text
 truncateText maxLen t =

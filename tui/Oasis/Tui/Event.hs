@@ -18,7 +18,7 @@ import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Graphics.Vty as Vty
 import Oasis.Client.OpenAI.Param (ChatParams(..))
-import Oasis.Tui.Actions (providerModels, runBasicAction, runResponsesAction, runModelsAction, runEmbeddingsAction, runHooksAction, runStructuredJsonAction, runStructuredSchemaAction)
+import Oasis.Tui.Actions (providerModels, runBasicAction, runResponsesAction, runModelsAction, runEmbeddingsAction, runHooksAction, runStructuredJsonAction, runStructuredSchemaAction, runToolCallingAction)
 import Oasis.Tui.State (AppState(..), Name(..), ParamField(..), TuiEvent(..))
 import Oasis.Types (StopParam(..))
 
@@ -393,6 +393,13 @@ applySelection = do
                       , activeList = MainViewport
                       })
                     runStructuredSchemaAction
+                else if runnerName == "tool-calling"
+                  then do
+                    modify (\s -> s
+                      { selectedRunner = Just runnerName
+                      , activeList = MainViewport
+                      })
+                    runToolCallingAction
               else
                 modify (\s -> s
                   { selectedRunner = Just runnerName
