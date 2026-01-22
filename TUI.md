@@ -133,30 +133,24 @@ TUI 保持与 CLI 相同的分层架构（L1-L3），仅作为 L4 表示层提�
 
 #### 阶段 2：核心交互与 Basic Runner
 1. 实现左侧面板完整功能：provider/model/runner 列表交互
-2. 实现中央区域动态内容切换，非 Chat runner 输出显示区域（支持语法高亮）
-3. 集成 Basic runner 执行，显示结果，**把显示效果部分做好**
-4. 实现对话框系统基础框架，支持弹出对话框输入参数（如 temperature、max_tokens 等）
+2. 实现中央区域内容展示，支持 JSON 和 Markdown 语法高亮
+3. 集成 Basic runner 执行和结果显示
+4. 实现对话框系统基础框架，支持弹出对话框输入参数
 
 **交付物**：可选择 provider/model/runner、执行 basic runner 并查看美观输出、可通过对话框调整参数的 TUI
 
-#### 阶段 3：Chat Runner 与高级显示
-1. 完善 Chat runner 界面：消息历史显示、输入框多行编辑
+#### 阶段 3：其他 Runner
+1. 实现其他 runner（Embeddings、Structured、ToolCalling 等）
+
+**交付物**：生产可用的 TUI，支持除 Chat 以外所有 runner
+
+#### 阶段 4：Chat Runner 与高级功能
+1. 实现 Chat runner 界面：消息历史显示、输入框多行编辑
 2. 实现流式输出渲染，支持 thinking tokens
-3. **所有显示和输入体验在这里做好**
-4. 添加 Verbose Mode 对话框（消息历史编辑）
-5. 实现 Advanced Mode 暂停确认功能
+3. Verbose Mode：消息历史列表及编辑
+4. Advanced Mode：请求拦截即 context 修改
 
 **交付物**：功能完整的 Chat runner TUI，支持多轮对话、流式输出和高级模式
-
-#### 阶段 4：其他 Runner 与高级功能
-1. 实现其他 runner（Embeddings、Structured、ToolCalling 等）
-2. 完善 runner 参数对话框系统（基于 JSON Schema 的动态表单）
-3. 添加语法高亮（JSON/Markdown）
-4. 错误处理和状态反馈优化
-5. 终端兼容性测试（80×40 最小尺寸）
-6. **实现高级功能**：右侧边栏的 Verbose Mode 和 Advanced Mode 面板
-
-**交付物**：生产可用的 TUI，覆盖所有需求，支持所有 runner 和高级功能
 
 ### 验证标准
 每个阶段完成后应通过以下验证：
