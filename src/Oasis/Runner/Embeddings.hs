@@ -9,7 +9,7 @@ module Oasis.Runner.Embeddings
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
-import Oasis.Model (resolveModelId)
+import Oasis.Model (resolveEmbeddingModelId)
 import Oasis.Client.OpenAI.Param (parseExtraArgs)
 import Oasis.Runner.Result (encodeRequestJson, buildRequestResponse)
 import Data.Aeson (FromJSON(..), ToJSON(..), (.:?), (.=), withObject)
@@ -50,7 +50,7 @@ parseEmbeddingParams = parseExtraArgs "Embeddings" emptyEmbeddingParams
 
 runEmbeddings :: Provider -> Text -> Maybe Text -> EmbeddingParams -> Text -> IO (Either Text EmbeddingResult)
 runEmbeddings provider apiKey modelOverride params inputText = do
-  let modelId = resolveModelId provider modelOverride
+  let modelId = resolveEmbeddingModelId provider modelOverride
       reqBody = EmbeddingRequest
         { model = modelId
         , input = Aeson.String inputText

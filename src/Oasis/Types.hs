@@ -34,6 +34,7 @@ data Provider = Provider
   , chat_model_id      :: Text
   , coder_model_id     :: Text
   , reasoner_model_id  :: Text
+  , embedding_model_id :: Maybe Text
   , default_model_type :: Maybe Text
   } deriving (Show, Eq, Generic, FromJSON, ToJSON)
     deriving FromValue via GenericTomlTable Provider

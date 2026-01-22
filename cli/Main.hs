@@ -14,7 +14,7 @@ import Oasis.Runner.ToolCalling
 import Oasis.Runner.PartialMode
 import Oasis.Runner.PrefixCompletion
 import Oasis.Runner.FIMCompletion
-import Oasis.Model (resolveModelId)
+import Oasis.Model (resolveModelId, resolveEmbeddingModelId)
 import Oasis.Client.OpenAI.Param (parseChatParams)
 import Oasis.CLI.Render.Text (renderRunnerResultText, renderResponseOnlyText)
 import qualified Data.Text as T
@@ -300,7 +300,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               putTextLn "Embeddings runner requires input text."
               exitFailure
             else do
-              putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+              putTextLn $ "Using model: " <> resolveEmbeddingModelId provider modelOverride
               result <- runEmbeddings provider apiKey modelOverride params inputText
               case result of
                 Left err -> do

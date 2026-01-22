@@ -1,6 +1,9 @@
 module Oasis.Tui.Actions
   ( runBasicAction
   , runResponsesAction
+  , runModelsAction
+  , runEmbeddingsAction
+  , runHooksAction
   , providerModels
   ) where
 
@@ -13,19 +16,26 @@ import qualified Data.List as List
 import qualified Data.Map.Strict as M
 import Oasis.Config (resolveProvider)
 import Oasis.Runner.Basic (runBasic)
-import Oasis.Runner.Responses (runResponses, emptyResponsesParams, ResponsesParams(..))
-import Oasis.Tui.Render.Output (prettyJson, mdCodeSection, mdTextSection, mdConcat)
+import qualified Oasis.Runner.Responses as Responses
+import Oasis.Runner.GetModels (runGetModels)
+import qualified Oasis.Runner.Embeddings as Embeddings
+import Oasis.Tui.Render.Output (RequestContext(..), prettyJson, mdCodeSection, mdTextSection, mdConcat, requestSections, renderErrorOutput)
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
 import Oasis.Types (Config(..), Provider(..), RequestResponse(..), Message(..), messageContentText)
-import Oasis.Client.OpenAI (ResponsesResponse(..), ChatCompletionResponse(..), ChatChoice(..), ChatCompletionRequest(..), ResponsesRequest(..), defaultChatRequest, buildResponsesUrl, buildChatUrl)
+import Oasis.Client.OpenAI (ResponsesResponse(..), ChatCompletionResponse(..), ChatChoice(..), ChatCompletionRequest(..), ResponsesRequest(..), EmbeddingRequest(..), EmbeddingResponse(..), EmbeddingData(..), defaultChatRequest, buildResponsesUrl, buildChatUrl, buildModelsUrl, buildEmbeddingsUrl, sendChatCompletionRawWithHooks, renderClientError, ClientHooks(..))
 import Oasis.Client.OpenAI.Param (applyChatParams)
 import Oasis.Chat.Message (userMessage)
-import Oasis.Model (resolveModelId)
+import Oasis.Model (resolveModelId, resolveEmbeddingModelId)
 import Data.Aeson (encode, ToJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
+import qualified Data.ByteString as BS
+import Data.CaseInsensitive (original)
+import Network.HTTP.Client (Request(..))
+import Network.HTTP.Types.Header (HeaderName, hAuthorization)
+import Network.HTTP.Types.Status (Status, statusCode)
 
 runBasicAction :: Text -> EventM Name AppState ()
 runBasicAction prompt = do
@@ -51,30 +61,23 @@ runBasicAction prompt = do
           void $ liftIO $ forkIO $ do
             let modelId = resolveModelId provider modelOverride
                 baseUrl = selectBaseUrl provider useBeta
-                requestUrl = buildChatUrl baseUrl
                 reqBody = applyChatParams params (defaultChatRequest modelId [userMessage prompt])
-                reqJsonText = encodeJsonText reqBody
+                reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody
             result <- runBasic provider apiKey modelOverride params prompt useBeta
             let (statusMsg, outputMsg) =
                   case result of
                     Left err ->
-                      let prettyRequest = prettyJson reqJsonText
-                          output = mdConcat
-                            [ mdTextSection "Request URL" requestUrl
-                            , mdCodeSection "Request" "json" prettyRequest
-                            , mdTextSection "Error" err
-                            ]
-                      in ("Basic runner failed.", output)
+                      ("Basic runner failed.", renderErrorOutput reqCtx err)
                     Right rr ->
-                      let prettyRequest = prettyJson (requestJson rr)
-                          prettyResponse = prettyJson (responseJson rr)
+                      let prettyResponse = prettyJson (responseJson rr)
                           assistantContent = response rr >>= extractAssistantContent
-                          output = mdConcat (catMaybes
-                            [ Just (mdTextSection "Request URL" requestUrl)
-                            , Just (mdCodeSection "Request" "json" prettyRequest)
-                            , Just (mdCodeSection "Response" "json" prettyResponse)
-                            , fmap (mdTextSection "Assistant") assistantContent
-                            ])
+                          output = mdConcat
+                            ( requestSections reqCtx
+                              <> catMaybes
+                                  [ Just (mdCodeSection "Response" "json" prettyResponse)
+                                  , fmap (mdTextSection "Assistant") assistantContent
+                                  ]
+                            )
                       in ("Basic runner completed.", output)
             writeBChan chan (BasicCompleted statusMsg outputMsg)
 
@@ -91,7 +94,7 @@ runResponsesAction inputText = do
           modify (\s -> s { statusText = "Provider not found: " <> providerName })
         Just (provider, apiKey) -> do
           let modelOverride = selectedModel st
-              params = emptyResponsesParams
+              params = Responses.emptyResponsesParams
           modify (\s -> s
             { statusText = "Running responses runner..."
             , outputText = ""
@@ -101,31 +104,136 @@ runResponsesAction inputText = do
           void $ liftIO $ forkIO $ do
             let modelId = resolveModelId provider modelOverride
                 reqBody = buildResponsesRequest modelId params inputText
-                reqJsonText = encodeJsonText reqBody
-                requestUrl = buildResponsesUrl (base_url provider)
-            result <- runResponses provider apiKey modelOverride params inputText
+                reqCtx = buildRequestContext (buildResponsesUrl (base_url provider)) reqBody
+            result <- Responses.runResponses provider apiKey modelOverride params inputText
             let (statusMsg, outputMsg) =
                   case result of
                     Left err ->
-                      let prettyRequest = prettyJson reqJsonText
-                          output = mdConcat
-                            [ mdTextSection "Request URL" requestUrl
-                            , mdCodeSection "Request" "json" prettyRequest
-                            , mdTextSection "Error" err
-                            ]
-                      in ("Responses runner failed.", output)
+                      ("Responses runner failed.", renderErrorOutput reqCtx err)
                     Right rr ->
-                      let prettyRequest = prettyJson (requestJson rr)
-                          prettyResponse = prettyJson (responseJson rr)
+                      let prettyResponse = prettyJson (responseJson rr)
                           assistantContent = response rr >>= \r -> output_text r
-                          output = mdConcat (catMaybes
-                            [ Just (mdTextSection "Request URL" requestUrl)
-                            , Just (mdCodeSection "Request" "json" prettyRequest)
-                            , Just (mdCodeSection "Response" "json" prettyResponse)
-                            , fmap (mdTextSection "Assistant") assistantContent
-                            ])
+                          output = mdConcat
+                            ( requestSections reqCtx
+                              <> catMaybes
+                                  [ Just (mdCodeSection "Response" "json" prettyResponse)
+                                  , fmap (mdTextSection "Assistant") assistantContent
+                                  ]
+                            )
                       in ("Responses runner completed.", output)
             writeBChan chan (ResponsesCompleted statusMsg outputMsg)
+
+runModelsAction :: EventM Name AppState ()
+runModelsAction = do
+  st <- get
+  case selectedProvider st of
+    Nothing ->
+      modify (\s -> s { statusText = "Select a provider first." })
+    Just providerName -> do
+      resolved <- liftIO (resolveProvider (config st) providerName)
+      case resolved of
+        Nothing ->
+          modify (\s -> s { statusText = "Provider not found: " <> providerName })
+        Just (provider, apiKey) -> do
+          modify (\s -> s
+            { statusText = "Running models runner..."
+            , outputText = ""
+            , runnerStarted = True
+            })
+          let chan = eventChan st
+          void $ liftIO $ forkIO $ do
+            let reqCtx = RequestContext (buildModelsUrl (base_url provider)) ""
+            result <- runGetModels provider apiKey
+            let (statusMsg, outputMsg) =
+                  case result of
+                    Left err ->
+                      ("Models runner failed.", renderErrorOutput reqCtx err)
+                    Right rr ->
+                      let prettyResponse = prettyJson (responseJson rr)
+                          output = mdConcat
+                            ( requestSections reqCtx
+                              <> [mdCodeSection "Response" "json" prettyResponse]
+                            )
+                      in ("Models runner completed.", output)
+            writeBChan chan (ModelsCompleted statusMsg outputMsg)
+
+runEmbeddingsAction :: Text -> EventM Name AppState ()
+runEmbeddingsAction inputText = do
+  st <- get
+  case selectedProvider st of
+    Nothing ->
+      modify (\s -> s { statusText = "Select a provider first." })
+    Just providerName -> do
+      resolved <- liftIO (resolveProvider (config st) providerName)
+      case resolved of
+        Nothing ->
+          modify (\s -> s { statusText = "Provider not found: " <> providerName })
+        Just (provider, apiKey) -> do
+          let modelOverride = selectedModel st
+              params = Embeddings.emptyEmbeddingParams
+          modify (\s -> s
+            { statusText = "Running embeddings runner..."
+            , outputText = ""
+            , runnerStarted = True
+            })
+          let chan = eventChan st
+          void $ liftIO $ forkIO $ do
+            let modelId = resolveEmbeddingModelId provider modelOverride
+                reqBody = buildEmbeddingsRequest modelId params inputText
+                reqCtx = buildRequestContext (buildEmbeddingsUrl (base_url provider)) reqBody
+            result <- Embeddings.runEmbeddings provider apiKey modelOverride params inputText
+            let (statusMsg, outputMsg) =
+                  case result of
+                    Left err ->
+                      let output = mdConcat
+                            ( requestSections reqCtx
+                              <> [ mdTextSection "Actual Model" modelId
+                                 , mdTextSection "Error" err
+                                 ]
+                            )
+                      in ("Embeddings runner failed.", output)
+                    Right rr ->
+                      let prettyResponse = prettyJson (responseJson rr)
+                          summaryText = embeddingSummary <$> response rr
+                          output = mdConcat
+                            ( requestSections reqCtx
+                              <> [ mdTextSection "Actual Model" modelId ]
+                              <> catMaybes
+                                  [ Just (mdCodeSection "Response" "json" prettyResponse)
+                                  , fmap (mdTextSection "Summary") summaryText
+                                  ]
+                            )
+                      in ("Embeddings runner completed.", output)
+            writeBChan chan (EmbeddingsCompleted statusMsg outputMsg)
+
+runHooksAction :: Text -> EventM Name AppState ()
+runHooksAction prompt = do
+  st <- get
+  case selectedProvider st of
+    Nothing ->
+      modify (\s -> s { statusText = "Select a provider first." })
+    Just providerName -> do
+      resolved <- liftIO (resolveProvider (config st) providerName)
+      case resolved of
+        Nothing ->
+          modify (\s -> s { statusText = "Provider not found: " <> providerName })
+        Just (provider, apiKey) -> do
+          let modelOverride = selectedModel st
+              params = chatParams st
+              useBeta = betaUrlSetting st
+          modify (\s -> s
+            { statusText = "Running hooks runner..."
+            , outputText = ""
+            , runnerStarted = True
+            })
+          let chan = eventChan st
+          void $ liftIO $ forkIO $ do
+            let modelId = resolveModelId provider modelOverride
+                baseUrl = selectBaseUrl provider useBeta
+                reqBody = applyChatParams params (defaultChatRequest modelId [userMessage prompt])
+                reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody
+            (statusMsg, outputMsg) <- runHooksWithLog provider apiKey useBeta reqCtx reqBody
+            writeBChan chan (HooksCompleted statusMsg outputMsg)
 
 extractAssistantContent :: ChatCompletionResponse -> Maybe Text
 extractAssistantContent ChatCompletionResponse{choices} =
@@ -136,6 +244,13 @@ extractAssistantContent ChatCompletionResponse{choices} =
 encodeJsonText :: ToJSON a => a -> Text
 encodeJsonText = TE.decodeUtf8Lenient . BL.toStrict . encode
 
+buildRequestContext :: ToJSON a => Text -> a -> RequestContext
+buildRequestContext url reqBody =
+  RequestContext
+    { requestUrl = url
+    , requestJson = encodeJsonText reqBody
+    }
+
 selectBaseUrl :: Provider -> Bool -> Text
 selectBaseUrl Provider{base_url, beta_base_url} useBeta =
   let beta = beta_base_url >>= nonEmpty
@@ -145,18 +260,116 @@ selectBaseUrl Provider{base_url, beta_base_url} useBeta =
       let trimmed = T.strip t
       in if T.null trimmed then Nothing else Just trimmed
 
-buildResponsesRequest :: Text -> ResponsesParams -> Text -> ResponsesRequest
+buildResponsesRequest :: Text -> Responses.ResponsesParams -> Text -> ResponsesRequest
 buildResponsesRequest modelId params inputText =
   ResponsesRequest
     { model = modelId
     , input = Aeson.String inputText
     , stream = Nothing
-    , max_output_tokens = paramMaxOutputTokens params
-    , temperature = paramTemperature params
-    , top_p = paramTopP params
-    , user = paramUser params
-    , response_format = paramResponseFormat params
+    , max_output_tokens = Responses.paramMaxOutputTokens params
+    , temperature = Responses.paramTemperature params
+    , top_p = Responses.paramTopP params
+    , user = Responses.paramUser params
+    , response_format = Responses.paramResponseFormat params
     }
+
+buildEmbeddingsRequest :: Text -> Embeddings.EmbeddingParams -> Text -> EmbeddingRequest
+buildEmbeddingsRequest modelId params inputText =
+  EmbeddingRequest
+    { model = modelId
+    , input = Aeson.String inputText
+    , encoding_format = Embeddings.paramEncodingFormat params
+    , dimensions = Embeddings.paramDimensions params
+    , user = Embeddings.paramUser params
+    }
+
+embeddingSummary :: EmbeddingResponse -> Text
+embeddingSummary EmbeddingResponse{data_} =
+  let count = length data_
+      firstEmbedding = listToMaybe data_ >>= \EmbeddingData{embedding} -> Just embedding
+      dim = maybe 0 length firstEmbedding
+      preview = maybe "[]" (formatPreview 6) firstEmbedding
+  in T.unlines
+      [ "Vectors: " <> show count
+      , "Dimensions: " <> show dim
+      , "Head: " <> preview
+      ]
+  where
+    formatPreview n xs =
+      let items = map (T.pack . show) (take n xs)
+      in "[" <> T.intercalate ", " items <> if length xs > n then ", ...]" else "]"
+
+runHooksWithLog
+  :: Provider
+  -> Text
+  -> Bool
+  -> RequestContext
+  -> ChatCompletionRequest
+  -> IO (Text, Text)
+runHooksWithLog provider apiKey useBeta reqCtx reqBody = do
+  logRef <- newIORef ([] :: [Text])
+  let appendLog t = modifyIORef' logRef (<> [t])
+      hooks = ClientHooks
+        { onRequest = Just (logRequest appendLog)
+        , onResponse = Just (logResponse appendLog)
+        , onError = Just (appendLog . renderClientError)
+        }
+  result <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody useBeta
+  logs <- readIORef logRef
+  let logText = T.intercalate "\n" logs
+  case result of
+    Left err -> do
+      let output = mdConcat
+            ( requestSections reqCtx
+              <> [ mdTextSection "Hook Log" logText
+                 , mdTextSection "Error" (renderClientError err)
+                 ]
+            )
+      pure ("Hooks runner failed.", output)
+    Right body -> do
+      let responseText = truncateText 800 (TE.decodeUtf8Lenient (BL.toStrict body))
+          output = mdConcat
+            ( requestSections reqCtx
+              <> [ mdTextSection "Hook Log" logText
+                 , mdCodeSection "Response JSON (truncated)" "json" responseText
+                 ]
+            )
+      pure ("Hooks runner completed.", output)
+
+logRequest :: (Text -> IO ()) -> Request -> IO ()
+logRequest appendLog req = do
+  appendLog "--- Hook: Request ---"
+  appendLog (formatRequestLine req)
+  forM_ (requestHeaders req) $ \(name, value) ->
+    appendLog (formatHeader name value)
+
+logResponse :: (Text -> IO ()) -> Status -> [(HeaderName, BS.ByteString)] -> BL.ByteString -> IO ()
+logResponse appendLog status headers body = do
+  appendLog "--- Hook: Response ---"
+  appendLog ("Status: " <> show (statusCode status))
+  forM_ headers $ \(name, value) ->
+    appendLog (formatHeader name value)
+  appendLog ("Body bytes: " <> show (BL.length body))
+
+formatRequestLine :: Request -> Text
+formatRequestLine req =
+  let scheme = if secure req then "https" else "http"
+      hostText = TE.decodeUtf8Lenient (host req)
+      pathText = TE.decodeUtf8Lenient (path req)
+      queryText = TE.decodeUtf8Lenient (queryString req)
+      url = scheme <> "://" <> hostText <> pathText <> queryText
+      methodText = TE.decodeUtf8Lenient (method req)
+  in methodText <> " " <> url
+
+formatHeader :: HeaderName -> BS.ByteString -> Text
+formatHeader name value
+  | name == hAuthorization = TE.decodeUtf8Lenient (original name) <> ": <redacted>"
+  | otherwise = TE.decodeUtf8Lenient (original name) <> ": " <> TE.decodeUtf8Lenient value
+
+truncateText :: Int -> Text -> Text
+truncateText maxLen txt
+  | T.length txt <= maxLen = txt
+  | otherwise = T.take maxLen txt <> "..."
 
 providerModels :: Config -> Text -> [Text]
 providerModels cfg providerName =

@@ -1,9 +1,12 @@
 module Oasis.Tui.Render.Output
-  ( prettyJson
+  ( RequestContext(..)
+  , prettyJson
   , codeBlock
   , mdCodeSection
   , mdTextSection
   , mdConcat
+  , requestSections
+  , renderErrorOutput
   ) where
 
 import Relude
@@ -11,6 +14,11 @@ import Data.Aeson (Value, eitherDecodeStrict)
 import Data.Aeson.Encode.Pretty (encodePretty)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
+
+data RequestContext = RequestContext
+  { requestUrl  :: Text
+  , requestJson :: Text
+  } deriving (Show, Eq)
 
 prettyJson :: Text -> Text
 prettyJson input =
@@ -32,3 +40,17 @@ mdTextSection title content =
 
 mdConcat :: [Text] -> Text
 mdConcat = T.intercalate "\n\n"
+
+requestSections :: RequestContext -> [Text]
+requestSections RequestContext{requestUrl, requestJson} =
+  let prettyRequest = prettyJson requestJson
+  in catMaybes
+      [ Just (mdTextSection "Request URL" requestUrl)
+      , if T.null (T.strip requestJson)
+          then Nothing
+          else Just (mdCodeSection "Request" "json" prettyRequest)
+      ]
+
+renderErrorOutput :: RequestContext -> Text -> Text
+renderErrorOutput ctx err =
+  mdConcat (requestSections ctx <> [mdTextSection "Error" err])

@@ -23,6 +23,18 @@ data TuiEvent
       { eventStatus :: Text
       , eventOutput :: Text
       }
+  | ModelsCompleted
+    { eventStatus :: Text
+    , eventOutput :: Text
+    }
+  | EmbeddingsCompleted
+    { eventStatus :: Text
+    , eventOutput :: Text
+    }
+  | HooksCompleted
+    { eventStatus :: Text
+    , eventOutput :: Text
+    }
 
 
 data Name

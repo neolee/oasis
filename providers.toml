@@ -28,6 +28,7 @@ beta_base_url = ""
 chat_model_id = "qwen-plus-latest"
 coder_model_id = "qwen3-coder-plus"
 reasoner_model_id = "qwen-plus-latest"
+embedding_model_id = "text-embedding-v3"
 
 [providers.moonshot]
 description = "Moonshot"
@@ -65,6 +66,7 @@ beta_base_url = ""
 chat_model_id = "qwen3"
 coder_model_id = ""
 reasoner_model_id = "qwen3-thinking"
+embedding_model_id = "snowflake"
 
 [providers.lmstudio]
 description = "LM Studio"

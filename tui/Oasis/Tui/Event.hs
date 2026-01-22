@@ -18,7 +18,7 @@ import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Graphics.Vty as Vty
 import Oasis.Client.OpenAI.Param (ChatParams(..))
-import Oasis.Tui.Actions (providerModels, runBasicAction, runResponsesAction)
+import Oasis.Tui.Actions (providerModels, runBasicAction, runResponsesAction, runModelsAction, runEmbeddingsAction, runHooksAction)
 import Oasis.Tui.State (AppState(..), Name(..), ParamField(..), TuiEvent(..))
 import Oasis.Types (StopParam(..))
 
@@ -217,6 +217,8 @@ submitPrompt = do
   case selectedRunner st of
     Just "basic" -> runBasicAction prompt
     Just "responses" -> runResponsesAction prompt
+    Just "embeddings" -> runEmbeddingsAction prompt
+    Just "hooks" -> runHooksAction prompt
     _ -> modify (\s -> s { statusText = "Runner not supported yet." })
 
 cancelPrompt :: EventM Name AppState ()
@@ -356,7 +358,7 @@ applySelection = do
       case L.listSelectedElement (runnerList st) of
         Nothing -> pure ()
         Just (_, runnerName) ->
-          if runnerName == "basic" || runnerName == "responses"
+          if runnerName `elem` ["basic", "responses", "embeddings", "hooks"]
             then
               modify (\s -> s
                 { selectedRunner = Just runnerName
@@ -366,10 +368,17 @@ applySelection = do
                 , promptPristine = True
                 , statusText = "Enter prompt for " <> runnerName <> " runner."
                 })
-            else
-              modify (\s -> s
-                { selectedRunner = Just runnerName
-                , activeList = MainViewport
-                , statusText = "Selected runner: " <> runnerName
-                })
+            else if runnerName == "models"
+              then do
+                modify (\s -> s
+                  { selectedRunner = Just runnerName
+                  , activeList = MainViewport
+                  })
+                runModelsAction
+              else
+                modify (\s -> s
+                  { selectedRunner = Just runnerName
+                  , activeList = MainViewport
+                  , statusText = "Selected runner: " <> runnerName
+                  })
     MainViewport -> pure ()

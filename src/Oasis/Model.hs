@@ -1,6 +1,7 @@
 module Oasis.Model
   ( selectModelId
   , resolveModelId
+  , resolveEmbeddingModelId
   ) where
 
 import Relude
@@ -22,3 +23,13 @@ resolveModelId provider = \case
     , T.toLower trimmed /= "default"
     , trimmed /= "-" -> trimmed
   _ -> selectModelId provider
+
+resolveEmbeddingModelId :: Provider -> Maybe Text -> Text
+resolveEmbeddingModelId provider@Provider{embedding_model_id} modelOverride =
+  case embedding_model_id >>= nonEmpty of
+    Just emb -> emb
+    Nothing -> resolveModelId provider modelOverride
+  where
+    nonEmpty t =
+      let trimmed = T.strip t
+      in if T.null trimmed then Nothing else Just trimmed
