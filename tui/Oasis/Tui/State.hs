@@ -36,6 +36,10 @@ data TuiEvent
     { eventStatus :: Text
     , eventOutput :: Text
     }
+  | StructuredCompleted
+    { eventStatus :: Text
+    , eventOutput :: Text
+    }
 
 
 data Name

@@ -18,7 +18,7 @@ import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Graphics.Vty as Vty
 import Oasis.Client.OpenAI.Param (ChatParams(..))
-import Oasis.Tui.Actions (providerModels, runBasicAction, runResponsesAction, runModelsAction, runEmbeddingsAction, runHooksAction)
+import Oasis.Tui.Actions (providerModels, runBasicAction, runResponsesAction, runModelsAction, runEmbeddingsAction, runHooksAction, runStructuredJsonAction, runStructuredSchemaAction)
 import Oasis.Tui.State (AppState(..), Name(..), ParamField(..), TuiEvent(..))
 import Oasis.Types (StopParam(..))
 
@@ -375,6 +375,20 @@ applySelection = do
                   , activeList = MainViewport
                   })
                 runModelsAction
+              else if runnerName == "structured-json"
+                then do
+                  modify (\s -> s
+                    { selectedRunner = Just runnerName
+                    , activeList = MainViewport
+                    })
+                  runStructuredJsonAction
+                else if runnerName == "structured-schema"
+                  then do
+                    modify (\s -> s
+                      { selectedRunner = Just runnerName
+                      , activeList = MainViewport
+                      })
+                    runStructuredSchemaAction
               else
                 modify (\s -> s
                   { selectedRunner = Just runnerName

@@ -4,6 +4,8 @@ module Oasis.Tui.Actions
   , runModelsAction
   , runEmbeddingsAction
   , runHooksAction
+  , runStructuredJsonAction
+  , runStructuredSchemaAction
   , providerModels
   ) where
 
@@ -22,15 +24,17 @@ import qualified Oasis.Runner.Embeddings as Embeddings
 import Oasis.Tui.Render.Output (RequestContext(..), prettyJson, mdCodeSection, mdTextSection, mdConcat, requestSections, renderErrorOutput)
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
 import Oasis.Types (Config(..), Provider(..), RequestResponse(..), Message(..), messageContentText)
-import Oasis.Client.OpenAI (ResponsesResponse(..), ChatCompletionResponse(..), ChatChoice(..), ChatCompletionRequest(..), ResponsesRequest(..), EmbeddingRequest(..), EmbeddingResponse(..), EmbeddingData(..), defaultChatRequest, buildResponsesUrl, buildChatUrl, buildModelsUrl, buildEmbeddingsUrl, sendChatCompletionRawWithHooks, renderClientError, ClientHooks(..))
+import Oasis.Client.OpenAI (ResponsesResponse(..), ChatCompletionResponse(..), ChatChoice(..), ChatCompletionRequest(..), ResponsesRequest(..), EmbeddingRequest(..), EmbeddingResponse(..), EmbeddingData(..), ChatCompletionStreamChunk(..), StreamChoice(..), StreamDelta(..), defaultChatRequest, buildResponsesUrl, buildChatUrl, buildModelsUrl, buildEmbeddingsUrl, sendChatCompletionRawWithHooks, renderClientError, ClientHooks(..), streamChatCompletionWithRequestWithHooks, emptyClientHooks)
+import qualified Oasis.Client.OpenAI as OpenAI
 import Oasis.Client.OpenAI.Param (applyChatParams)
-import Oasis.Chat.Message (userMessage)
+import Oasis.Chat.Message (userMessage, systemMessage)
 import Oasis.Model (resolveModelId, resolveEmbeddingModelId)
-import Data.Aeson (encode, ToJSON)
+import Data.Aeson (encode, ToJSON, Value, eitherDecodeStrict, (.=))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
+import qualified Data.IORef as IORef
 import qualified Data.ByteString as BS
 import Data.CaseInsensitive (original)
 import Network.HTTP.Client (Request(..))
@@ -235,6 +239,12 @@ runHooksAction prompt = do
             (statusMsg, outputMsg) <- runHooksWithLog provider apiKey useBeta reqCtx reqBody
             writeBChan chan (HooksCompleted statusMsg outputMsg)
 
+runStructuredJsonAction :: EventM Name AppState ()
+runStructuredJsonAction = runStructuredAction jsonObjectFormat "structured-json"
+
+runStructuredSchemaAction :: EventM Name AppState ()
+runStructuredSchemaAction = runStructuredAction jsonSchemaFormat "structured-schema"
+
 extractAssistantContent :: ChatCompletionResponse -> Maybe Text
 extractAssistantContent ChatCompletionResponse{choices} =
   case choices of
@@ -307,15 +317,15 @@ runHooksWithLog
   -> ChatCompletionRequest
   -> IO (Text, Text)
 runHooksWithLog provider apiKey useBeta reqCtx reqBody = do
-  logRef <- newIORef ([] :: [Text])
-  let appendLog t = modifyIORef' logRef (<> [t])
+  logRef <- IORef.newIORef ([] :: [Text])
+  let appendLog t = IORef.modifyIORef' logRef (<> [t])
       hooks = ClientHooks
         { onRequest = Just (logRequest appendLog)
         , onResponse = Just (logResponse appendLog)
         , onError = Just (appendLog . renderClientError)
         }
   result <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody useBeta
-  logs <- readIORef logRef
+  logs <- IORef.readIORef logRef
   let logText = T.intercalate "\n" logs
   case result of
     Left err -> do
@@ -370,6 +380,121 @@ truncateText :: Int -> Text -> Text
 truncateText maxLen txt
   | T.length txt <= maxLen = txt
   | otherwise = T.take maxLen txt <> "..."
+
+runStructuredAction :: Value -> Text -> EventM Name AppState ()
+runStructuredAction responseFormat runnerLabel = do
+  st <- get
+  case selectedProvider st of
+    Nothing ->
+      modify (\s -> s { statusText = "Select a provider first." })
+    Just providerName -> do
+      resolved <- liftIO (resolveProvider (config st) providerName)
+      case resolved of
+        Nothing ->
+          modify (\s -> s { statusText = "Provider not found: " <> providerName })
+        Just (provider, apiKey) -> do
+          let modelOverride = selectedModel st
+              params = chatParams st
+              useBeta = betaUrlSetting st
+          modify (\s -> s
+            { statusText = "Running " <> runnerLabel <> " runner..."
+            , outputText = ""
+            , runnerStarted = True
+            })
+          let chan = eventChan st
+          void $ liftIO $ forkIO $ do
+            let modelId = resolveModelId provider modelOverride
+                reqMessages =
+                  [ systemMessage structuredSystemMessage
+                  , userMessage structuredQuestionText
+                  ]
+                reqBase = defaultChatRequest modelId reqMessages
+                ChatCompletionRequest{..} = applyChatParams params reqBase
+                reqBody = ChatCompletionRequest
+                  { OpenAI.stream = True
+                  , OpenAI.response_format = Just responseFormat
+                  , ..
+                  }
+            accumRef <- IORef.newIORef ""
+            result <- streamChatCompletionWithRequestWithHooks emptyClientHooks provider apiKey reqBody (handleStructuredChunk accumRef) useBeta
+            rawText <- IORef.readIORef accumRef
+            let (statusMsg, outputMsg) =
+                  case result of
+                    Left err ->
+                      let output = mdConcat
+                            [ mdTextSection "Raw Stream" rawText
+                            , mdTextSection "Parsed JSON" ("Error: " <> renderClientError err)
+                            ]
+                      in (runnerLabel <> " runner failed.", output)
+                    Right _ ->
+                      let parsedSection =
+                            case parseJsonText rawText of
+                              Left perr -> mdTextSection "Parsed JSON" ("Invalid JSON: " <> perr)
+                              Right pretty -> mdCodeSection "Parsed JSON" "json" pretty
+                          output = mdConcat
+                            [ mdTextSection "Raw Stream" rawText
+                            , parsedSection
+                            ]
+                      in (runnerLabel <> " runner completed.", output)
+            writeBChan chan (StructuredCompleted statusMsg outputMsg)
+
+handleStructuredChunk :: IORef.IORef Text -> ChatCompletionStreamChunk -> IO ()
+handleStructuredChunk accumRef chunk =
+  forEachDeltaContentLocal chunk $ \t ->
+    IORef.modifyIORef' accumRef (<> t)
+
+forEachDeltaContentLocal :: ChatCompletionStreamChunk -> (Text -> IO ()) -> IO ()
+forEachDeltaContentLocal ChatCompletionStreamChunk{choices} f =
+  forM_ choices $ \StreamChoice{delta} ->
+    forM_ (maybe [] deltaContent delta) f
+
+deltaContent :: StreamDelta -> [Text]
+deltaContent StreamDelta{content} = maybe [] pure content
+
+parseJsonText :: Text -> Either Text Text
+parseJsonText raw =
+  case eitherDecodeStrict (encodeUtf8 raw) :: Either String Value of
+    Left err -> Left (T.pack err)
+    Right _ -> Right (prettyJson raw)
+
+structuredSystemMessage :: Text
+structuredSystemMessage = T.unlines
+  [ "The user will provide some exam text. Please parse the \"question\" and \"answer\" and output them in JSON format."
+  , ""
+  , "EXAMPLE INPUT:"
+  , "Which is the highest mountain in the world? Mount Everest."
+  , ""
+  , "EXAMPLE JSON OUTPUT:"
+  , "{"
+  , "  \"question\": \"Which is the highest mountain in the world?\","
+  , "  \"answer\": \"Mount Everest\""
+  , "}"
+  ]
+
+structuredQuestionText :: Text
+structuredQuestionText = "Which is the longest river in the world? The Nile River."
+
+jsonObjectFormat :: Value
+jsonObjectFormat = Aeson.object
+  [ "type" .= ("json_object" :: Text)
+  ]
+
+jsonSchemaFormat :: Value
+jsonSchemaFormat = Aeson.object
+  [ "type" .= ("json_schema" :: Text)
+  , "json_schema" .= Aeson.object
+      [ "name" .= ("session" :: Text)
+      , "schema" .= Aeson.object
+          [ "type" .= ("object" :: Text)
+          , "properties" .= Aeson.object
+              [ "question" .= Aeson.object ["type" .= ("string" :: Text)]
+              , "answer" .= Aeson.object ["type" .= ("string" :: Text)]
+              ]
+          , "required" .= (["question", "answer"] :: [Text])
+          ]
+      , "required" .= (["session"] :: [Text])
+      ]
+  ]
 
 providerModels :: Config -> Text -> [Text]
 providerModels cfg providerName =
