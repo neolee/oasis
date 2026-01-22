@@ -19,6 +19,10 @@ data TuiEvent
       { eventStatus :: Text
       , eventOutput :: Text
       }
+  | ResponsesCompleted
+      { eventStatus :: Text
+      , eventOutput :: Text
+      }
 
 
 data Name

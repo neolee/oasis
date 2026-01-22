@@ -63,7 +63,7 @@ drawUI st =
                   ]
                   <> runnerPromptLines st
                   <> [ padTop (Pad 1) hBorder
-                     , viewport MainViewport Both (renderMarkdown (outputText st))
+                     , viewport MainViewport Vertical (renderMarkdown (outputText st))
                      ]
                 )
     rightPane =
@@ -86,12 +86,14 @@ drawUI st =
           ]
 
     promptDialog st' =
-      centerLayer $
+      let runnerLabel = fromMaybe "runner" (selectedRunner st')
+          dialogTitle = runnerLabel <> " prompt"
+      in centerLayer $
         hLimit 80 $
           vLimit 12 $
             withAttr (attrName "promptDialog") $
               overrideAttr borderAttr (attrName "promptDialogBorder") $
-                borderWithLabel (txt "basic prompt") $
+                borderWithLabel (txt dialogTitle) $
                   padAll 1 $
                     vBox
                       [ renderEditor (txt . unlines) True (promptEditor st')

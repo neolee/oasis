@@ -18,7 +18,7 @@ import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Graphics.Vty as Vty
 import Oasis.Client.OpenAI.Param (ChatParams(..))
-import Oasis.Tui.Actions (providerModels, runBasicAction)
+import Oasis.Tui.Actions (providerModels, runBasicAction, runResponsesAction)
 import Oasis.Tui.State (AppState(..), Name(..), ParamField(..), TuiEvent(..))
 import Oasis.Types (StopParam(..))
 
@@ -214,7 +214,10 @@ submitPrompt = do
     , lastPrompt = prompt
     , promptPristine = False
     })
-  runBasicAction prompt
+  case selectedRunner st of
+    Just "basic" -> runBasicAction prompt
+    Just "responses" -> runResponsesAction prompt
+    _ -> modify (\s -> s { statusText = "Runner not supported yet." })
 
 cancelPrompt :: EventM Name AppState ()
 cancelPrompt =
@@ -353,7 +356,7 @@ applySelection = do
       case L.listSelectedElement (runnerList st) of
         Nothing -> pure ()
         Just (_, runnerName) ->
-          if runnerName == "basic"
+          if runnerName == "basic" || runnerName == "responses"
             then
               modify (\s -> s
                 { selectedRunner = Just runnerName
@@ -361,7 +364,7 @@ applySelection = do
                 , promptDialogOpen = True
                 , promptEditor = editor PromptEditor (Just 5) (promptDefault s)
                 , promptPristine = True
-                , statusText = "Enter prompt for basic runner."
+                , statusText = "Enter prompt for " <> runnerName <> " runner."
                 })
             else
               modify (\s -> s

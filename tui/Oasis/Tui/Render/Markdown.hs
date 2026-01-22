@@ -15,8 +15,7 @@ renderMarkdown :: Text -> Widget n
 renderMarkdown input =
   let blocks = parseMarkdown input
       content = vBox (intersperse (padTop (Pad 1) (txt "")) (map renderBlock blocks))
-      (w, h) = markdownSize blocks
-  in hLimit w (vLimit h content)
+  in content
 
 renderBlock :: Block -> Widget n
 renderBlock = \case
@@ -35,31 +34,6 @@ data Block
   | Paragraph [Text]
   | Bullet [Text]
   | CodeBlock Text Text
-
-markdownSize :: [Block] -> (Int, Int)
-markdownSize blocks =
-  let widths = map blockWidth blocks
-      heights = map blockHeight blocks
-      w = max 1 (foldl' max 0 widths)
-      h = max 1 (sum heights + max 0 (length blocks - 1))
-  in (w, h)
-
-blockWidth :: Block -> Int
-blockWidth = \case
-  Heading _ title -> T.length title
-  Paragraph ls -> maxLineLength ls
-  Bullet items -> maxLineLength (map ("- " <>) items)
-  CodeBlock _ code -> maxLineLength (lines code)
-
-blockHeight :: Block -> Int
-blockHeight = \case
-  Heading _ _ -> 1
-  Paragraph ls -> max 1 (length ls)
-  Bullet items -> max 1 (length items)
-  CodeBlock _ code -> max 1 (length (lines code))
-
-maxLineLength :: [Text] -> Int
-maxLineLength ls = foldl' max 0 (map T.length ls)
 
 parseMarkdown :: Text -> [Block]
 parseMarkdown input = go (lines input) []
