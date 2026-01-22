@@ -42,7 +42,7 @@ appEvent (VtyEvent ev) =
       then handleParamDialogEvent ev
       else if promptDialogOpen st
         then handlePromptEvent ev
-      else case ev of
+      else (case ev of
         Vty.EvKey (Vty.KChar 'q') [] -> halt
         Vty.EvKey (Vty.KChar 'p') [] -> setActive ProviderList
         Vty.EvKey (Vty.KChar 'm') [] -> setActive ModelList
@@ -59,6 +59,7 @@ appEvent (VtyEvent ev) =
         Vty.EvKey (Vty.KChar '.') [Vty.MMeta] -> hScrollBy (viewportScroll MainViewport) 6
         Vty.EvKey (Vty.KChar ',') [Vty.MMeta] -> hScrollBy (viewportScroll MainViewport) (-6)
         _ -> handleActiveListEvent ev
+        )
 appEvent _ = pure ()
 
 setActive :: Name -> EventM Name AppState ()

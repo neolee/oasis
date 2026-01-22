@@ -40,6 +40,7 @@ dependencies:
 - brick-skylighting
 - skylighting
 - vty
+- microlens
 
 default-extensions:
 - NoImplicitPrelude

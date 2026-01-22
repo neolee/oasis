@@ -63,7 +63,7 @@ drawUI st =
                   ]
                   <> runnerPromptLines st
                   <> [ padTop (Pad 1) hBorder
-                     , viewport MainViewport Vertical (renderMarkdown (outputText st))
+                     , viewport MainViewport Both (renderMarkdown MainViewport (outputText st))
                      ]
                 )
     rightPane =
@@ -146,6 +146,7 @@ drawUI st =
       case paramDialogError st' of
         Nothing -> []
         Just err -> [ padTop (Pad 1) $ txt ("Error: " <> err) ]
+
 
 promptSummary :: AppState -> Text
 promptSummary st =

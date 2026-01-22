@@ -4,43 +4,136 @@ module Oasis.Tui.Render.Markdown
 
 import Relude
 import Brick.AttrMap (attrName)
-import Brick.Types (Widget)
+import Brick.Types (Widget(..), vpSize, getContext, availWidthL, Size(..))
 import Brick.Widgets.Core
 import Brick.Widgets.Skylighting (highlightFromMap)
 import Skylighting.Syntax (defaultSyntaxMap)
 import Data.Char (isSpace)
 import qualified Data.Text as T
+import qualified Data.List as List
+import Lens.Micro ((^.))
+import qualified Graphics.Text.Width as W
 
-renderMarkdown :: Text -> Widget n
-renderMarkdown input =
-  let blocks = parseMarkdown input
-      content = vBox (intersperse (padTop (Pad 1) (txt "")) (map renderBlock blocks))
-  in content
+renderMarkdown :: (Ord n, Show n) => n -> Text -> Widget n
+renderMarkdown viewportName input =
+  Widget Fixed Fixed $ do
+    ctx <- getContext
+    mVp <- unsafeLookupViewport viewportName
+    let wrapWidth = max 1 $ case mVp of
+          Just vp -> let (w, _) = vp ^. vpSize in w
+          Nothing -> ctx ^. availWidthL
+        blocks = parseMarkdown input
+        content = vBox (map (renderBlock wrapWidth) blocks)
+    render content
 
-renderBlock :: Block -> Widget n
-renderBlock = \case
-  Heading _ title -> withAttr (attrName "mdHeading") (txtWrap title)
-  Paragraph ls -> txtWrap (unlines ls)
-  Bullet items -> vBox (map renderBullet items)
+renderBlock :: Int -> Block -> Widget n
+renderBlock wrapWidth = \case
+  Heading _ title -> withAttr (attrName "mdHeading") (renderWrapped wrapWidth title)
+  Paragraph ls -> renderWrapped wrapWidth (T.intercalate "\n" (map T.strip ls))
+  Bullet items -> vBox (map (renderBullet wrapWidth) items)
   CodeBlock lang code ->
     let langName = if T.null (T.strip lang) then "text" else lang
     in highlightFromMap defaultSyntaxMap langName code
+  Blank n -> vBox (replicate n (renderLine ""))
 
-renderBullet :: Text -> Widget n
-renderBullet item = txtWrap ("- " <> item)
+renderBullet :: Int -> Text -> Widget n
+renderBullet wrapWidth item =
+  let innerWidth = max 1 (wrapWidth - 2)
+      wrapped = wrapText innerWidth (T.strip item)
+  in case wrapped of
+      [] -> txt "- "
+      (firstLine:rest) ->
+        vBox
+          ( txt ("- " <> firstLine)
+          : map (renderLine . ("  " <>)) rest
+          )
+
+renderWrapped :: Int -> Text -> Widget n
+renderWrapped wrapWidth t =
+  let wrapped = wrapText wrapWidth (T.strip t)
+  in case wrapped of
+  [] -> renderLine ""
+  xs -> vBox (map renderLine xs)
+
+renderLine :: Text -> Widget n
+renderLine line = if T.null line then txt " " else txt line
+
+wrapText :: Int -> Text -> [Text]
+wrapText maxWidth t
+  | maxWidth <= 1 = [t]
+  | T.null (T.strip t) = []
+  | otherwise =
+      let segments = T.splitOn "\n" t
+      in concatMap (wrapSingleLine maxWidth) segments
+  where
+    wrapSingleLine limit line
+      | T.null line = [""]
+      | otherwise = finalize (go [] "" 0 (T.words line))
+      where
+        finalize [] = []
+        finalize xs = xs
+
+        go acc current curW [] =
+          if T.null current
+            then reverse acc
+            else reverse (current : acc)
+        go acc current curW (w:ws)
+          | T.null current =
+              let wWidth = textWidth w
+              in if wWidth <= limit
+                    then go acc w wWidth ws
+                    else
+                      let parts = splitWord limit w
+                      in case reverse parts of
+                           [] -> go acc "" 0 ws
+                           (lastPart:revRest) ->
+                             let acc' = revRest <> acc
+                                 curW' = textWidth lastPart
+                             in go acc' lastPart curW' ws
+          | otherwise =
+              let wWidth = textWidth w
+                  addWidth = curW + 1 + wWidth
+              in if addWidth <= limit
+                    then go acc (current <> " " <> w) addWidth ws
+                    else go (current : acc) "" 0 (w:ws)
+
+    textWidth = W.safeWctwidth
+
+    splitWord :: Int -> Text -> [Text]
+    splitWord limit txt
+      | limit <= 1 = [txt]
+      | T.null txt = []
+      | otherwise = step [] "" 0 txt
+      where
+        step acc cur curW rest =
+          case T.uncons rest of
+            Nothing ->
+              if T.null cur then reverse acc else reverse (cur : acc)
+            Just (c, remaining) ->
+              let cw = W.safeWcwidth c
+                  nextW = curW + cw
+              in if nextW > limit && not (T.null cur)
+                    then step (cur : acc) "" 0 rest
+                    else
+                      let cur' = T.snoc cur c
+                          curW' = if cw < 0 then curW else nextW
+                      in step acc cur' curW' remaining
 
 data Block
   = Heading Int Text
   | Paragraph [Text]
   | Bullet [Text]
   | CodeBlock Text Text
+  | Blank Int
 
 parseMarkdown :: Text -> [Block]
 parseMarkdown input = go (lines input) []
   where
     go [] acc = reverse acc
     go (ln:rest) acc
-      | isBlank ln = go rest acc
+      | isBlank ln =
+        let (blanks, remaining) = span isBlank (ln:rest)
+        in go remaining (Blank (length blanks) : acc)
       | isFenceStart ln =
           let (lang, afterStart) = parseFenceStart ln rest
               (codeLines, remaining) = break isFenceEnd afterStart

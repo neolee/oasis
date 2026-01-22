@@ -83,6 +83,7 @@ library
     , http-client-tls
     , http-conduit
     , http-types
+    , microlens
     , mtl
     , relude
     , skylighting
@@ -132,6 +133,7 @@ executable oasis-cli
     , http-client-tls
     , http-conduit
     , http-types
+    , microlens
     , mtl
     , oasis
     , relude
@@ -188,6 +190,7 @@ executable oasis-tui
     , http-client-tls
     , http-conduit
     , http-types
+    , microlens
     , mtl
     , oasis
     , relude

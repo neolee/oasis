@@ -38,6 +38,16 @@ To leverage Haskell's powerful type system for building a reliable, unified LLM 
 4.  **Verifiable Iterations**: Each development step must produce a human-verifiable result (e.g., a CLI output or a passing test suite).
 5.  **TUI Concurrency**: Use `BChan` + `forkIO` to keep the UI responsive while running LLM requests; UI updates must be delivered via async events.
 
+## TUI Text Wrapping (Pane-Accurate, CJK-Safe)
+
+- **Pane width must be resolved at render time**: use viewport size (not estimated terminal width). This is done by reading `vpSize` from the viewport in the render phase. See [tui/Oasis/Tui/Render/Markdown.hs](tui/Oasis/Tui/Render/Markdown.hs).
+- **Custom wrap with terminal column widths**: wrap lines by accumulating display columns using Vty width functions (`safeWcwidth` / `safeWctwidth`) to correctly handle CJK and mixed text. See [tui/Oasis/Tui/Render/Markdown.hs](tui/Oasis/Tui/Render/Markdown.hs).
+- **Preserve explicit newlines and blank lines**:
+    - Split on `\n`, wrap each segment independently.
+    - Render empty lines as a single space to ensure they occupy height (Brick treats `txt ""` as zero height).
+    - Parse and retain consecutive blank lines as a separate block to avoid collapsing `\n\n`.
+    See [tui/Oasis/Tui/Render/Markdown.hs](tui/Oasis/Tui/Render/Markdown.hs).
+
 ## OpenAI-Compatible Client Interface Design
 
 The `Oasis.Client.OpenAI` module should expose a layered, reusable interface:
