@@ -151,10 +151,15 @@ executable oasis-tui
   main-is: Main.hs
   other-modules:
       Oasis.Tui.Actions
+      Oasis.Tui.Actions.Chat
+      Oasis.Tui.Actions.Common
+      Oasis.Tui.Actions.Models
+      Oasis.Tui.Actions.ToolCalling
       Oasis.Tui.Event
       Oasis.Tui.Keymap
       Oasis.Tui.Render.Markdown
       Oasis.Tui.Render.Output
+      Oasis.Tui.RunnerRegistry
       Oasis.Tui.State
       Oasis.Tui.View
       Paths_oasis

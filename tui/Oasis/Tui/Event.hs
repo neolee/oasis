@@ -18,7 +18,8 @@ import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Graphics.Vty as Vty
 import Oasis.Client.OpenAI.Param (ChatParams(..))
-import Oasis.Tui.Actions (providerModels, runBasicAction, runResponsesAction, runModelsAction, runEmbeddingsAction, runHooksAction, runStructuredJsonAction, runStructuredSchemaAction, runToolCallingAction)
+import Oasis.Tui.Actions.Models ( providerModels )
+import Oasis.Tui.RunnerRegistry (RunnerAction(..), RunnerSpec(..), lookupRunner)
 import Oasis.Tui.State (AppState(..), Name(..), ParamField(..), TuiEvent(..))
 import Oasis.Types (StopParam(..))
 
@@ -219,11 +220,10 @@ submitPrompt = do
     , lastPrompt = prompt
     , promptPristine = False
     })
-  case selectedRunner st of
-    Just "basic" -> runBasicAction prompt
-    Just "responses" -> runResponsesAction prompt
-    Just "embeddings" -> runEmbeddingsAction prompt
-    Just "hooks" -> runHooksAction prompt
+  case selectedRunner st >>= lookupRunner of
+    Just RunnerSpec{runnerAction = NeedsPrompt action} -> action prompt
+    Just RunnerSpec{runnerAction = Unsupported} ->
+      modify (\s -> s { statusText = "Runner not supported yet." })
     _ -> modify (\s -> s { statusText = "Runner not supported yet." })
 
 cancelPrompt :: EventM Name AppState ()
@@ -363,8 +363,8 @@ applySelection = do
       case L.listSelectedElement (runnerList st) of
         Nothing -> pure ()
         Just (_, runnerName) ->
-          if runnerName `elem` ["basic", "responses", "embeddings", "hooks"]
-            then
+          case lookupRunner runnerName of
+            Just RunnerSpec{runnerAction = NeedsPrompt _} ->
               modify (\s -> s
                 { selectedRunner = Just runnerName
                 , activeList = PromptEditor
@@ -373,38 +373,22 @@ applySelection = do
                 , promptPristine = True
                 , statusText = "Enter prompt for " <> runnerName <> " runner."
                 })
-            else if runnerName == "models"
-              then do
-                modify (\s -> s
-                  { selectedRunner = Just runnerName
-                  , activeList = MainViewport
-                  })
-                runModelsAction
-              else if runnerName == "structured-json"
-                then do
-                  modify (\s -> s
-                    { selectedRunner = Just runnerName
-                    , activeList = MainViewport
-                    })
-                  runStructuredJsonAction
-                else if runnerName == "structured-schema"
-                  then do
-                    modify (\s -> s
-                      { selectedRunner = Just runnerName
-                      , activeList = MainViewport
-                      })
-                    runStructuredSchemaAction
-                else if runnerName == "tool-calling"
-                  then do
-                    modify (\s -> s
-                      { selectedRunner = Just runnerName
-                      , activeList = MainViewport
-                      })
-                    runToolCallingAction
-              else
-                modify (\s -> s
-                  { selectedRunner = Just runnerName
-                  , activeList = MainViewport
-                  , statusText = "Selected runner: " <> runnerName
-                  })
+            Just RunnerSpec{runnerAction = NoPrompt action} -> do
+              modify (\s -> s
+                { selectedRunner = Just runnerName
+                , activeList = MainViewport
+                })
+              action
+            Just RunnerSpec{runnerAction = Unsupported} ->
+              modify (\s -> s
+                { selectedRunner = Just runnerName
+                , activeList = MainViewport
+                , statusText = "Runner not supported yet."
+                })
+            Nothing ->
+              modify (\s -> s
+                { selectedRunner = Just runnerName
+                , activeList = MainViewport
+                , statusText = "Runner not supported yet."
+                })
     MainViewport -> pure ()

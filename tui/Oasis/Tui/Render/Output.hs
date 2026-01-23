@@ -3,6 +3,7 @@ module Oasis.Tui.Render.Output
   , prettyJson
   , codeBlock
   , mdCodeSection
+  , mdJsonSection
   , mdTextSection
   , mdConcat
   , requestSections
@@ -33,6 +34,10 @@ codeBlock lang content =
 mdCodeSection :: Text -> Text -> Text -> Text
 mdCodeSection title lang content =
   "## " <> title <> "\n" <> codeBlock lang content
+
+mdJsonSection :: Text -> Text -> Text
+mdJsonSection title content =
+  mdCodeSection title "json" (prettyJson content)
 
 mdTextSection :: Text -> Text -> Text
 mdTextSection title content =

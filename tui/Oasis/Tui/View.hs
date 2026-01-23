@@ -15,6 +15,7 @@ import qualified Data.Text as T
 import Oasis.Tui.Keymap (keyMain, keyModel, keyProvider, keyRunner, tipsFor)
 import Oasis.Tui.Render.Markdown (renderMarkdown)
 import Oasis.Tui.State (AppState(..), Name(..), ParamField(..))
+import Oasis.Tui.RunnerRegistry (runnerRequiresPrompt)
 
 drawUI :: AppState -> [Widget Name]
 drawUI st =
@@ -160,19 +161,9 @@ runnerPromptLines st =
     then
       let runnerName = fromMaybe "-" (selectedRunner st)
           promptLines =
-            if runnerUsesPrompt (selectedRunner st)
-              then [txt ("Prompt: " <> promptSummary st)]
-              else []
+            [txt ("Prompt: " <> promptSummary st) | runnerRequiresPrompt (selectedRunner st)]
       in [txt ("Runner: " <> runnerName)] <> promptLines
     else []
-
-runnerUsesPrompt :: Maybe Text -> Bool
-runnerUsesPrompt = \case
-  Just "basic" -> True
-  Just "responses" -> True
-  Just "embeddings" -> True
-  Just "hooks" -> True
-  _ -> False
 
 truncateText :: Int -> Text -> Text
 truncateText maxLen t =
