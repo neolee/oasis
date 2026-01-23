@@ -11,6 +11,7 @@ import Relude
 import Brick.Types (EventM)
 import Oasis.Tui.Actions.Chat
     ( runBasicAction,
+      runChatInitAction,
       runHooksAction,
       runStructuredJsonAction,
       runStructuredSchemaAction )
@@ -36,7 +37,7 @@ data RunnerSpec = RunnerSpec
 runnerRegistry :: [RunnerSpec]
 runnerRegistry =
   [ RunnerSpec "basic" (NeedsPrompt runBasicAction)
-  , RunnerSpec "chat" Unsupported
+  , RunnerSpec "chat" (NoPrompt runChatInitAction)
   , RunnerSpec "embeddings" (NeedsPrompt runEmbeddingsAction)
   , RunnerSpec "responses" (NeedsPrompt runResponsesAction)
   , RunnerSpec "models" (NoPrompt runModelsAction)

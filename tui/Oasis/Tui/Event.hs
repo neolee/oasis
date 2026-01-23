@@ -7,7 +7,7 @@ module Oasis.Tui.Event
   ) where
 
 import Relude
-import Brick.Main (halt, viewportScroll, vScrollBy, hScrollBy)
+import Brick.Main (halt, viewportScroll, vScrollBy, hScrollBy, vScrollToEnd)
 import Brick.Types (BrickEvent(..), EventM, nestEventM)
 import Brick.Widgets.Edit (Editor, editor, getEditContents, handleEditorEvent)
 import qualified Brick.Widgets.List as L
@@ -19,13 +19,21 @@ import qualified Data.Vector as V
 import qualified Graphics.Vty as Vty
 import Oasis.Client.OpenAI.Param (ChatParams(..))
 import Oasis.Tui.Actions.Models ( providerModels )
+import Oasis.Tui.Actions.Chat (runChatAction)
 import Oasis.Tui.RunnerRegistry (RunnerAction(..), RunnerSpec(..), lookupRunner)
 import Oasis.Tui.State (AppState(..), Name(..), ParamField(..), TuiEvent(..))
-import Oasis.Types (StopParam(..))
+import Oasis.Chat.Message (assistantMessage, userMessage)
+import Oasis.Types (Message(..), MessageContent(..), StopParam(..), messageContentText)
 
 appEvent :: BrickEvent Name TuiEvent -> EventM Name AppState ()
 appEvent (AppEvent evt) =
   case evt of
+    ChatStreaming{eventDelta} ->
+      do
+        modify (applyChatDelta eventDelta)
+        scrollChatToBottom
+    ChatCompleted{eventStatus} ->
+      modify (\s -> s { statusText = eventStatus })
     StructuredStreaming{eventOutput} ->
       modify (\s -> s { outputText = eventOutput })
     _ ->
@@ -43,12 +51,15 @@ appEvent (VtyEvent ev) =
       then handleParamDialogEvent ev
       else if promptDialogOpen st
         then handlePromptEvent ev
-      else (case ev of
+        else if activeList st == ChatInputEditor
+          then handleChatInputEvent ev
+          else (case ev of
         Vty.EvKey (Vty.KChar 'q') [] -> halt
         Vty.EvKey (Vty.KChar 'p') [] -> setActive ProviderList
         Vty.EvKey (Vty.KChar 'm') [] -> setActive ModelList
         Vty.EvKey (Vty.KChar 'r') [] -> setActive RunnerList
-        Vty.EvKey (Vty.KChar 'v') [] -> setActive MainViewport
+        Vty.EvKey (Vty.KChar 'v') [] -> focusMainViewport
+        Vty.EvKey (Vty.KChar 'e') [] -> focusChatInput
         Vty.EvKey (Vty.KChar 'h') [] -> toggleVerbose
         Vty.EvKey (Vty.KChar 'd') [] -> toggleDebug
         Vty.EvKey (Vty.KChar 'a') [] -> openParamDialog
@@ -57,13 +68,25 @@ appEvent (VtyEvent ev) =
         Vty.EvKey Vty.KDown [] -> handleUpDown 1
         Vty.EvKey Vty.KLeft [] -> handleLeftRight (-1)
         Vty.EvKey Vty.KRight [] -> handleLeftRight 1
-        Vty.EvKey (Vty.KChar 'v') [Vty.MCtrl] -> vScrollBy (viewportScroll MainViewport) 6
-        Vty.EvKey (Vty.KChar 'v') [Vty.MMeta] -> vScrollBy (viewportScroll MainViewport) (-6)
-        Vty.EvKey (Vty.KChar '.') [Vty.MMeta] -> hScrollBy (viewportScroll MainViewport) 6
-        Vty.EvKey (Vty.KChar ',') [Vty.MMeta] -> hScrollBy (viewportScroll MainViewport) (-6)
+        Vty.EvKey (Vty.KChar 'v') [Vty.MCtrl] -> scrollPage 6
+        Vty.EvKey (Vty.KChar 'v') [Vty.MMeta] -> scrollPage (-6)
+        Vty.EvKey (Vty.KChar '.') [Vty.MMeta] -> scrollPageHoriz 6
+        Vty.EvKey (Vty.KChar ',') [Vty.MMeta] -> scrollPageHoriz (-6)
         _ -> handleActiveListEvent ev
         )
 appEvent _ = pure ()
+
+focusMainViewport :: EventM Name AppState ()
+focusMainViewport = do
+  st <- get
+  if selectedRunner st == Just "chat"
+    then setActive ChatViewport
+    else setActive MainViewport
+
+focusChatInput :: EventM Name AppState ()
+focusChatInput = do
+  st <- get
+  when (selectedRunner st == Just "chat") (setActive ChatInputEditor)
 
 toggleVerbose :: EventM Name AppState ()
 toggleVerbose = modify (\s ->
@@ -99,33 +122,49 @@ handleActiveListEvent ev = do
     VerboseMessageList -> do
       (lst, _) <- nestEventM (verboseMessageList st) (L.handleListEvent ev)
       modify (\s -> s { verboseMessageList = lst })
-    MainViewport -> pure ()
-    ChatViewport -> pure ()
-    PromptEditor -> pure ()
-    ChatInputEditor -> pure ()
-    VerboseContentEditor -> pure ()
-    DebugRequestEditor -> pure ()
-    ParamBetaUrlEditor -> pure ()
-    ParamTemperatureEditor -> pure ()
-    ParamTopPEditor -> pure ()
-    ParamMaxCompletionTokensEditor -> pure ()
-    ParamStopEditor -> pure ()
+    _ -> pure ()
 
 scrollMain :: Int -> EventM Name AppState ()
 scrollMain amount = do
   st <- get
   when (activeList st == MainViewport) $ vScrollBy (viewportScroll MainViewport) amount
 
+scrollChat :: Int -> EventM Name AppState ()
+scrollChat amount = do
+  st <- get
+  when (activeList st == ChatViewport) $ vScrollBy (viewportScroll ChatViewport) amount
+
 scrollMainHoriz :: Int -> EventM Name AppState ()
 scrollMainHoriz amount = do
   st <- get
   when (activeList st == MainViewport) $ hScrollBy (viewportScroll MainViewport) amount
+
+scrollPage :: Int -> EventM Name AppState ()
+scrollPage amount = do
+  st <- get
+  case activeList st of
+    MainViewport -> vScrollBy (viewportScroll MainViewport) amount
+    ChatViewport -> vScrollBy (viewportScroll ChatViewport) amount
+    _ -> pure ()
+
+scrollPageHoriz :: Int -> EventM Name AppState ()
+scrollPageHoriz amount = do
+  st <- get
+  case activeList st of
+    MainViewport -> hScrollBy (viewportScroll MainViewport) amount
+    ChatViewport -> hScrollBy (viewportScroll ChatViewport) amount
+    _ -> pure ()
+
+scrollChatToBottom :: EventM Name AppState ()
+scrollChatToBottom =
+  vScrollToEnd (viewportScroll ChatViewport)
 
 handleUpDown :: Int -> EventM Name AppState ()
 handleUpDown amount = do
   st <- get
   case activeList st of
     MainViewport -> scrollMain amount
+    ChatViewport -> scrollChat amount
     ProviderList ->
       modify (\t -> t { providerList = moveListWrap amount (providerList t) })
     ModelList ->
@@ -138,6 +177,7 @@ handleLeftRight :: Int -> EventM Name AppState ()
 handleLeftRight amount = do
   st <- get
   when (activeList st == MainViewport) $ scrollMainHoriz amount
+  when (activeList st == ChatViewport) $ hScrollBy (viewportScroll ChatViewport) amount
 
 moveListWrap :: Int -> L.List Name Text -> L.List Name Text
 moveListWrap delta lst =
@@ -222,6 +262,66 @@ paramFieldName = \case
   ParamTopP -> ParamTopPEditor
   ParamMaxCompletionTokens -> ParamMaxCompletionTokensEditor
   ParamStop -> ParamStopEditor
+
+handleChatInputEvent :: Vty.Event -> EventM Name AppState ()
+handleChatInputEvent ev =
+  case ev of
+    Vty.EvKey Vty.KEnter [] -> insertChatNewline ev
+    Vty.EvKey (Vty.KChar 's') [Vty.MCtrl] -> submitChatInput
+    Vty.EvKey Vty.KEsc [] -> cancelChatInput
+    _ -> do
+      st <- get
+      (editor', _) <- nestEventM (chatInputEditor st) (handleEditorEvent (VtyEvent ev))
+      modify (\s -> s { chatInputEditor = editor' })
+
+insertChatNewline :: Vty.Event -> EventM Name AppState ()
+insertChatNewline _ = do
+  st <- get
+  let newlineEvent = Vty.EvKey Vty.KEnter []
+  (editor', _) <- nestEventM (chatInputEditor st) (handleEditorEvent (VtyEvent newlineEvent))
+  modify (\s -> s { chatInputEditor = editor' })
+
+cancelChatInput :: EventM Name AppState ()
+cancelChatInput =
+  modify (\s -> s { activeList = ChatViewport })
+
+submitChatInput :: EventM Name AppState ()
+submitChatInput = do
+  st <- get
+  let inputText = editorText (chatInputEditor st)
+  if isBlank inputText
+    then pure ()
+    else do
+      let newMessages = chatMessages st <> [userMessage inputText, assistantMessage ""]
+          verboseList' = syncVerboseList newMessages (verboseMessageList st)
+      modify (\s -> s
+        { chatMessages = newMessages
+        , verboseMessageList = verboseList'
+        , chatInputEditor = editor ChatInputEditor (Just 3) ""
+        , activeList = ChatInputEditor
+        })
+      scrollChatToBottom
+      runChatAction newMessages
+
+applyChatDelta :: Text -> AppState -> AppState
+applyChatDelta deltaText st =
+  let updated = appendAssistantDelta deltaText (chatMessages st)
+      verboseList' = syncVerboseList updated (verboseMessageList st)
+  in st { chatMessages = updated, verboseMessageList = verboseList' }
+
+appendAssistantDelta :: Text -> [Message] -> [Message]
+appendAssistantDelta deltaText msgs =
+  case reverse msgs of
+    (msg:rest)
+      | role msg == "assistant" ->
+          let current = messageContentText (content msg)
+              nextMsg = msg { content = ContentText (current <> deltaText) }
+          in reverse (nextMsg : rest)
+    _ -> msgs
+
+syncVerboseList :: [Message] -> L.List Name Message -> L.List Name Message
+syncVerboseList msgs lst =
+  L.listReplace (V.fromList msgs) (L.listSelected lst) lst
 
 openParamDialog :: EventM Name AppState ()
 openParamDialog = do
@@ -435,3 +535,4 @@ applySelection = do
                 , statusText = "Runner not supported yet."
                 })
     MainViewport -> pure ()
+    _ -> pure ()

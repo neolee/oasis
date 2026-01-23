@@ -60,20 +60,9 @@ drawUI st =
                       L.renderList drawProvider (activeList st == RunnerList) (runnerList st)
           ]
     centerPane =
-      focusBorder (activeList st == MainViewport) $
-        borderWithLabel (txt ("main [" <> keyMain <> "]")) $
-          withAttr (attrName "paneContent") $
-            padAll 1 $
-              vBox
-                ( [ txt "Advanced: [h] Message History  [d] Debug Mode"
-                  , txt ("Provider: " <> fromMaybe "-" (selectedProvider st))
-                  , txt ("Model: " <> fromMaybe "-" (selectedModel st))
-                  ]
-                  <> runnerPromptLines st
-                  <> [ padTop (Pad 1) hBorder
-                     , viewport MainViewport Both (renderMarkdown MainViewport (outputText st))
-                     ]
-                )
+      if selectedRunner st == Just "chat"
+        then chatPane
+        else standardPane
     rightPane =
       if verboseEnabled st
         then hLimit 25 $
@@ -102,6 +91,38 @@ drawUI st =
                 withAttr (attrName "paneContent") $
                   padLeftRight 1 (txt (tipsFor st))
           ]
+
+    standardPane =
+      focusBorder (activeList st == MainViewport) $
+        borderWithLabel (txt ("main [" <> keyMain <> "]")) $
+          withAttr (attrName "paneContent") $
+            padAll 1 $
+              vBox
+                ( [ txt "Advanced: [h] Message History  [d] Debug Mode"
+                  , txt ("Provider: " <> fromMaybe "-" (selectedProvider st))
+                  , txt ("Model: " <> fromMaybe "-" (selectedModel st))
+                  ]
+                  <> runnerPromptLines st
+                  <> [ padTop (Pad 1) hBorder
+                     , viewport MainViewport Both (renderMarkdown MainViewport (outputText st))
+                     ]
+                )
+
+    chatPane =
+      let isChatFocused = activeList st == ChatViewport || activeList st == ChatInputEditor
+      in focusBorder isChatFocused $
+        borderWithLabel (txt ("chat [" <> keyMain <> "]")) $
+          withAttr (attrName "paneContent") $
+            padAll 1 $
+              vBox
+                [ txt "Advanced: [h] Message History  [d] Debug Mode"
+                , txt ("Provider: " <> fromMaybe "-" (selectedProvider st))
+                , txt ("Model: " <> fromMaybe "-" (selectedModel st))
+                , padTop (Pad 1) hBorder
+                , viewport ChatViewport Vertical (renderChatHistory (chatMessages st))
+                , padTop (Pad 1) hBorder
+                , vLimit 3 $ renderEditor (txt . unlines) (activeList st == ChatInputEditor) (chatInputEditor st)
+                ]
 
     promptDialog st' =
       let runnerLabel = fromMaybe "runner" (selectedRunner st')
@@ -221,6 +242,21 @@ drawMessageRow _ msg =
         _ -> "[role] "
       preview = truncateText 40 (messageContentText (content msg))
   in txt (roleTag <> preview)
+
+renderChatHistory :: [Message] -> Widget Name
+renderChatHistory msgs =
+  vBox (map renderChatMessage msgs)
+
+renderChatMessage :: Message -> Widget Name
+renderChatMessage msg =
+  let roleLabel = case role msg of
+        "user" -> "User"
+        "assistant" -> "ASSISTANT"
+        "system" -> "System"
+        "tool" -> "Tool"
+        _ -> "Role"
+      header = roleLabel <> ": " <> messageContentText (content msg)
+  in padBottom (Pad 1) $ renderMarkdown ChatViewport header
 
 focusBorder :: Bool -> Widget Name -> Widget Name
 focusBorder isActive =

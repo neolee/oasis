@@ -28,8 +28,8 @@ renderMarkdown viewportName input =
 
 renderBlock :: Int -> Block -> Widget n
 renderBlock wrapWidth = \case
-  Heading _ title -> withAttr (attrName "mdHeading") (renderWrapped wrapWidth title)
-  Paragraph ls -> renderWrapped wrapWidth (T.intercalate "\n" (map T.strip ls))
+  Heading _ title -> withAttr (attrName "mdHeading") (renderWrappedInline wrapWidth title)
+  Paragraph ls -> renderWrappedInline wrapWidth (T.intercalate "\n" (map T.strip ls))
   Bullet items -> vBox (map (renderBullet wrapWidth) items)
   CodeBlock lang code ->
     let langName = if T.null (T.strip lang) then "text" else lang
@@ -54,6 +54,23 @@ renderWrapped wrapWidth t =
   in case wrapped of
   [] -> renderLine ""
   xs -> vBox (map renderLine xs)
+
+renderWrappedInline :: Int -> Text -> Widget n
+renderWrappedInline wrapWidth t =
+  let linesIn = T.splitOn "\n" (T.strip t)
+      rendered = concatMap (renderWrappedLine wrapWidth) linesIn
+  in case rendered of
+      [] -> renderLine ""
+      xs -> vBox xs
+
+renderWrappedLine :: Int -> Text -> [Widget n]
+renderWrappedLine wrapWidth line
+  | T.null line = [renderLine ""]
+  | otherwise =
+      let wrapped = wrapText wrapWidth line
+      in if null wrapped
+          then [renderLine ""]
+          else map renderLine wrapped
 
 renderLine :: Text -> Widget n
 renderLine line = if T.null line then txt " " else txt line
@@ -83,7 +100,7 @@ wrapText maxWidth t
               in if wWidth <= limit
                     then go acc w wWidth ws
                     else
-                      let parts = splitWord limit w
+                      let parts = splitWordByWidth limit w
                       in case reverse parts of
                            [] -> go acc "" 0 ws
                            (lastPart:revRest) ->
@@ -99,25 +116,26 @@ wrapText maxWidth t
 
     textWidth = W.safeWctwidth
 
-    splitWord :: Int -> Text -> [Text]
-    splitWord limit txt
-      | limit <= 1 = [txt]
-      | T.null txt = []
-      | otherwise = step [] "" 0 txt
-      where
-        step acc cur curW rest =
-          case T.uncons rest of
-            Nothing ->
-              if T.null cur then reverse acc else reverse (cur : acc)
-            Just (c, remaining) ->
-              let cw = W.safeWcwidth c
-                  nextW = curW + cw
-              in if nextW > limit && not (T.null cur)
-                    then step (cur : acc) "" 0 rest
-                    else
-                      let cur' = T.snoc cur c
-                          curW' = if cw < 0 then curW else nextW
-                      in step acc cur' curW' remaining
+splitWordByWidth :: Int -> Text -> [Text]
+splitWordByWidth limit txt
+  | limit <= 1 = [txt]
+  | T.null txt = []
+  | otherwise = step [] "" 0 txt
+  where
+    step acc cur curW rest =
+      case T.uncons rest of
+        Nothing ->
+          if T.null cur then reverse acc else reverse (cur : acc)
+        Just (c, remaining) ->
+          let cw = W.safeWcwidth c
+              nextW = curW + cw
+          in if nextW > limit && not (T.null cur)
+                then step (cur : acc) "" 0 rest
+                else
+                  let cur' = T.snoc cur c
+                      curW' = if cw < 0 then curW else nextW
+                  in step acc cur' curW' remaining
+
 
 data Block
   = Heading Int Text

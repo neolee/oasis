@@ -1,5 +1,7 @@
 module Oasis.Tui.Actions.Chat
   ( runBasicAction
+  , runChatInitAction
+  , runChatAction
   , runHooksAction
   , runStructuredJsonAction
   , runStructuredSchemaAction
@@ -8,7 +10,7 @@ module Oasis.Tui.Actions.Chat
 import Relude
 import Brick.BChan (BChan, writeBChan)
 import Brick.Types (EventM)
-import Control.Monad.State.Class (get)
+import Control.Monad.State.Class (get, modify)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
@@ -21,6 +23,7 @@ import Oasis.Client.OpenAI
   , StreamChoice(..)
   , StreamDelta(..)
   , defaultChatRequest
+  , setChatStream
   , buildChatUrl
   , sendChatCompletionRawWithHooks
   , renderClientError
@@ -30,7 +33,7 @@ import Oasis.Client.OpenAI
   )
 import qualified Oasis.Client.OpenAI as OpenAI
 import Oasis.Client.OpenAI.Param (applyChatParams)
-import Oasis.Chat.Message (userMessage, systemMessage)
+import Oasis.Chat.Message (assistantMessage, userMessage, systemMessage)
 import Oasis.Model (resolveModelId)
 import Oasis.Runner.Basic (runBasic)
 import Oasis.Tui.Actions.Common
@@ -53,7 +56,7 @@ import Oasis.Tui.Render.Output
   , renderErrorOutput
   )
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
-import Oasis.Types (Provider(..), RequestResponse(..))
+import Oasis.Types (Message, Provider(..), RequestResponse(..))
 import Network.HTTP.Client (Request(..))
 import Network.HTTP.Types.Header (HeaderName, hAuthorization)
 import Network.HTTP.Types.Status (Status, statusCode)
@@ -173,6 +176,46 @@ forEachDeltaContent ChatCompletionStreamChunk{choices} f =
 
 deltaContent :: StreamDelta -> [Text]
 deltaContent StreamDelta{content} = maybe [] pure content
+
+runChatInitAction :: EventM Name AppState ()
+runChatInitAction =
+  modify (\s -> s
+    { statusText = "Chat ready."
+    , activeList = ChatInputEditor
+    , runnerStarted = True
+    })
+
+runChatAction :: [Message] -> EventM Name AppState ()
+runChatAction messages = do
+  st <- get
+  mResolved <- resolveSelectedProvider
+  forM_ mResolved $ \(provider, apiKey) -> do
+    let modelOverride = selectedModel st
+        params = chatParams st
+        useBeta = betaUrlSetting st
+        chan = eventChan st
+    startRunner "Running chat..."
+    runInBackground st $ do
+      let modelId = resolveModelId provider modelOverride
+          reqBase = defaultChatRequest modelId messages
+          reqBody = applyChatParams params (setChatStream True reqBase)
+      result <- streamChatCompletionWithRequestWithHooks emptyClientHooks provider apiKey reqBody (handleChatChunk chan) useBeta
+      case result of
+        Left err -> pure (ChatCompleted ("Chat failed: " <> renderClientError err))
+        Right _ -> pure (ChatCompleted "Chat completed.")
+
+handleChatChunk :: BChan TuiEvent -> ChatCompletionStreamChunk -> IO ()
+handleChatChunk chan chunk =
+  forM_ (chatDeltaText chunk) (writeBChan chan . ChatStreaming)
+
+chatDeltaText :: ChatCompletionStreamChunk -> [Text]
+chatDeltaText ChatCompletionStreamChunk{choices} =
+  concatMap extractChoice choices
+  where
+    extractChoice StreamChoice{delta} =
+      case delta of
+        Nothing -> []
+        Just StreamDelta{content} -> maybe [] pure content
 
 parseJsonText :: Text -> Either Text Text
 parseJsonText raw =

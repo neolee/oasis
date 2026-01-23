@@ -9,6 +9,7 @@ module Oasis.Client.OpenAI
   , StreamChoice(..)
   , StreamDelta(..)
   , defaultChatRequest
+  , setChatStream
   , EmbeddingRequest(..)
   , EmbeddingResponse(..)
   , EmbeddingData(..)

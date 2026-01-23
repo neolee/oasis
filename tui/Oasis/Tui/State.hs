@@ -20,6 +20,12 @@ data TuiEvent
       { eventStatus :: Text
       , eventOutput :: Text
       }
+  | ChatStreaming
+    { eventDelta :: Text
+    }
+  | ChatCompleted
+    { eventStatus :: Text
+    }
   | ResponsesCompleted
       { eventStatus :: Text
       , eventOutput :: Text
@@ -144,7 +150,7 @@ mkState chan cfg providers models runners outputText statusText =
     , selectedRunner = Nothing
     , runnerStarted = False
     , promptEditor = editor PromptEditor (Just 5) defaultPrompt
-    , chatInputEditor = editor ChatInputEditor (Just 5) ""
+    , chatInputEditor = editor ChatInputEditor (Just 3) ""
     , chatMessages = []
     , verboseEnabled = False
     , debugEnabled = False

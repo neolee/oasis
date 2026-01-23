@@ -35,7 +35,7 @@ tipsFor st =
     else case paneKind (activeList st) of
       ListPane -> "[↑/↓] Move  [Enter] Select"
       OutputPane -> "[↓/↑/→/←] Scroll  [Ctrl+V/Alt+V/Alt+,/Alt+.] Page"
-      InputPane -> "[Enter] Submit  [Esc] Cancel"
+      InputPane -> "[Enter] Newline  [Ctrl+S] Submit  [Esc] Cancel"
 
 paneKind :: Name -> PaneKind
 paneKind = \case
