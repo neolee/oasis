@@ -8,7 +8,7 @@ import Brick.Types (Widget(..), vpSize, getContext, availWidthL, Size(..))
 import Brick.Widgets.Core
 import Brick.Widgets.Skylighting (highlightFromMap)
 import Skylighting.Syntax (defaultSyntaxMap)
-import Data.Char (isSpace)
+import Data.Char (isSpace, ord)
 import qualified Data.Text as T
 import qualified Data.List as List
 import Lens.Micro ((^.))
@@ -22,7 +22,7 @@ renderMarkdown viewportName input =
     let wrapWidth = max 1 $ case mVp of
           Just vp -> let (w, _) = vp ^. vpSize in w
           Nothing -> ctx ^. availWidthL
-        blocks = parseMarkdown input
+        blocks = parseMarkdown (sanitizeEmoji input)
         content = vBox (map (renderBlock wrapWidth) blocks)
     render content
 
@@ -206,3 +206,35 @@ dropBullet :: Text -> Text
 dropBullet t =
   let trimmed = T.stripStart t
   in fromMaybe trimmed (T.stripPrefix "- " trimmed <|> T.stripPrefix "* " trimmed)
+
+sanitizeEmoji :: Text -> Text
+sanitizeEmoji = T.concatMap replaceChar
+  where
+    placeholder = "□"
+    replaceChar c
+      | isEmojiChar c = placeholder
+      | isEmojiJoiner c = ""
+      | otherwise = T.singleton c
+
+isEmojiJoiner :: Char -> Bool
+isEmojiJoiner c =
+  let cp = ord c
+  in cp == 0x200D || inRange 0xFE00 0xFE0F cp
+
+isEmojiChar :: Char -> Bool
+isEmojiChar c =
+  let cp = ord c
+  in or
+      [ inRange 0x1F300 0x1F5FF cp
+      , inRange 0x1F600 0x1F64F cp
+      , inRange 0x1F680 0x1F6FF cp
+      , inRange 0x1F900 0x1F9FF cp
+      , inRange 0x1FA70 0x1FAFF cp
+      , inRange 0x2600 0x26FF cp
+      , inRange 0x2700 0x27BF cp
+      , inRange 0x1F1E6 0x1F1FF cp
+      , inRange 0x1F3FB 0x1F3FF cp
+      ]
+
+inRange :: Int -> Int -> Int -> Bool
+inRange lo hi x = x >= lo && x <= hi
