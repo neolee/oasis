@@ -16,6 +16,7 @@ import Oasis.Tui.Keymap (keyMain, keyModel, keyProvider, keyRunner, tipsFor)
 import Oasis.Tui.Render.Markdown (renderMarkdown)
 import Oasis.Tui.State (AppState(..), Name(..), ParamField(..))
 import Oasis.Tui.RunnerRegistry (runnerRequiresPrompt)
+import Oasis.Types (Message(..), messageContentText)
 
 drawUI :: AppState -> [Widget Name]
 drawUI st =
@@ -32,7 +33,9 @@ drawUI st =
        then [paramDialog st, baseUi]
        else if promptDialogOpen st
          then [promptDialog st, baseUi]
-         else [baseUi]
+         else if debugDialogOpen st
+           then [debugDialog st, baseUi]
+           else [baseUi]
   where
     leftPane =
       hLimit 25 $
@@ -62,7 +65,8 @@ drawUI st =
           withAttr (attrName "paneContent") $
             padAll 1 $
               vBox
-                ( [ txt ("Provider: " <> fromMaybe "-" (selectedProvider st))
+                ( [ txt "Advanced: [h] Message History  [d] Debug Mode"
+                  , txt ("Provider: " <> fromMaybe "-" (selectedProvider st))
                   , txt ("Model: " <> fromMaybe "-" (selectedModel st))
                   ]
                   <> runnerPromptLines st
@@ -71,18 +75,28 @@ drawUI st =
                      ]
                 )
     rightPane =
-      hLimit 25 $
-        borderWithLabel (txt "sidebar") $
-          withAttr (attrName "paneContent") $
-            padAll 1 $
-              txt ""
+      if verboseEnabled st
+        then hLimit 25 $
+          borderWithLabel (txt "history") $
+            withAttr (attrName "paneContent") $
+              padAll 1 $
+                vBox
+                  [ txt "Message History"
+                  , padTop (Pad 1) $
+                      L.renderList drawMessageRow (activeList st == VerboseMessageList) (verboseMessageList st)
+                  ]
+        else hLimit 1 emptyWidget
     statusBar =
       vLimit 3 $
         hBox
-          [ hLimitPercent 50 $
+          [ hLimitPercent 40 $
               borderWithLabel (txt "status") $
                 withAttr (attrName "paneContent") $
                   padLeftRight 1 (txt (statusText st))
+          , hLimitPercent 25 $
+              borderWithLabel (txt "modes") $
+                withAttr (attrName "paneContent") $
+                  padLeftRight 1 (txt (modeIndicators st))
           , hLimitPercent 100 $
               borderWithLabel (txt "info") $
                 withAttr (attrName "paneContent") $
@@ -122,6 +136,20 @@ drawUI st =
                         ]
                         <> paramErrorLine st'
                       )
+
+    debugDialog st' =
+      centerLayer $
+        hLimit 90 $
+          vLimit 20 $
+            withAttr (attrName "promptDialog") $
+              overrideAttr borderAttr (attrName "promptDialogBorder") $
+                borderWithLabel (txt "debug: request preview") $
+                  padAll 1 $
+                    vBox
+                      [ renderEditor (txt . unlines) True (debugRequestEditor st')
+                      , padTop (Pad 1) $
+                          txt "[Enter] Send  [Esc] Cancel  [Ctrl+R] Restore"
+                      ]
 
     renderParamLine label field editorWidget =
       let isFocused = paramDialogFocus st == field
@@ -174,8 +202,25 @@ truncateText maxLen t =
     then T.take (maxLen - 1) t <> "…"
     else t
 
+modeIndicators :: AppState -> Text
+modeIndicators st =
+  if debugEnabled st
+    then "debug: on"
+    else "debug: off"
+
 drawProvider :: Bool -> Text -> Widget Name
 drawProvider _ = txt
+
+drawMessageRow :: Bool -> Message -> Widget Name
+drawMessageRow _ msg =
+  let roleTag = case role msg of
+        "system" -> "[system] "
+        "user" -> "[user] "
+        "assistant" -> "[assistant] "
+        "tool" -> "[tool] "
+        _ -> "[role] "
+      preview = truncateText 40 (messageContentText (content msg))
+  in txt (roleTag <> preview)
 
 focusBorder :: Bool -> Widget Name -> Widget Name
 focusBorder isActive =

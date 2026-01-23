@@ -13,7 +13,7 @@ import Brick.Widgets.Edit (Editor, editor)
 import qualified Brick.Widgets.List as L
 import qualified Data.Vector as V
 import Oasis.Client.OpenAI.Param (ChatParams, emptyChatParams)
-import Oasis.Types (Config)
+import Oasis.Types (Config, Message)
 
 data TuiEvent
   = BasicCompleted
@@ -67,6 +67,11 @@ data Name
   | RunnerList
   | MainViewport
   | PromptEditor
+  | ChatViewport
+  | ChatInputEditor
+  | VerboseMessageList
+  | VerboseContentEditor
+  | DebugRequestEditor
   | ParamBetaUrlEditor
   | ParamTemperatureEditor
   | ParamTopPEditor
@@ -88,12 +93,23 @@ data AppState = AppState
   , providerList :: L.List Name Text
   , modelList :: L.List Name Text
   , runnerList :: L.List Name Text
+  , verboseMessageList :: L.List Name Message
   , activeList :: Name
   , selectedProvider :: Maybe Text
   , selectedModel :: Maybe Text
   , selectedRunner :: Maybe Text
   , runnerStarted :: Bool
   , promptEditor :: Editor Text Name
+  , chatInputEditor :: Editor Text Name
+  , chatMessages :: [Message]
+  , verboseEnabled :: Bool
+  , debugEnabled :: Bool
+  , debugDialogOpen :: Bool
+  , verboseContentEditor :: Editor Text Name
+  , debugRequestEditor :: Editor Text Name
+  , debugRequestOriginal :: Text
+  , debugRequestDraft :: Text
+  , debugRequestError :: Maybe Text
   , promptDialogOpen :: Bool
   , promptDefault :: Text
   , promptPristine :: Bool
@@ -121,12 +137,23 @@ mkState chan cfg providers models runners outputText statusText =
     , providerList = L.list ProviderList (V.fromList providers) 1
     , modelList = L.list ModelList (V.fromList models) 1
     , runnerList = L.list RunnerList (V.fromList runners) 1
+    , verboseMessageList = L.list VerboseMessageList V.empty 1
     , activeList = ProviderList
     , selectedProvider = Nothing
     , selectedModel = Nothing
     , selectedRunner = Nothing
     , runnerStarted = False
     , promptEditor = editor PromptEditor (Just 5) defaultPrompt
+    , chatInputEditor = editor ChatInputEditor (Just 5) ""
+    , chatMessages = []
+    , verboseEnabled = False
+    , debugEnabled = False
+    , debugDialogOpen = False
+    , verboseContentEditor = editor VerboseContentEditor (Just 8) ""
+    , debugRequestEditor = editor DebugRequestEditor (Just 10) ""
+    , debugRequestOriginal = ""
+    , debugRequestDraft = ""
+    , debugRequestError = Nothing
     , promptDialogOpen = False
     , promptDefault = defaultPrompt
     , promptPristine = False

@@ -49,6 +49,8 @@ appEvent (VtyEvent ev) =
         Vty.EvKey (Vty.KChar 'm') [] -> setActive ModelList
         Vty.EvKey (Vty.KChar 'r') [] -> setActive RunnerList
         Vty.EvKey (Vty.KChar 'v') [] -> setActive MainViewport
+        Vty.EvKey (Vty.KChar 'h') [] -> toggleVerbose
+        Vty.EvKey (Vty.KChar 'd') [] -> toggleDebug
         Vty.EvKey (Vty.KChar 'a') [] -> openParamDialog
         Vty.EvKey Vty.KEnter [] -> applySelection
         Vty.EvKey Vty.KUp [] -> handleUpDown (-1)
@@ -62,6 +64,21 @@ appEvent (VtyEvent ev) =
         _ -> handleActiveListEvent ev
         )
 appEvent _ = pure ()
+
+toggleVerbose :: EventM Name AppState ()
+toggleVerbose = modify (\s ->
+  let enabled' = not (verboseEnabled s)
+      active' = if enabled'
+        then activeList s
+        else case activeList s of
+          VerboseMessageList -> MainViewport
+          VerboseContentEditor -> MainViewport
+          _ -> activeList s
+  in s { verboseEnabled = enabled', activeList = active' }
+  )
+
+toggleDebug :: EventM Name AppState ()
+toggleDebug = modify (\s -> s { debugEnabled = not (debugEnabled s) })
 
 setActive :: Name -> EventM Name AppState ()
 setActive name = modify (\s -> s { activeList = name })
@@ -79,8 +96,15 @@ handleActiveListEvent ev = do
     RunnerList -> do
       (lst, _) <- nestEventM (runnerList st) (L.handleListEvent ev)
       modify (\s -> s { runnerList = lst })
+    VerboseMessageList -> do
+      (lst, _) <- nestEventM (verboseMessageList st) (L.handleListEvent ev)
+      modify (\s -> s { verboseMessageList = lst })
     MainViewport -> pure ()
+    ChatViewport -> pure ()
     PromptEditor -> pure ()
+    ChatInputEditor -> pure ()
+    VerboseContentEditor -> pure ()
+    DebugRequestEditor -> pure ()
     ParamBetaUrlEditor -> pure ()
     ParamTemperatureEditor -> pure ()
     ParamTopPEditor -> pure ()

@@ -42,8 +42,13 @@ paneKind = \case
   ProviderList -> ListPane
   ModelList -> ListPane
   RunnerList -> ListPane
+  VerboseMessageList -> ListPane
   MainViewport -> OutputPane
+  ChatViewport -> OutputPane
   PromptEditor -> InputPane
+  ChatInputEditor -> InputPane
+  VerboseContentEditor -> InputPane
+  DebugRequestEditor -> InputPane
   ParamBetaUrlEditor -> InputPane
   ParamTemperatureEditor -> InputPane
   ParamTopPEditor -> InputPane
