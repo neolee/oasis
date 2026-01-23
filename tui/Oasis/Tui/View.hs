@@ -253,11 +253,11 @@ renderChatHistory msgs =
 renderChatMessage :: Message -> Widget Name
 renderChatMessage msg =
   let roleLabel = case role msg of
-        "user" -> "User"
+        "user" -> "USER"
         "assistant" -> "ASSISTANT"
-        "system" -> "System"
-        "tool" -> "Tool"
-        _ -> "Role"
+        "system" -> "SYSTEM"
+        "tool" -> "TOOL"
+        _ -> "ROLE"
       header = roleLabel <> ": " <> messageContentText (content msg)
   in padBottom (Pad 1) $ renderMarkdown ChatViewport header
 

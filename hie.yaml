@@ -8,3 +8,6 @@ cradle:
 
     - path: "tui/Main.hs"
       component: "oasis:exe:oasis-tui"
+
+    - path: "tools/VtyWidthTable/Main.hs"
+      component: "oasis:exe:vty-width-table"      

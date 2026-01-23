@@ -48,6 +48,20 @@ To leverage Haskell's powerful type system for building a reliable, unified LLM 
     - Parse and retain consecutive blank lines as a separate block to avoid collapsing `\n\n`.
     See [tui/Oasis/Tui/Render/Markdown.hs](tui/Oasis/Tui/Render/Markdown.hs).
 
+## Known Issues
+
+- **Inline Markdown formatting deferred**: Inline bold/italic, inline code, links and code blocks can be detected but are not formatted properly due to rendering/layout complications. This remains unresolved.
+
+## Emoji Width Handling (Vty Custom Width Table)
+
+- **Problem**: Vty’s built-in width table disagrees with terminal rendering for many emoji, causing border gaps. ZWJ sequences remain problematic, but most non-ZWJ emoji can be corrected.
+- **Solution**: Generate a terminal-specific width table using the Vty width-table tool and load it via Vty user config at startup.
+    - Tool entry point: [tools/VtyWidthTable/Main.hs](tools/VtyWidthTable/Main.hs) (invokes `defaultMain` with terminal cursor measurement).
+    - Run: `stack run vty-width-table -- -u` (writes the table and updates `~/.vty/config` with a `widthMap`).
+    - The tool reports the output path (e.g., `~/.vty/width_table_<TERM>.dat`).
+- **Load at runtime**: TUI startup uses Vty user config to ensure widthMap is applied. See [tui/Main.hs](tui/Main.hs).
+- **Notes**: Custom width table is loaded once per process by Vty; restart the TUI after generating a new table.
+
 ## OpenAI-Compatible Client Interface Design
 
 The `Oasis.Client.OpenAI` module should expose a layered, reusable interface:

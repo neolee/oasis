@@ -3,11 +3,13 @@ module Main where
 import Relude
 import Brick.AttrMap (attrMap, attrName)
 import Brick.BChan (newBChan)
-import Brick.Main (App(..), customMainWithDefaultVty, showCursorNamed)
+import Brick.Main (App(..), customMainWithVty, showCursorNamed)
 import qualified Brick.Widgets.List as L
 import Brick.Widgets.Skylighting (attrMappingsForStyle, highlightedCodeBlockAttr)
 import qualified Brick.Widgets.Edit as E
 import qualified Graphics.Vty as Vty
+import qualified Graphics.Vty.Config as VtyConfig
+import qualified Graphics.Vty.CrossPlatform as VtyPlatform
 import Oasis.Config
 import Oasis.Tui.Event (appEvent)
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..), mkState, defaultOutputText)
@@ -63,5 +65,7 @@ main = do
           runTui chan st
   where
     runTui chan st = do
-      (_, vty) <- customMainWithDefaultVty (Just chan) app st
+      userCfg <- VtyConfig.userConfig
+      vty0 <- VtyPlatform.mkVty userCfg
+      (_, vty) <- customMainWithVty vty0 (VtyPlatform.mkVty userCfg) (Just chan) app st
       Vty.shutdown vty

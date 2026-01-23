@@ -22,7 +22,7 @@ renderMarkdown viewportName input =
     let wrapWidth = max 1 $ case mVp of
           Just vp -> let (w, _) = vp ^. vpSize in w
           Nothing -> ctx ^. availWidthL
-        blocks = parseMarkdown (sanitizeEmoji input)
+        blocks = parseMarkdown input
         content = vBox (map (renderBlock wrapWidth) blocks)
     render content
 
