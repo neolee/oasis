@@ -146,6 +146,8 @@ executable oasis-cli
     , vector
     , vty
   default-language: GHC2024
+  if os(darwin)
+    ghc-options: -optl-Wl,-w
 
 executable oasis-tui
   main-is: Main.hs
@@ -209,3 +211,5 @@ executable oasis-tui
     , vector
     , vty
   default-language: GHC2024
+  if os(darwin)
+    ghc-options: -optl-Wl,-w

@@ -96,6 +96,10 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    when:
+    - condition: os(darwin)
+      ghc-options:
+      - -optl-Wl,-w
     dependencies:
     - oasis
   oasis-tui:
@@ -105,5 +109,9 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    when:
+    - condition: os(darwin)
+      ghc-options:
+      - -optl-Wl,-w
     dependencies:
     - oasis
