@@ -44,7 +44,7 @@ drawUI st =
              else [baseUi]
   where
     leftPane =
-      hLimit 25 $
+      hLimitPercent 20 $
         vBox
           [ vLimitPercent 30 $
               focusBorder (activeList st == ProviderList) $
@@ -72,11 +72,9 @@ drawUI st =
     rightPane =
       if verboseEnabled st
         then
-          let historyPaneWidth = 25
-              historyInnerWidth = max 0 (historyPaneWidth - 2)
-              isHistoryFocused = activeList st == VerboseMessageList
+          let isHistoryFocused = activeList st == VerboseMessageList
               isDetailFocused = activeList st == VerboseContentEditor
-          in hLimit historyPaneWidth $
+          in hLimitPercent 25 $
               case L.listSelectedElement (verboseMessageList st) of
                 Nothing ->
                   vBox
@@ -85,7 +83,7 @@ drawUI st =
                           borderWithLabel (txt ("history [" <> keyHistory <> "]")) $
                             withAttr (attrName "paneContent") $
                               padAll 1 $
-                                renderMessageList historyInnerWidth isHistoryFocused (verboseMessageList st)
+                                renderMessageList isHistoryFocused (verboseMessageList st)
                     ]
                 Just (_, msg) ->
                   let detailRoleLabel = "role: " <> role msg
@@ -95,7 +93,7 @@ drawUI st =
                             borderWithLabel (txt ("history [" <> keyHistory <> "]")) $
                               withAttr (attrName "paneContent") $
                                 padAll 1 $
-                                  renderMessageList historyInnerWidth isHistoryFocused (verboseMessageList st)
+                                  renderMessageList isHistoryFocused (verboseMessageList st)
                       , vLimitPercent 100 $
                           focusBorder isDetailFocused $
                             borderWithLabel (txt detailRoleLabel) $

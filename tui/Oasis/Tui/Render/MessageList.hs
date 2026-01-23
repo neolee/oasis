@@ -4,15 +4,19 @@ module Oasis.Tui.Render.MessageList
   ) where
 
 import Relude
-import Brick.Types (Widget)
+import Brick.Types (Widget(..), getContext, availWidthL, Size(..))
 import Brick.Widgets.Core (txt)
 import qualified Brick.Widgets.List as L
 import qualified Data.Text as T
 import Oasis.Types (Message(..), messageContentText)
+import Lens.Micro ((^.))
 
-renderMessageList :: (Ord n, Show n) => Int -> Bool -> L.List n Message -> Widget n
-renderMessageList maxWidth =
-  L.renderListWithIndex (flip (drawMessageRow maxWidth))
+renderMessageList :: (Ord n, Show n) => Bool -> L.List n Message -> Widget n
+renderMessageList isFocused lst =
+  Widget Greedy Fixed $ do
+    ctx <- getContext
+    let maxWidth = max 1 (ctx ^. availWidthL)
+    render (L.renderListWithIndex (flip (drawMessageRow maxWidth)) isFocused lst)
 
 messageListLine :: Int -> Message -> Text
 messageListLine idx msg =
