@@ -100,14 +100,33 @@ scrollMainHoriz amount = do
 handleUpDown :: Int -> EventM Name AppState ()
 handleUpDown amount = do
   st <- get
-  if activeList st == MainViewport
-    then scrollMain amount
-    else handleActiveListEvent (if amount < 0 then Vty.EvKey Vty.KUp [] else Vty.EvKey Vty.KDown [])
+  case activeList st of
+    MainViewport -> scrollMain amount
+    ProviderList ->
+      modify (\t -> t { providerList = moveListWrap amount (providerList t) })
+    ModelList ->
+      modify (\t -> t { modelList = moveListWrap amount (modelList t) })
+    RunnerList ->
+      modify (\t -> t { runnerList = moveListWrap amount (runnerList t) })
+    _ -> handleActiveListEvent (if amount < 0 then Vty.EvKey Vty.KUp [] else Vty.EvKey Vty.KDown [])
 
 handleLeftRight :: Int -> EventM Name AppState ()
 handleLeftRight amount = do
   st <- get
   when (activeList st == MainViewport) $ scrollMainHoriz amount
+
+moveListWrap :: Int -> L.List Name Text -> L.List Name Text
+moveListWrap delta lst =
+  let len = V.length (L.listElements lst)
+  in if len == 0
+      then lst
+      else
+        let current = fromMaybe 0 (L.listSelected lst)
+            next
+              | delta < 0 = if current <= 0 then len - 1 else current - 1
+              | delta > 0 = if current >= len - 1 then 0 else current + 1
+              | otherwise = current
+        in L.listMoveTo next lst
 
 handlePromptEvent :: Vty.Event -> EventM Name AppState ()
 handlePromptEvent ev =
