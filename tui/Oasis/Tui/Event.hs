@@ -20,7 +20,7 @@ import qualified Graphics.Vty as Vty
 import Oasis.Client.OpenAI.Param (ChatParams(..))
 import Oasis.Tui.Actions.Models ( providerModels )
 import Oasis.Tui.Actions.Chat (runChatAction)
-import Oasis.Tui.RunnerRegistry (RunnerAction(..), RunnerSpec(..), lookupRunner)
+import Oasis.Tui.Registry (RunnerAction(..), RunnerSpec(..), lookupRunner)
 import Oasis.Tui.State (AppState(..), Name(..), ParamField(..), TuiEvent(..))
 import Oasis.Chat.Message (assistantMessage, userMessage)
 import Oasis.Types (Message(..), MessageContent(..), StopParam(..), messageContentText)
@@ -47,7 +47,9 @@ appEvent (AppEvent evt) =
 appEvent (VtyEvent ev) =
   do
     st <- get
-    if paramDialogOpen st
+    if testPaneOpen st
+      then handleTestPaneEvent ev
+      else if paramDialogOpen st
       then handleParamDialogEvent ev
       else if promptDialogOpen st
         then handlePromptEvent ev
@@ -63,6 +65,7 @@ appEvent (VtyEvent ev) =
         Vty.EvKey (Vty.KChar 'h') [] -> toggleVerbose
         Vty.EvKey (Vty.KChar 'd') [] -> toggleDebug
         Vty.EvKey (Vty.KChar 'a') [] -> openParamDialog
+        Vty.EvKey (Vty.KChar 'x') [] -> toggleTestPane
         Vty.EvKey Vty.KEnter [] -> applySelection
         Vty.EvKey Vty.KUp [] -> handleUpDown (-1)
         Vty.EvKey Vty.KDown [] -> handleUpDown 1
@@ -75,6 +78,13 @@ appEvent (VtyEvent ev) =
         _ -> handleActiveListEvent ev
         )
 appEvent _ = pure ()
+
+handleTestPaneEvent :: Vty.Event -> EventM Name AppState ()
+handleTestPaneEvent ev =
+  case ev of
+    Vty.EvKey (Vty.KChar 'x') [] -> toggleTestPane
+    Vty.EvKey Vty.KEsc [] -> toggleTestPane
+    _ -> pure ()
 
 focusMainViewport :: EventM Name AppState ()
 focusMainViewport = do
@@ -102,6 +112,9 @@ toggleVerbose = modify (\s ->
 
 toggleDebug :: EventM Name AppState ()
 toggleDebug = modify (\s -> s { debugEnabled = not (debugEnabled s) })
+
+toggleTestPane :: EventM Name AppState ()
+toggleTestPane = modify (\s -> s { testPaneOpen = not (testPaneOpen s) })
 
 setActive :: Name -> EventM Name AppState ()
 setActive name = modify (\s -> s { activeList = name })

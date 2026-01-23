@@ -13,7 +13,7 @@ import Oasis.Tui.Event (appEvent)
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..), mkState, defaultOutputText)
 import qualified Data.Map.Strict as M
 import Oasis.Tui.View (drawUI)
-import Oasis.Tui.RunnerRegistry (runnerNames)
+import Oasis.Tui.Registry (runnerNames)
 import Oasis.Types (Config(..), Defaults(..))
 import Skylighting.Styles (pygments)
 

@@ -34,7 +34,7 @@ tipsFor st =
     then "[Tab/Shift+Tab] Next/Prev  [Space] Toggle  [Enter] Save  [Esc] Cancel"
     else case paneKind (activeList st) of
       ListPane -> "[↑/↓] Move  [Enter] Select"
-      OutputPane -> "[↓/↑/→/←] Scroll  [Ctrl+V/Alt+V/Alt+,/Alt+.] Page"
+      OutputPane -> "[↓/↑/→/←] Scroll  [Ctrl+V/Alt+V/Alt+,/Alt+.] Page  [x] Lab"
       InputPane -> "[Enter] Newline  [Ctrl+S] Submit  [Esc] Cancel"
 
 paneKind :: Name -> PaneKind

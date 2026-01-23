@@ -116,6 +116,7 @@ data AppState = AppState
   , debugRequestOriginal :: Text
   , debugRequestDraft :: Text
   , debugRequestError :: Maybe Text
+  , testPaneOpen :: Bool
   , promptDialogOpen :: Bool
   , promptDefault :: Text
   , promptPristine :: Bool
@@ -160,6 +161,7 @@ mkState chan cfg providers models runners outputText statusText =
     , debugRequestOriginal = ""
     , debugRequestDraft = ""
     , debugRequestError = Nothing
+    , testPaneOpen = False
     , promptDialogOpen = False
     , promptDefault = defaultPrompt
     , promptPristine = False

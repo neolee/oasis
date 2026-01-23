@@ -15,7 +15,8 @@ import qualified Data.Text as T
 import Oasis.Tui.Keymap (keyMain, keyModel, keyProvider, keyRunner, tipsFor)
 import Oasis.Tui.Render.Markdown (renderMarkdown)
 import Oasis.Tui.State (AppState(..), Name(..), ParamField(..))
-import Oasis.Tui.RunnerRegistry (runnerRequiresPrompt)
+import Oasis.Tui.Registry (runnerRequiresPrompt)
+import Oasis.Tui.X (renderTestPane)
 import Oasis.Types (Message(..), messageContentText)
 
 drawUI :: AppState -> [Widget Name]
@@ -29,13 +30,15 @@ drawUI st =
               ]
           , statusBar
           ]
-  in if paramDialogOpen st
-       then [paramDialog st, baseUi]
-       else if promptDialogOpen st
-         then [promptDialog st, baseUi]
-         else if debugDialogOpen st
-           then [debugDialog st, baseUi]
-           else [baseUi]
+  in if testPaneOpen st
+       then [renderTestPane st, baseUi]
+       else if paramDialogOpen st
+         then [paramDialog st, baseUi]
+         else if promptDialogOpen st
+           then [promptDialog st, baseUi]
+           else if debugDialogOpen st
+             then [debugDialog st, baseUi]
+             else [baseUi]
   where
     leftPane =
       hLimit 25 $

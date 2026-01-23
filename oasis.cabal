@@ -160,11 +160,12 @@ executable oasis-tui
       Oasis.Tui.Actions.ToolCalling
       Oasis.Tui.Event
       Oasis.Tui.Keymap
+      Oasis.Tui.Registry
       Oasis.Tui.Render.Markdown
       Oasis.Tui.Render.Output
-      Oasis.Tui.RunnerRegistry
       Oasis.Tui.State
       Oasis.Tui.View
+      Oasis.Tui.X
       Paths_oasis
   hs-source-dirs:
       tui

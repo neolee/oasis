@@ -1,4 +1,4 @@
-module Oasis.Tui.RunnerRegistry
+module Oasis.Tui.Registry
   ( RunnerAction(..)
   , RunnerSpec(..)
   , runnerRegistry
