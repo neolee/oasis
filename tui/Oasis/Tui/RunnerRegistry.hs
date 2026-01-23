@@ -17,6 +17,8 @@ import Oasis.Tui.Actions.Chat
 import Oasis.Tui.Actions.Models
     ( runResponsesAction, runModelsAction, runEmbeddingsAction )
 import Oasis.Tui.Actions.ToolCalling ( runToolCallingAction )
+import Oasis.Tui.Actions.Completions
+  ( runPartialModeAction, runPrefixCompletionAction, runFimCompletionAction )
 import Oasis.Tui.State (AppState, Name)
 
 
@@ -34,17 +36,17 @@ data RunnerSpec = RunnerSpec
 runnerRegistry :: [RunnerSpec]
 runnerRegistry =
   [ RunnerSpec "basic" (NeedsPrompt runBasicAction)
-  , RunnerSpec "responses" (NeedsPrompt runResponsesAction)
+  , RunnerSpec "chat" Unsupported
   , RunnerSpec "embeddings" (NeedsPrompt runEmbeddingsAction)
-  , RunnerSpec "hooks" (NeedsPrompt runHooksAction)
+  , RunnerSpec "responses" (NeedsPrompt runResponsesAction)
   , RunnerSpec "models" (NoPrompt runModelsAction)
+  , RunnerSpec "hooks" (NeedsPrompt runHooksAction)
   , RunnerSpec "structured-json" (NoPrompt runStructuredJsonAction)
   , RunnerSpec "structured-schema" (NoPrompt runStructuredSchemaAction)
   , RunnerSpec "tool-calling" (NoPrompt runToolCallingAction)
-  , RunnerSpec "chat" Unsupported
-  , RunnerSpec "partial-mode" Unsupported
-  , RunnerSpec "prefix-completion" Unsupported
-  , RunnerSpec "fim-completion" Unsupported
+  , RunnerSpec "partial-mode" (NoPrompt runPartialModeAction)
+  , RunnerSpec "prefix-completion" (NoPrompt runPrefixCompletionAction)
+  , RunnerSpec "fim-completion" (NoPrompt runFimCompletionAction)
   ]
 
 runnerNames :: [Text]

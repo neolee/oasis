@@ -47,6 +47,18 @@ data TuiEvent
     { eventStatus :: Text
     , eventOutput :: Text
     }
+  | PartialModeCompleted
+    { eventStatus :: Text
+    , eventOutput :: Text
+    }
+  | PrefixCompletionCompleted
+    { eventStatus :: Text
+    , eventOutput :: Text
+    }
+  | FimCompletionCompleted
+    { eventStatus :: Text
+    , eventOutput :: Text
+    }
 
 
 data Name

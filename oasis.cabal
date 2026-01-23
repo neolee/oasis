@@ -153,6 +153,7 @@ executable oasis-tui
       Oasis.Tui.Actions
       Oasis.Tui.Actions.Chat
       Oasis.Tui.Actions.Common
+      Oasis.Tui.Actions.Completions
       Oasis.Tui.Actions.Models
       Oasis.Tui.Actions.ToolCalling
       Oasis.Tui.Event
