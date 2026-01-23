@@ -155,7 +155,7 @@ runStructuredAction responseFormat runnerLabel = do
             case result of
               Left err ->
                 let output = mdConcat
-                      [ mdTextSection "Raw Stream" rawText
+                      [ mdCodeSection "Raw Stream" "text" rawText
                       , mdTextSection "Parsed JSON" ("Error: " <> renderClientError err)
                       ]
                 in (runnerLabel <> " runner failed.", output)
@@ -165,7 +165,7 @@ runStructuredAction responseFormat runnerLabel = do
                         Left perr -> mdTextSection "Parsed JSON" ("Invalid JSON: " <> perr)
                         Right pretty -> mdCodeSection "Parsed JSON" "json" pretty
                     output = mdConcat
-                      [ mdTextSection "Raw Stream" rawText
+                      [ mdCodeSection "Raw Stream" "text" rawText
                       , parsedSection
                       ]
                 in (runnerLabel <> " runner completed.", output)
@@ -236,7 +236,7 @@ parseJsonText raw =
 streamingOutput :: Text -> Text
 streamingOutput rawText =
   mdConcat
-    [ mdTextSection "Raw Stream" rawText
+    [ mdCodeSection "Raw Stream" "text" rawText
     , mdTextSection "Parsed JSON" "Streaming..."
     ]
 
