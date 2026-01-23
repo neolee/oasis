@@ -37,21 +37,24 @@ drawUI st =
     leftPane =
       hLimit 25 $
         vBox
-          [ focusBorder (activeList st == ProviderList) $
-              borderWithLabel (txt ("providers [" <> keyProvider <> "]")) $
-                withAttr (attrName "paneContent") $
-                  padAll 1 $
-                    L.renderList drawProvider (activeList st == ProviderList) (providerList st)
-          , focusBorder (activeList st == ModelList) $
-              borderWithLabel (txt ("models [" <> keyModel <> "]")) $
-                withAttr (attrName "paneContent") $
-                  padAll 1 $
-                    L.renderList drawProvider (activeList st == ModelList) (modelList st)
-          , focusBorder (activeList st == RunnerList) $
-              borderWithLabel (txt ("runners [" <> keyRunner <> "]")) $
-                withAttr (attrName "paneContent") $
-                  padAll 1 $
-                    L.renderList drawProvider (activeList st == RunnerList) (runnerList st)
+          [ vLimitPercent 30 $
+              focusBorder (activeList st == ProviderList) $
+                borderWithLabel (txt ("providers [" <> keyProvider <> "]")) $
+                  withAttr (attrName "paneContent") $
+                    padAll 1 $
+                      L.renderList drawProvider (activeList st == ProviderList) (providerList st)
+          , vLimitPercent 30 $
+              focusBorder (activeList st == ModelList) $
+                borderWithLabel (txt ("models [" <> keyModel <> "]")) $
+                  withAttr (attrName "paneContent") $
+                    padAll 1 $
+                      L.renderList drawProvider (activeList st == ModelList) (modelList st)
+          , vLimitPercent 100 $
+              focusBorder (activeList st == RunnerList) $
+                borderWithLabel (txt ("runners [" <> keyRunner <> "]")) $
+                  withAttr (attrName "paneContent") $
+                    padAll 1 $
+                      L.renderList drawProvider (activeList st == RunnerList) (runnerList st)
           ]
     centerPane =
       focusBorder (activeList st == MainViewport) $
