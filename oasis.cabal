@@ -166,6 +166,7 @@ executable oasis-tui
       Oasis.Tui.Keymap
       Oasis.Tui.Registry
       Oasis.Tui.Render.Markdown
+      Oasis.Tui.Render.MessageList
       Oasis.Tui.Render.Output
       Oasis.Tui.State
       Oasis.Tui.View

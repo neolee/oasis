@@ -12,8 +12,9 @@ import qualified Brick.Widgets.List as L
 import Brick.Widgets.Edit (renderEditor)
 import qualified Brick.Widgets.Edit as E
 import qualified Data.Text as T
-import Oasis.Tui.Keymap (keyMain, keyModel, keyProvider, keyRunner, tipsFor)
+import Oasis.Tui.Keymap (keyMain, keyModel, keyProvider, keyRunner, keyHistory, tipsFor)
 import Oasis.Tui.Render.Markdown (renderMarkdown)
+import Oasis.Tui.Render.MessageList (renderMessageList)
 import Oasis.Tui.State (AppState(..), Name(..), ParamField(..))
 import Oasis.Tui.Registry (runnerRequiresPrompt)
 import Oasis.Tui.X (renderTestPane)
@@ -68,15 +69,16 @@ drawUI st =
         else standardPane
     rightPane =
       if verboseEnabled st
-        then hLimit 25 $
-          borderWithLabel (txt "history") $
-            withAttr (attrName "paneContent") $
-              padAll 1 $
-                vBox
-                  [ txt "Message History"
-                  , padTop (Pad 1) $
-                      L.renderList drawMessageRow (activeList st == VerboseMessageList) (verboseMessageList st)
-                  ]
+        then
+          let historyPaneWidth = 25
+              historyInnerWidth = max 0 (historyPaneWidth - 2)
+              isHistoryFocused = activeList st == VerboseMessageList
+          in hLimit historyPaneWidth $
+              focusBorder isHistoryFocused $
+                borderWithLabel (txt ("history [" <> keyHistory <> "]")) $
+                  withAttr (attrName "paneContent") $
+                    padAll 1 $
+                      renderMessageList historyInnerWidth isHistoryFocused (verboseMessageList st)
         else hLimit 1 emptyWidget
     statusBar =
       vLimit 3 $
@@ -234,17 +236,6 @@ modeIndicators st =
 
 drawProvider :: Bool -> Text -> Widget Name
 drawProvider _ = txt
-
-drawMessageRow :: Bool -> Message -> Widget Name
-drawMessageRow _ msg =
-  let roleTag = case role msg of
-        "system" -> "[system] "
-        "user" -> "[user] "
-        "assistant" -> "[assistant] "
-        "tool" -> "[tool] "
-        _ -> "[role] "
-      preview = truncateText 40 (messageContentText (content msg))
-  in txt (roleTag <> preview)
 
 renderChatHistory :: [Message] -> Widget Name
 renderChatHistory msgs =

@@ -62,6 +62,7 @@ appEvent (VtyEvent ev) =
         Vty.EvKey (Vty.KChar 'r') [] -> setActive RunnerList
         Vty.EvKey (Vty.KChar 'v') [] -> focusMainViewport
         Vty.EvKey (Vty.KChar 'e') [] -> focusChatInput
+        Vty.EvKey (Vty.KChar 'l') [] -> focusVerboseList
         Vty.EvKey (Vty.KChar 'h') [] -> toggleVerbose
         Vty.EvKey (Vty.KChar 'd') [] -> toggleDebug
         Vty.EvKey (Vty.KChar 'a') [] -> openParamDialog
@@ -97,6 +98,11 @@ focusChatInput :: EventM Name AppState ()
 focusChatInput = do
   st <- get
   when (selectedRunner st == Just "chat") (setActive ChatInputEditor)
+
+focusVerboseList :: EventM Name AppState ()
+focusVerboseList = do
+  st <- get
+  when (verboseEnabled st) (setActive VerboseMessageList)
 
 toggleVerbose :: EventM Name AppState ()
 toggleVerbose = modify (\s ->

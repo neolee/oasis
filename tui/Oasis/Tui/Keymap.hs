@@ -3,6 +3,7 @@ module Oasis.Tui.Keymap
   , keyModel
   , keyRunner
   , keyMain
+  , keyHistory
   , PaneKind(..)
   , paneKind
   , tipsFor
@@ -27,6 +28,9 @@ keyRunner = "r"
 
 keyMain :: Text
 keyMain = "v"
+
+keyHistory :: Text
+keyHistory = "l"
 
 tipsFor :: AppState -> Text
 tipsFor st =
