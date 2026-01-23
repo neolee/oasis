@@ -33,7 +33,9 @@ drawUI st =
           ]
   in if testPaneOpen st
        then [renderTestPane st, baseUi]
-       else if paramDialogOpen st
+       else if verboseRoleDialogOpen st
+         then [roleDialog st, baseUi]
+         else if paramDialogOpen st
          then [paramDialog st, baseUi]
          else if promptDialogOpen st
            then [promptDialog st, baseUi]
@@ -73,12 +75,34 @@ drawUI st =
           let historyPaneWidth = 25
               historyInnerWidth = max 0 (historyPaneWidth - 2)
               isHistoryFocused = activeList st == VerboseMessageList
+              isDetailFocused = activeList st == VerboseContentEditor
           in hLimit historyPaneWidth $
-              focusBorder isHistoryFocused $
-                borderWithLabel (txt ("history [" <> keyHistory <> "]")) $
-                  withAttr (attrName "paneContent") $
-                    padAll 1 $
-                      renderMessageList historyInnerWidth isHistoryFocused (verboseMessageList st)
+              case L.listSelectedElement (verboseMessageList st) of
+                Nothing ->
+                  vBox
+                    [ vLimitPercent 100 $
+                        focusBorder isHistoryFocused $
+                          borderWithLabel (txt ("history [" <> keyHistory <> "]")) $
+                            withAttr (attrName "paneContent") $
+                              padAll 1 $
+                                renderMessageList historyInnerWidth isHistoryFocused (verboseMessageList st)
+                    ]
+                Just (_, msg) ->
+                  let detailRoleLabel = "role: " <> role msg
+                  in vBox
+                      [ vLimitPercent 50 $
+                          focusBorder isHistoryFocused $
+                            borderWithLabel (txt ("history [" <> keyHistory <> "]")) $
+                              withAttr (attrName "paneContent") $
+                                padAll 1 $
+                                  renderMessageList historyInnerWidth isHistoryFocused (verboseMessageList st)
+                      , vLimitPercent 100 $
+                          focusBorder isDetailFocused $
+                            borderWithLabel (txt detailRoleLabel) $
+                              withAttr (attrName "paneContent") $
+                                padAll 1 $
+                                  renderVerboseDetail st
+                      ]
         else hLimit 1 emptyWidget
     statusBar =
       vLimit 3 $
@@ -176,6 +200,24 @@ drawUI st =
                       , padTop (Pad 1) $
                           txt "[Enter] Send  [Esc] Cancel  [Ctrl+R] Restore"
                       ]
+
+    roleDialog st' =
+      centerLayer $
+        hLimit 40 $
+          vLimit 12 $
+            withAttr (attrName "promptDialog") $
+              overrideAttr borderAttr (attrName "promptDialogBorder") $
+                borderWithLabel (txt "select role") $
+                  padAll 1 $
+                    L.renderList drawProvider True (verboseRoleList st')
+
+    renderVerboseDetail st' =
+      case L.listSelectedElement (verboseMessageList st') of
+        Nothing -> txt " "
+        Just (_, msg) ->
+          if activeList st' == VerboseContentEditor
+            then renderEditor (txt . unlines) True (verboseContentEditor st')
+            else txtWrap (messageContentText (content msg))
 
     renderParamLine label field editorWidget =
       let isFocused = paramDialogFocus st == field

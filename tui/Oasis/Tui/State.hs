@@ -79,6 +79,7 @@ data Name
   | ChatViewport
   | ChatInputEditor
   | VerboseMessageList
+  | VerboseRoleList
   | VerboseContentEditor
   | DebugRequestEditor
   | ParamBetaUrlEditor
@@ -115,6 +116,11 @@ data AppState = AppState
   , debugEnabled :: Bool
   , debugDialogOpen :: Bool
   , verboseContentEditor :: Editor Text Name
+  , verboseRoleDialogOpen :: Bool
+  , verboseRoleList :: L.List Name Text
+  , verbosePendingInsertIndex :: Maybe Int
+  , verboseEditIndex :: Maybe Int
+  , verboseDeleteConfirm :: Maybe Int
   , debugRequestEditor :: Editor Text Name
   , debugRequestOriginal :: Text
   , debugRequestDraft :: Text
@@ -160,6 +166,11 @@ mkState chan cfg providers models runners outputText statusText =
     , debugEnabled = False
     , debugDialogOpen = False
     , verboseContentEditor = editor VerboseContentEditor (Just 8) ""
+    , verboseRoleDialogOpen = False
+    , verboseRoleList = L.list VerboseRoleList (V.fromList ["system", "user", "assistant", "tool"]) 1
+    , verbosePendingInsertIndex = Nothing
+    , verboseEditIndex = Nothing
+    , verboseDeleteConfirm = Nothing
     , debugRequestEditor = editor DebugRequestEditor (Just 10) ""
     , debugRequestOriginal = ""
     , debugRequestDraft = ""

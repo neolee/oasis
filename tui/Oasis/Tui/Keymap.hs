@@ -34,11 +34,17 @@ keyHistory = "l"
 
 tipsFor :: AppState -> Text
 tipsFor st =
-  if paramDialogOpen st
+  if verboseRoleDialogOpen st
+    then "[↑/↓] Move  [Enter] Select  [Esc] Cancel"
+    else if isJust (verboseDeleteConfirm st)
+      then "[y] Confirm  [n] Cancel"
+      else if paramDialogOpen st
     then "[Tab/Shift+Tab] Next/Prev  [Space] Toggle  [Enter] Save  [Esc] Cancel"
     else case paneKind (activeList st) of
+      ListPane | activeList st == VerboseMessageList -> "[↑/↓] Move  [a] Append  [i] Insert  [e] Edit  [Del/BS] Delete"
       ListPane -> "[↑/↓] Move  [Enter] Select"
       OutputPane -> "[↓/↑/→/←] Scroll  [Ctrl+V/Alt+V/Alt+,/Alt+.] Page  [x] Lab"
+      InputPane | activeList st == VerboseContentEditor -> "[Enter] Newline  [Ctrl+S] Save  [Esc] Cancel"
       InputPane -> "[Enter] Newline  [Ctrl+S] Submit  [Esc] Cancel"
 
 paneKind :: Name -> PaneKind
@@ -47,6 +53,7 @@ paneKind = \case
   ModelList -> ListPane
   RunnerList -> ListPane
   VerboseMessageList -> ListPane
+  VerboseRoleList -> ListPane
   MainViewport -> OutputPane
   ChatViewport -> OutputPane
   PromptEditor -> InputPane

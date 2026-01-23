@@ -35,10 +35,7 @@ appEvent (AppEvent evt) =
     ChatCompleted{eventStatus} ->
       modify (\s -> s { statusText = eventStatus })
     MessageListSynced{eventMessages} ->
-      modify (\s -> s
-        { chatMessages = eventMessages
-        , verboseMessageList = syncVerboseList eventMessages (verboseMessageList s)
-        })
+      modify (\s -> applyMessages eventMessages (L.listSelected (verboseMessageList s)) s)
     StructuredStreaming{eventOutput} ->
       modify (\s -> s { outputText = eventOutput })
     _ ->
@@ -52,25 +49,49 @@ appEvent (AppEvent evt) =
 appEvent (VtyEvent ev) =
   do
     st <- get
-    if testPaneOpen st
-      then handleTestPaneEvent ev
-      else if paramDialogOpen st
-      then handleParamDialogEvent ev
-      else if promptDialogOpen st
-        then handlePromptEvent ev
-        else if activeList st == ChatInputEditor
-          then handleChatInputEvent ev
-          else (case ev of
+    if isJust (verboseDeleteConfirm st)
+      then handleDeleteConfirm ev
+      else if verboseRoleDialogOpen st
+        then handleRoleDialogEvent ev
+        else if testPaneOpen st
+          then handleTestPaneEvent ev
+          else if paramDialogOpen st
+          then handleParamDialogEvent ev
+          else if promptDialogOpen st
+            then handlePromptEvent ev
+            else if activeList st == VerboseContentEditor
+              then handleVerboseContentEvent ev
+              else if activeList st == ChatInputEditor
+                then handleChatInputEvent ev
+                else (case ev of
         Vty.EvKey (Vty.KChar 'q') [] -> halt
         Vty.EvKey (Vty.KChar 'p') [] -> setActive ProviderList
         Vty.EvKey (Vty.KChar 'm') [] -> setActive ModelList
         Vty.EvKey (Vty.KChar 'r') [] -> setActive RunnerList
         Vty.EvKey (Vty.KChar 'v') [] -> focusMainViewport
-        Vty.EvKey (Vty.KChar 'e') [] -> focusChatInput
+        Vty.EvKey (Vty.KChar 'e') [] ->
+          if activeList st == VerboseMessageList
+            then openVerboseEditor
+            else focusChatInput
         Vty.EvKey (Vty.KChar 'l') [] -> focusVerboseList
         Vty.EvKey (Vty.KChar 'h') [] -> toggleVerbose
         Vty.EvKey (Vty.KChar 'd') [] -> toggleDebug
-        Vty.EvKey (Vty.KChar 'a') [] -> openParamDialog
+        Vty.EvKey (Vty.KChar 'a') [] ->
+          if activeList st == VerboseMessageList
+            then openRoleDialogForAppend
+            else openParamDialog
+        Vty.EvKey (Vty.KChar 'i') [] ->
+          if activeList st == VerboseMessageList
+            then openRoleDialogForInsert
+            else pure ()
+        Vty.EvKey Vty.KDel [] ->
+          if activeList st == VerboseMessageList
+            then startDeleteConfirm
+            else pure ()
+        Vty.EvKey Vty.KBS [] ->
+          if activeList st == VerboseMessageList
+            then startDeleteConfirm
+            else pure ()
         Vty.EvKey (Vty.KChar 'x') [] -> toggleTestPane
         Vty.EvKey Vty.KEnter [] -> applySelection
         Vty.EvKey Vty.KUp [] -> handleUpDown (-1)
@@ -107,7 +128,13 @@ focusChatInput = do
 focusVerboseList :: EventM Name AppState ()
 focusVerboseList = do
   st <- get
-  when (verboseEnabled st) (setActive VerboseMessageList)
+  when (verboseEnabled st) $ do
+    let lst = verboseMessageList st
+        hasSelection = isJust (L.listSelected lst)
+        lst' = if hasSelection || V.null (L.listElements lst)
+          then lst
+          else L.listMoveTo 0 lst
+    modify (\s -> s { activeList = VerboseMessageList, verboseMessageList = lst' })
 
 toggleVerbose :: EventM Name AppState ()
 toggleVerbose = modify (\s ->
@@ -146,6 +173,9 @@ handleActiveListEvent ev = do
     VerboseMessageList -> do
       (lst, _) <- nestEventM (verboseMessageList st) (L.handleListEvent ev)
       modify (\s -> s { verboseMessageList = lst })
+    VerboseRoleList -> do
+      (lst, _) <- nestEventM (verboseRoleList st) (L.handleListEvent ev)
+      modify (\s -> s { verboseRoleList = lst })
     _ -> pure ()
 
 scrollMain :: Int -> EventM Name AppState ()
@@ -350,6 +380,189 @@ syncVerboseList msgs lst =
 clearVerboseList :: L.List Name Message -> L.List Name Message
 clearVerboseList = L.listReplace V.empty Nothing
 
+applyMessages :: [Message] -> Maybe Int -> AppState -> AppState
+applyMessages msgs sel s =
+  s
+    { chatMessages = msgs
+    , verboseMessageList = L.listReplace (V.fromList msgs) sel (verboseMessageList s)
+    }
+
+openRoleDialogForAppend :: EventM Name AppState ()
+openRoleDialogForAppend = do
+  st <- get
+  let idx = length (chatMessages st)
+  modify (\s -> s
+    { verboseRoleDialogOpen = True
+    , verbosePendingInsertIndex = Just idx
+    , activeList = VerboseRoleList
+    , statusText = "Select role to append."
+    })
+
+openRoleDialogForInsert :: EventM Name AppState ()
+openRoleDialogForInsert = do
+  st <- get
+  let idx = fromMaybe 0 (L.listSelected (verboseMessageList st))
+  modify (\s -> s
+    { verboseRoleDialogOpen = True
+    , verbosePendingInsertIndex = Just idx
+    , activeList = VerboseRoleList
+    , statusText = "Select role to insert."
+    })
+
+handleRoleDialogEvent :: Vty.Event -> EventM Name AppState ()
+handleRoleDialogEvent ev =
+  case ev of
+    Vty.EvKey Vty.KEnter [] -> confirmRoleDialog
+    Vty.EvKey Vty.KEsc [] -> cancelRoleDialog
+    Vty.EvKey Vty.KUp [] -> handleActiveListEvent ev
+    Vty.EvKey Vty.KDown [] -> handleActiveListEvent ev
+    _ -> handleActiveListEvent ev
+
+confirmRoleDialog :: EventM Name AppState ()
+confirmRoleDialog = do
+  st <- get
+  case L.listSelectedElement (verboseRoleList st) of
+    Nothing -> pure ()
+    Just (_, roleText) ->
+      case verbosePendingInsertIndex st of
+        Nothing -> pure ()
+        Just idx -> do
+          let newMsg = Message roleText (ContentText "") Nothing Nothing Nothing Nothing
+              msgs = chatMessages st
+              newMsgs = insertMessageAt idx newMsg msgs
+          modify (\s ->
+            applyMessages newMsgs (Just idx) s
+              { verboseRoleDialogOpen = False
+              , verbosePendingInsertIndex = Nothing
+              , verboseEditIndex = Just idx
+              , verboseContentEditor = editor VerboseContentEditor (Just 8) ""
+              , activeList = VerboseContentEditor
+              , statusText = "Edit message content."
+              })
+
+cancelRoleDialog :: EventM Name AppState ()
+cancelRoleDialog =
+  modify (\s -> s
+    { verboseRoleDialogOpen = False
+    , verbosePendingInsertIndex = Nothing
+    , activeList = VerboseMessageList
+    , statusText = "Role selection cancelled."
+    })
+
+openVerboseEditor :: EventM Name AppState ()
+openVerboseEditor = do
+  st <- get
+  case L.listSelectedElement (verboseMessageList st) of
+    Nothing -> modify (\s -> s { statusText = "No message selected." })
+    Just (idx, msg) ->
+      modify (\s -> s
+        { verboseEditIndex = Just idx
+        , verboseContentEditor = editor VerboseContentEditor (Just 8) (messageContentText (content msg))
+        , activeList = VerboseContentEditor
+        , statusText = "Editing message."
+        })
+
+handleVerboseContentEvent :: Vty.Event -> EventM Name AppState ()
+handleVerboseContentEvent ev =
+  case ev of
+    Vty.EvKey (Vty.KChar 's') [Vty.MCtrl] -> saveVerboseContent
+    Vty.EvKey Vty.KEsc [] -> cancelVerboseContent
+    _ -> do
+      st <- get
+      (editor', _) <- nestEventM (verboseContentEditor st) (handleEditorEvent (VtyEvent ev))
+      modify (\s -> s { verboseContentEditor = editor' })
+
+saveVerboseContent :: EventM Name AppState ()
+saveVerboseContent = do
+  st <- get
+  case verboseEditIndex st of
+    Nothing -> pure ()
+    Just idx -> do
+      let msgs = chatMessages st
+          contentText = editorTextRaw (verboseContentEditor st)
+          updatedMsgs = updateMessageAt idx contentText msgs
+      modify (\s ->
+        applyMessages updatedMsgs (Just idx) s
+          { verboseEditIndex = Nothing
+          , activeList = VerboseMessageList
+          , statusText = "Message saved."
+          })
+
+cancelVerboseContent :: EventM Name AppState ()
+cancelVerboseContent =
+  modify (\s -> s
+    { verboseEditIndex = Nothing
+    , activeList = VerboseMessageList
+    , statusText = "Edit cancelled."
+    })
+
+startDeleteConfirm :: EventM Name AppState ()
+startDeleteConfirm = do
+  st <- get
+  case L.listSelectedElement (verboseMessageList st) of
+    Nothing -> modify (\s -> s { statusText = "No message selected." })
+    Just (idx, _) ->
+      modify (\s -> s
+        { verboseDeleteConfirm = Just idx
+        , statusText = "Delete message? [y/n]"
+        })
+
+handleDeleteConfirm :: Vty.Event -> EventM Name AppState ()
+handleDeleteConfirm ev =
+  case ev of
+    Vty.EvKey (Vty.KChar 'y') [] -> confirmDelete
+    Vty.EvKey (Vty.KChar 'n') [] -> cancelDelete
+    _ -> pure ()
+
+confirmDelete :: EventM Name AppState ()
+confirmDelete = do
+  st <- get
+  case verboseDeleteConfirm st of
+    Nothing -> pure ()
+    Just idx -> do
+      let msgs = deleteMessageAt idx (chatMessages st)
+          newSel
+            | null msgs = Nothing
+            | idx >= length msgs = Just (length msgs - 1)
+            | otherwise = Just idx
+      modify (\s ->
+        applyMessages msgs newSel s
+          { verboseDeleteConfirm = Nothing
+          , statusText = "Message deleted."
+          })
+
+cancelDelete :: EventM Name AppState ()
+cancelDelete =
+  modify (\s -> s
+    { verboseDeleteConfirm = Nothing
+    , statusText = "Delete cancelled."
+    })
+
+insertMessageAt :: Int -> Message -> [Message] -> [Message]
+insertMessageAt idx msg msgs =
+  let (before, after) = splitAt idx msgs
+  in before <> [msg] <> after
+
+updateMessageAt :: Int -> Text -> [Message] -> [Message]
+updateMessageAt idx contentText msgs =
+  if idx < 0 || idx >= length msgs
+    then msgs
+    else
+      let (before, after) = splitAt idx msgs
+      in case after of
+           [] -> msgs
+           (m:rest) -> before <> [m { content = ContentText contentText }] <> rest
+
+deleteMessageAt :: Int -> [Message] -> [Message]
+deleteMessageAt idx msgs =
+  if idx < 0 || idx >= length msgs
+    then msgs
+    else
+      let (before, after) = splitAt idx msgs
+      in case after of
+           [] -> msgs
+           (_:rest) -> before <> rest
+
 openParamDialog :: EventM Name AppState ()
 openParamDialog = do
   st <- get
@@ -491,6 +704,9 @@ parseQuoted t
 
 editorText :: Editor Text Name -> Text
 editorText = T.strip . mconcat . getEditContents
+
+editorTextRaw :: Editor Text Name -> Text
+editorTextRaw = T.intercalate "\n" . getEditContents
 
 
 isBlank :: Text -> Bool
