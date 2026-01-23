@@ -34,6 +34,11 @@ appEvent (AppEvent evt) =
         scrollChatToBottom
     ChatCompleted{eventStatus} ->
       modify (\s -> s { statusText = eventStatus })
+    MessageListSynced{eventMessages} ->
+      modify (\s -> s
+        { chatMessages = eventMessages
+        , verboseMessageList = syncVerboseList eventMessages (verboseMessageList s)
+        })
     StructuredStreaming{eventOutput} ->
       modify (\s -> s { outputText = eventOutput })
     _ ->
@@ -342,6 +347,9 @@ syncVerboseList :: [Message] -> L.List Name Message -> L.List Name Message
 syncVerboseList msgs lst =
   L.listReplace (V.fromList msgs) (L.listSelected lst) lst
 
+clearVerboseList :: L.List Name Message -> L.List Name Message
+clearVerboseList = L.listReplace V.empty Nothing
+
 openParamDialog :: EventM Name AppState ()
 openParamDialog = do
   st <- get
@@ -529,6 +537,8 @@ applySelection = do
             Just RunnerSpec{runnerAction = NeedsPrompt _} ->
               modify (\s -> s
                 { selectedRunner = Just runnerName
+                , chatMessages = []
+                , verboseMessageList = clearVerboseList (verboseMessageList s)
                 , activeList = PromptEditor
                 , promptDialogOpen = True
                 , promptEditor = editor PromptEditor (Just 5) (promptDefault s)
@@ -538,12 +548,16 @@ applySelection = do
             Just RunnerSpec{runnerAction = NoPrompt action} -> do
               modify (\s -> s
                 { selectedRunner = Just runnerName
+                , chatMessages = []
+                , verboseMessageList = clearVerboseList (verboseMessageList s)
                 , activeList = MainViewport
                 })
               action
             Just RunnerSpec{runnerAction = Unsupported} ->
               modify (\s -> s
                 { selectedRunner = Just runnerName
+                , chatMessages = []
+                , verboseMessageList = clearVerboseList (verboseMessageList s)
                 , activeList = MainViewport
                 , statusText = "Runner not supported yet."
                 })

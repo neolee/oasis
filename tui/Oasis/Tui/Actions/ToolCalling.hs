@@ -18,8 +18,9 @@ import Oasis.Client.OpenAI
   , ChatChoice(..)
   , ChatCompletionRequest(..)
   , defaultChatRequest
-  , requestChat
+  , requestChatWithHooks
   , renderClientError
+  , emptyClientHooks
   )
 import Oasis.Model (resolveModelId)
 import Oasis.Service.Amap (getWeatherText)
@@ -29,6 +30,7 @@ import Oasis.Tui.Actions.Common
   , runInBackground
   , encodeJsonText
   , extractAssistantContent
+  , withMessageListHooks
   )
 import Oasis.Tui.Render.Output (mdJsonSection, mdTextSection, mdConcat)
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
@@ -49,6 +51,7 @@ runToolCallingAction = do
     let modelOverride = selectedModel st
         params = chatParams st
         useBeta = betaUrlSetting st
+        chan = eventChan st
     startRunner "Running tool-calling runner..."
     runInBackground st $ do
       let modelId = resolveModelId provider modelOverride
@@ -67,7 +70,8 @@ runToolCallingAction = do
             { tools = Just tools
             , parallel_tool_calls = Just True
             }
-      firstResp <- requestChat provider apiKey params reqBase0 useBeta
+          hooks0 = withMessageListHooks chan messages0 emptyClientHooks
+      firstResp <- requestChatWithHooks hooks0 provider apiKey params reqBase0 useBeta
       (statusMsg, outputMsg) <- case firstResp of
         Left err ->
           let output = mdConcat
@@ -115,7 +119,8 @@ runToolCallingAction = do
                           reqBase1 = (defaultChatRequest modelId messages1)
                             { tools = Just tools
                             }
-                      secondResp <- requestChat provider apiKey params reqBase1 useBeta
+                          hooks1 = withMessageListHooks chan messages1 emptyClientHooks
+                      secondResp <- requestChatWithHooks hooks1 provider apiKey params reqBase1 useBeta
                       case secondResp of
                         Left err ->
                           let output = mdConcat

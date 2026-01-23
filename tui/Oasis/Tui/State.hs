@@ -26,6 +26,9 @@ data TuiEvent
   | ChatCompleted
     { eventStatus :: Text
     }
+  | MessageListSynced
+    { eventMessages :: [Message]
+    }
   | ResponsesCompleted
       { eventStatus :: Text
       , eventOutput :: Text

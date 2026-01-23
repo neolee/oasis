@@ -35,7 +35,7 @@ import qualified Oasis.Client.OpenAI as OpenAI
 import Oasis.Client.OpenAI.Param (applyChatParams)
 import Oasis.Chat.Message (assistantMessage, userMessage, systemMessage)
 import Oasis.Model (resolveModelId)
-import Oasis.Runner.Basic (runBasic)
+import Oasis.Runner.Basic (runBasicWithHooks)
 import Oasis.Tui.Actions.Common
   ( resolveSelectedProvider
   , startRunner
@@ -44,6 +44,8 @@ import Oasis.Tui.Actions.Common
   , selectBaseUrl
   , truncateText
   , extractAssistantContent
+  , withMessageListHooks
+  , mergeClientHooks
   )
 import Oasis.Tui.Render.Output
   ( RequestContext(..)
@@ -70,13 +72,15 @@ runBasicAction prompt = do
     let modelOverride = selectedModel st
         params = chatParams st
         useBeta = betaUrlSetting st
+        chan = eventChan st
     startRunner "Running basic runner..."
     runInBackground st $ do
       let modelId = resolveModelId provider modelOverride
           baseUrl = selectBaseUrl provider useBeta
           reqBody = applyChatParams params (defaultChatRequest modelId [userMessage prompt])
           reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody
-      result <- runBasic provider apiKey modelOverride params prompt useBeta
+          hooks = withMessageListHooks chan [userMessage prompt] emptyClientHooks
+      result <- runBasicWithHooks hooks provider apiKey modelOverride params prompt useBeta
       let (statusMsg, outputMsg) =
             case result of
               Left err ->
@@ -101,13 +105,15 @@ runHooksAction prompt = do
     let modelOverride = selectedModel st
         params = chatParams st
         useBeta = betaUrlSetting st
+        chan = eventChan st
     startRunner "Running hooks runner..."
     runInBackground st $ do
       let modelId = resolveModelId provider modelOverride
           baseUrl = selectBaseUrl provider useBeta
           reqBody = applyChatParams params (defaultChatRequest modelId [userMessage prompt])
           reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody
-      (statusMsg, outputMsg) <- runHooksWithLog provider apiKey useBeta reqCtx reqBody
+          hooks = withMessageListHooks chan [userMessage prompt] emptyClientHooks
+      (statusMsg, outputMsg) <- runHooksWithLog hooks provider apiKey useBeta reqCtx reqBody
       pure (HooksCompleted statusMsg outputMsg)
 
 runStructuredJsonAction :: EventM Name AppState ()
@@ -140,8 +146,11 @@ runStructuredAction responseFormat runnerLabel = do
             , ..
             }
       accumRef <- IORef.newIORef ""
-      result <- streamChatCompletionWithRequestWithHooks emptyClientHooks provider apiKey reqBody (handleStructuredChunk chan accumRef) useBeta
+      let hooks = withMessageListHooks chan reqMessages emptyClientHooks
+      result <- streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody (handleStructuredChunk chan accumRef) useBeta
       rawText <- IORef.readIORef accumRef
+      unless (T.null (T.strip rawText)) $
+        writeBChan chan (MessageListSynced (reqMessages <> [assistantMessage rawText]))
       let (statusMsg, outputMsg) =
             case result of
               Left err ->
@@ -199,7 +208,8 @@ runChatAction messages = do
       let modelId = resolveModelId provider modelOverride
           reqBase = defaultChatRequest modelId messages
           reqBody = applyChatParams params (setChatStream True reqBase)
-      result <- streamChatCompletionWithRequestWithHooks emptyClientHooks provider apiKey reqBody (handleChatChunk chan) useBeta
+          hooks = withMessageListHooks chan messages emptyClientHooks
+      result <- streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody (handleChatChunk chan) useBeta
       case result of
         Left err -> pure (ChatCompleted ("Chat failed: " <> renderClientError err))
         Right _ -> pure (ChatCompleted "Chat completed.")
@@ -272,13 +282,14 @@ jsonSchemaFormat =
   ]
 
 runHooksWithLog
-  :: Provider
+  :: ClientHooks
+  -> Provider
   -> Text
   -> Bool
   -> RequestContext
   -> ChatCompletionRequest
   -> IO (Text, Text)
-runHooksWithLog provider apiKey useBeta reqCtx reqBody = do
+runHooksWithLog extraHooks provider apiKey useBeta reqCtx reqBody = do
   logRef <- IORef.newIORef ([] :: [Text])
   let appendLog t = IORef.modifyIORef' logRef (<> [t])
       hooks = ClientHooks
@@ -286,7 +297,8 @@ runHooksWithLog provider apiKey useBeta reqCtx reqBody = do
         , onResponse = Just (logResponse appendLog)
         , onError = Just (appendLog . renderClientError)
         }
-  result <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody useBeta
+      mergedHooks = mergeClientHooks hooks extraHooks
+  result <- sendChatCompletionRawWithHooks mergedHooks provider apiKey reqBody useBeta
   logs <- IORef.readIORef logRef
   let logText = T.intercalate "\n" logs
   case result of

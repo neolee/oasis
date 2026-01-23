@@ -49,6 +49,7 @@ module Oasis.Client.OpenAI
   , sendChatCompletionRawWithHooks
   , sendChatCompletionRawWithManager
   , requestChat
+  , requestChatWithHooks
   , renderClientError
   , ClientHooks(..)
   , emptyClientHooks
@@ -104,8 +105,12 @@ sendChatCompletionRawWithManager manager hooks provider apiKey reqBody useBeta =
 
 requestChat :: Provider -> Text -> ChatParams -> ChatCompletionRequest -> Bool -> IO (Either ClientError BL.ByteString)
 requestChat provider apiKey params reqBase useBeta = do
+  requestChatWithHooks emptyClientHooks provider apiKey params reqBase useBeta
+
+requestChatWithHooks :: ClientHooks -> Provider -> Text -> ChatParams -> ChatCompletionRequest -> Bool -> IO (Either ClientError BL.ByteString)
+requestChatWithHooks hooks provider apiKey params reqBase useBeta = do
   let reqBody = applyChatParams params reqBase
-  sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody useBeta
+  sendChatCompletionRawWithHooks hooks provider apiKey reqBody useBeta
 
 streamChatCompletion :: Provider -> Text -> Text -> [Message] -> (ChatCompletionStreamChunk -> IO ()) -> IO (Either ClientError ())
 streamChatCompletion provider apiKey modelId msgs onChunk = do

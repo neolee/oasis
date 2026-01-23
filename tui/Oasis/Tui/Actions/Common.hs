@@ -7,10 +7,13 @@ module Oasis.Tui.Actions.Common
   , selectBaseUrl
   , truncateText
   , extractAssistantContent
+  , messageListHooks
+  , withMessageListHooks
+  , mergeClientHooks
   ) where
 
 import Relude
-import Brick.BChan (writeBChan)
+import Brick.BChan (BChan, writeBChan)
 import Brick.Types (EventM)
 import Control.Concurrent (forkIO)
 import Control.Monad.State.Class (get, modify)
@@ -18,8 +21,9 @@ import Oasis.Config (resolveProvider)
 import Oasis.Tui.Render.Output (RequestContext(..))
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
 import Oasis.Types (Provider(..), Message(..), messageContentText)
-import Oasis.Client.OpenAI (ChatCompletionResponse(..), ChatChoice(..))
-import Data.Aeson (ToJSON, encode)
+import Oasis.Chat.Message (assistantMessage)
+import Oasis.Client.OpenAI (ChatCompletionResponse(..), ChatChoice(..), ClientHooks(..), emptyClientHooks)
+import Data.Aeson (ToJSON, encode, eitherDecode)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
@@ -83,3 +87,42 @@ extractAssistantContent ChatCompletionResponse{choices} =
   case choices of
     (ChatChoice{message = Just Message{content}}:_) -> Just (messageContentText content)
     _ -> Nothing
+
+messageListHooks :: BChan TuiEvent -> [Message] -> ClientHooks
+messageListHooks chan msgs =
+  emptyClientHooks
+    { onRequest = Just (\_ -> writeBChan chan (MessageListSynced msgs))
+    , onResponse = Just (\_ _ body ->
+        case eitherDecode body :: Either String ChatCompletionResponse of
+          Left _ -> pure ()
+          Right resp ->
+            case extractAssistantContent resp of
+              Nothing -> pure ()
+              Just contentText ->
+                writeBChan chan (MessageListSynced (msgs <> [assistantMessage contentText]))
+        )
+    }
+
+withMessageListHooks :: BChan TuiEvent -> [Message] -> ClientHooks -> ClientHooks
+withMessageListHooks chan msgs hooks =
+  mergeClientHooks hooks (messageListHooks chan msgs)
+
+mergeClientHooks :: ClientHooks -> ClientHooks -> ClientHooks
+mergeClientHooks left right =
+  ClientHooks
+    { onRequest = mergeReq (onRequest left) (onRequest right)
+    , onResponse = mergeResp (onResponse left) (onResponse right)
+    , onError = mergeErr (onError left) (onError right)
+    }
+  where
+    mergeReq Nothing r = r
+    mergeReq l Nothing = l
+    mergeReq (Just f) (Just g) = Just (\req -> f req >> g req)
+
+    mergeResp Nothing r = r
+    mergeResp l Nothing = l
+    mergeResp (Just f) (Just g) = Just (\status headers body -> f status headers body >> g status headers body)
+
+    mergeErr Nothing r = r
+    mergeErr l Nothing = l
+    mergeErr (Just f) (Just g) = Just (\err -> f err >> g err)

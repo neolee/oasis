@@ -33,6 +33,7 @@ import Oasis.Tui.Actions.Common
   , buildRequestContext
   , selectBaseUrl
   , extractAssistantContent
+  , withMessageListHooks
   )
 import Oasis.Tui.Render.Output
   ( mdConcat
@@ -53,6 +54,7 @@ runPartialModeAction = do
     let modelOverride = selectedModel st
         params = chatParams st
         useBeta = betaUrlSetting st
+        chan = eventChan st
     startRunner "Running partial-mode runner..."
     runInBackground st $ do
       let modelId = resolveModelId provider modelOverride
@@ -63,7 +65,8 @@ runPartialModeAction = do
           reqBase = defaultChatRequest modelId messages
           reqBody = applyChatParams params reqBase
           reqCtx = buildRequestContext (buildChatUrl (selectBaseUrl provider useBeta)) reqBody
-      result <- sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody useBeta
+          hooks = withMessageListHooks chan messages emptyClientHooks
+      result <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody useBeta
       let (statusMsg, outputMsg) =
             case parseRawResponseStrictLocal result of
               Left err ->
@@ -87,6 +90,7 @@ runPrefixCompletionAction = do
     let modelOverride = selectedModel st
         params = chatParams st
         useBeta = betaUrlSetting st
+        chan = eventChan st
     startRunner "Running prefix-completion runner..."
     runInBackground st $ do
       let modelId = resolveModelId provider modelOverride
@@ -117,7 +121,8 @@ runPrefixCompletionAction = do
             }
           reqBody = applyChatParams params reqBase
           reqCtx = buildRequestContext (buildChatUrl (selectBaseUrl provider useBeta)) reqBody
-      result <- sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody useBeta
+          hooks = withMessageListHooks chan messages emptyClientHooks
+      result <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody useBeta
       let (statusMsg, outputMsg) =
             case parseRawResponseStrictLocal result of
               Left err ->
