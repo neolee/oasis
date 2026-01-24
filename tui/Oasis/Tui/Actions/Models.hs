@@ -8,7 +8,6 @@ module Oasis.Tui.Actions.Models
 
 import Relude
 import Brick.Types (EventM)
-import Control.Monad.State.Class (get)
 import qualified Data.List as List
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
@@ -30,11 +29,9 @@ import Oasis.Runner.GetModels (runGetModels)
 import qualified Oasis.Runner.Embeddings as Embeddings
 import qualified Oasis.Runner.Responses as Responses
 import Oasis.Tui.Actions.Common
-  ( resolveSelectedProvider
-  , startRunner
+  ( runProviderAction
   , buildRequestContext
   , encodeJsonText
-  , runWithDebug
   , buildDebugInfo
   , jsonRequestHeaders
   , modelsRequestHeaders
@@ -53,15 +50,12 @@ import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
 import Oasis.Types (Config(..), Provider(..), RequestResponse(..))
 
 runResponsesAction :: Text -> EventM Name AppState ()
-runResponsesAction inputText = do
-  st <- get
-  mResolved <- resolveSelectedProvider
-  forM_ mResolved $ \(provider, apiKey) -> do
+runResponsesAction inputText =
+  runProviderAction "Running responses runner..." $ \st provider apiKey -> do
     let modelOverride = selectedModel st
         params = Responses.emptyResponsesParams
         providerName = fromMaybe "-" (selectedProvider st)
-    startRunner "Running responses runner..."
-    let modelId = resolveModelId provider modelOverride
+        modelId = resolveModelId provider modelOverride
         reqBody = buildResponsesRequest modelId params inputText
         reqJson = encodeJsonText reqBody
         info = buildDebugInfo providerName modelId (buildResponsesUrl (base_url provider)) (jsonRequestHeaders apiKey)
@@ -87,16 +81,13 @@ runResponsesAction inputText = do
                               )
                         in ("Responses runner completed.", output)
               pure (ResponsesCompleted statusMsg outputMsg)
-    runWithDebug info reqJson handler
+    pure (info, reqJson, handler)
 
 runModelsAction :: EventM Name AppState ()
-runModelsAction = do
-  st <- get
-  mResolved <- resolveSelectedProvider
-  forM_ mResolved $ \(provider, apiKey) -> do
+runModelsAction =
+  runProviderAction "Running models runner..." $ \st provider apiKey -> do
     let providerName = fromMaybe "-" (selectedProvider st)
-    startRunner "Running models runner..."
-    let reqCtx = RequestContext (buildModelsUrl (base_url provider)) ""
+        reqCtx = RequestContext (buildModelsUrl (base_url provider)) ""
         info = buildDebugInfo providerName "-" (buildModelsUrl (base_url provider)) (modelsRequestHeaders apiKey)
         handler _ = Right $ do
           result <- runGetModels provider apiKey
@@ -111,18 +102,15 @@ runModelsAction = do
                           )
                     in ("Models runner completed.", output)
           pure (ModelsCompleted statusMsg outputMsg)
-    runWithDebug info "" handler
+    pure (info, "", handler)
 
 runEmbeddingsAction :: Text -> EventM Name AppState ()
-runEmbeddingsAction inputText = do
-  st <- get
-  mResolved <- resolveSelectedProvider
-  forM_ mResolved $ \(provider, apiKey) -> do
+runEmbeddingsAction inputText =
+  runProviderAction "Running embeddings runner..." $ \st provider apiKey -> do
     let modelOverride = selectedModel st
         params = Embeddings.emptyEmbeddingParams
         providerName = fromMaybe "-" (selectedProvider st)
-    startRunner "Running embeddings runner..."
-    let modelId = resolveEmbeddingModelId provider modelOverride
+        modelId = resolveEmbeddingModelId provider modelOverride
         reqBody = buildEmbeddingsRequest modelId params inputText
         reqJson = encodeJsonText reqBody
         info = buildDebugInfo providerName modelId (buildEmbeddingsUrl (base_url provider)) (jsonRequestHeaders apiKey)
@@ -152,7 +140,7 @@ runEmbeddingsAction inputText = do
                             )
                       in ("Embeddings runner completed.", output)
             pure (EmbeddingsCompleted statusMsg outputMsg)
-    runWithDebug info reqJson handler
+    pure (info, reqJson, handler)
 
 buildResponsesRequest :: Text -> Responses.ResponsesParams -> Text -> ResponsesRequest
 buildResponsesRequest modelId params inputText =

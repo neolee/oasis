@@ -6,7 +6,6 @@ module Oasis.Tui.Actions.Completions
 
 import Relude
 import Brick.Types (EventM)
-import Control.Monad.State.Class (get)
 import Oasis.Client.OpenAI
   ( ChatCompletionRequest(..)
   , CompletionRequest(..)
@@ -22,11 +21,9 @@ import Oasis.Client.OpenAI
 import Oasis.Client.OpenAI.Param (applyChatParams)
 import Oasis.Model (resolveModelId)
 import Oasis.Tui.Actions.Common
-  ( resolveSelectedProvider
-  , startRunner
+  ( runProviderAction
   , buildRequestContext
   , encodeJsonText
-  , runWithDebug
   , buildDebugInfo
   , jsonRequestHeaders
   , decodeJsonText
@@ -47,17 +44,14 @@ import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
 import Oasis.Types (Message(..), MessageContent(..), StopParam(..))
 
 runPartialModeAction :: EventM Name AppState ()
-runPartialModeAction = do
-  st <- get
-  mResolved <- resolveSelectedProvider
-  forM_ mResolved $ \(provider, apiKey) -> do
+runPartialModeAction =
+  runProviderAction "Running partial-mode runner..." $ \st provider apiKey -> do
     let modelOverride = selectedModel st
         params = chatParams st
         useBeta = betaUrlSetting st
         chan = eventChan st
         providerName = fromMaybe "-" (selectedProvider st)
-    startRunner "Running partial-mode runner..."
-    let modelId = resolveModelId provider modelOverride
+        modelId = resolveModelId provider modelOverride
         messages =
           [ Message "user" (ContentText "请对“春天来了，大地”这句话进行续写，来表达春天的美好和作者的喜悦之情") Nothing Nothing Nothing Nothing
           , Message "assistant" (ContentText "春天来了，大地") Nothing Nothing (Just True) (Just True)
@@ -93,20 +87,17 @@ runPartialModeAction = do
                               )
                         in ("Partial-mode runner completed.", output)
               pure (PartialModeCompleted statusMsg outputMsg)
-    runWithDebug info reqJson handler
+    pure (info, reqJson, handler)
 
 runPrefixCompletionAction :: EventM Name AppState ()
-runPrefixCompletionAction = do
-  st <- get
-  mResolved <- resolveSelectedProvider
-  forM_ mResolved $ \(provider, apiKey) -> do
+runPrefixCompletionAction =
+  runProviderAction "Running prefix-completion runner..." $ \st provider apiKey -> do
     let modelOverride = selectedModel st
         params = chatParams st
         useBeta = betaUrlSetting st
         chan = eventChan st
         providerName = fromMaybe "-" (selectedProvider st)
-    startRunner "Running prefix-completion runner..."
-    let modelId = resolveModelId provider modelOverride
+        modelId = resolveModelId provider modelOverride
         messages =
           [ Message "user" (ContentText "Please write quick sort code") Nothing Nothing Nothing Nothing
           , Message "assistant" (ContentText "```python\n") Nothing Nothing (Just True) (Just True)
@@ -162,18 +153,15 @@ runPrefixCompletionAction = do
                               )
                         in ("Prefix-completion runner completed.", output)
               pure (PrefixCompletionCompleted statusMsg outputMsg)
-    runWithDebug info reqJson handler
+    pure (info, reqJson, handler)
 
 runFimCompletionAction :: EventM Name AppState ()
-runFimCompletionAction = do
-  st <- get
-  mResolved <- resolveSelectedProvider
-  forM_ mResolved $ \(provider, apiKey) -> do
+runFimCompletionAction =
+  runProviderAction "Running fim-completion runner..." $ \st provider apiKey -> do
     let modelOverride = selectedModel st
         useBeta = betaUrlSetting st
         providerName = fromMaybe "-" (selectedProvider st)
-    startRunner "Running fim-completion runner..."
-    let modelId = resolveModelId provider modelOverride
+        modelId = resolveModelId provider modelOverride
         reqBody = CompletionRequest
           { model = modelId
           , prompt = "def fib(a):"
@@ -214,5 +202,5 @@ runFimCompletionAction = do
                               )
                         in ("FIM-completion runner completed.", output)
               pure (FimCompletionCompleted statusMsg outputMsg)
-    runWithDebug info reqJson handler
+    pure (info, reqJson, handler)
 

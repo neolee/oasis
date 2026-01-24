@@ -2,6 +2,7 @@ module Oasis.Tui.Actions.Common
   ( resolveSelectedProvider
   , startRunner
   , runInBackground
+  , runProviderAction
   , buildRequestContext
   , encodeJsonText
   , openDebugDialog
@@ -71,6 +72,18 @@ runInBackground st action =
     let chan = eventChan st
     evt <- action
     writeBChan chan evt
+
+runProviderAction
+  :: Text
+  -> (AppState -> Provider -> Text -> EventM Name AppState (DebugRequestInfo, Text, DebugRequestHandler))
+  -> EventM Name AppState ()
+runProviderAction msg build = do
+  st <- get
+  mResolved <- resolveSelectedProvider
+  forM_ mResolved $ \(provider, apiKey) -> do
+    startRunner msg
+    (info, reqJson, handler) <- build st provider apiKey
+    runWithDebug info reqJson handler
 
 encodeJsonText :: ToJSON a => a -> Text
 encodeJsonText = TE.decodeUtf8Lenient . BL.toStrict . encode

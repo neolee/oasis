@@ -10,7 +10,7 @@ module Oasis.Tui.Actions.Chat
 import Relude
 import Brick.BChan (BChan, writeBChan)
 import Brick.Types (EventM)
-import Control.Monad.State.Class (get, modify)
+import Control.Monad.State.Class (modify)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
@@ -36,11 +36,9 @@ import Oasis.Client.OpenAI.Param (applyChatParams)
 import Oasis.Chat.Message (assistantMessage, userMessage, systemMessage)
 import Oasis.Model (resolveModelId)
 import Oasis.Tui.Actions.Common
-  ( resolveSelectedProvider
-  , startRunner
+  ( runProviderAction
   , buildRequestContext
   , encodeJsonText
-  , runWithDebug
   , buildDebugInfo
   , jsonRequestHeaders
   , sseRequestHeaders
@@ -70,17 +68,14 @@ import Network.HTTP.Types.Status (Status, statusCode)
 import Data.CaseInsensitive (original)
 
 runBasicAction :: Text -> EventM Name AppState ()
-runBasicAction prompt = do
-  st <- get
-  mResolved <- resolveSelectedProvider
-  forM_ mResolved $ \(provider, apiKey) -> do
+runBasicAction prompt =
+  runProviderAction "Running basic runner..." $ \st provider apiKey -> do
     let modelOverride = selectedModel st
         params = chatParams st
         useBeta = betaUrlSetting st
         chan = eventChan st
         providerName = fromMaybe "-" (selectedProvider st)
-    startRunner "Running basic runner..."
-    let modelId = resolveModelId provider modelOverride
+        modelId = resolveModelId provider modelOverride
         baseUrl = selectBaseUrl provider useBeta
         reqBody = applyChatParams params (defaultChatRequest modelId [userMessage prompt])
         reqJson = encodeJsonText reqBody
@@ -113,20 +108,17 @@ runBasicAction prompt = do
                               )
                         in ("Basic runner completed.", output)
               pure (BasicCompleted statusMsg outputMsg)
-    runWithDebug info reqJson handler
+    pure (info, reqJson, handler)
 
 runHooksAction :: Text -> EventM Name AppState ()
-runHooksAction prompt = do
-  st <- get
-  mResolved <- resolveSelectedProvider
-  forM_ mResolved $ \(provider, apiKey) -> do
+runHooksAction prompt =
+  runProviderAction "Running hooks runner..." $ \st provider apiKey -> do
     let modelOverride = selectedModel st
         params = chatParams st
         useBeta = betaUrlSetting st
         chan = eventChan st
         providerName = fromMaybe "-" (selectedProvider st)
-    startRunner "Running hooks runner..."
-    let modelId = resolveModelId provider modelOverride
+        modelId = resolveModelId provider modelOverride
         baseUrl = selectBaseUrl provider useBeta
         reqBody = applyChatParams params (defaultChatRequest modelId [userMessage prompt])
         reqJson = encodeJsonText reqBody
@@ -145,7 +137,7 @@ runHooksAction prompt = do
                   reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody'
               (statusMsg, outputMsg) <- runHooksWithLog hooks' provider apiKey useBeta reqCtx reqBody'
               pure (HooksCompleted statusMsg outputMsg)
-    runWithDebug info reqJson handler
+    pure (info, reqJson, handler)
 
 runStructuredJsonAction :: EventM Name AppState ()
 runStructuredJsonAction = runStructuredAction jsonObjectFormat "structured-json"
@@ -154,17 +146,14 @@ runStructuredSchemaAction :: EventM Name AppState ()
 runStructuredSchemaAction = runStructuredAction jsonSchemaFormat "structured-schema"
 
 runStructuredAction :: Value -> Text -> EventM Name AppState ()
-runStructuredAction responseFormat runnerLabel = do
-  st <- get
-  mResolved <- resolveSelectedProvider
-  forM_ mResolved $ \(provider, apiKey) -> do
+runStructuredAction responseFormat runnerLabel =
+  runProviderAction ("Running " <> runnerLabel <> " runner...") $ \st provider apiKey -> do
     let modelOverride = selectedModel st
         params = chatParams st
         useBeta = betaUrlSetting st
         chan = eventChan st
         providerName = fromMaybe "-" (selectedProvider st)
-    startRunner ("Running " <> runnerLabel <> " runner...")
-    let modelId = resolveModelId provider modelOverride
+        modelId = resolveModelId provider modelOverride
         reqMessages =
           [ systemMessage structuredSystemMessage
           , userMessage structuredQuestionText
@@ -212,7 +201,7 @@ runStructuredAction responseFormat runnerLabel = do
                               ]
                         in (runnerLabel <> " runner completed.", output)
               pure (StructuredCompleted statusMsg outputMsg)
-    runWithDebug info reqJson handler
+    pure (info, reqJson, handler)
 
 handleStructuredChunk :: BChan TuiEvent -> IORef.IORef Text -> ChatCompletionStreamChunk -> IO ()
 handleStructuredChunk chan accumRef chunk =
@@ -238,17 +227,14 @@ runChatInitAction =
     })
 
 runChatAction :: [Message] -> EventM Name AppState ()
-runChatAction messages = do
-  st <- get
-  mResolved <- resolveSelectedProvider
-  forM_ mResolved $ \(provider, apiKey) -> do
+runChatAction messages =
+  runProviderAction "Running chat..." $ \st provider apiKey -> do
     let modelOverride = selectedModel st
         params = chatParams st
         useBeta = betaUrlSetting st
         chan = eventChan st
         providerName = fromMaybe "-" (selectedProvider st)
-    startRunner "Running chat..."
-    let modelId = resolveModelId provider modelOverride
+        modelId = resolveModelId provider modelOverride
         reqBase = defaultChatRequest modelId messages
         reqBody = applyChatParams params (setChatStream True reqBase)
         reqJson = encodeJsonText reqBody
@@ -268,7 +254,7 @@ runChatAction messages = do
               case result of
                 Left err -> pure (ChatCompleted ("Chat failed: " <> renderClientError err))
                 Right _ -> pure (ChatCompleted "Chat completed.")
-    runWithDebug info reqJson handler
+    pure (info, reqJson, handler)
 
 handleChatChunk :: BChan TuiEvent -> ChatCompletionStreamChunk -> IO ()
 handleChatChunk chan chunk =

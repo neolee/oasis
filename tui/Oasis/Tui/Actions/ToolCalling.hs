@@ -4,7 +4,6 @@ module Oasis.Tui.Actions.ToolCalling
 
 import Relude
 import Brick.Types (EventM)
-import Control.Monad.State.Class (get)
 import qualified Data.Aeson as Aeson
 import Data.Aeson (Value, eitherDecode, decode, (.=))
 import qualified Data.Aeson.KeyMap as KM
@@ -27,10 +26,8 @@ import Oasis.Client.OpenAI.Param (applyChatParams)
 import Oasis.Model (resolveModelId)
 import Oasis.Service.Amap (getWeatherText)
 import Oasis.Tui.Actions.Common
-  ( resolveSelectedProvider
-  , startRunner
+  ( runProviderAction
   , encodeJsonText
-  , runWithDebug
   , buildDebugInfo
   , selectBaseUrl
   , withMessageListHooks
@@ -51,17 +48,14 @@ import Oasis.Types
   )
 
 runToolCallingAction :: EventM Name AppState ()
-runToolCallingAction = do
-  st <- get
-  mResolved <- resolveSelectedProvider
-  forM_ mResolved $ \(provider, apiKey) -> do
+runToolCallingAction =
+  runProviderAction "Running tool-calling runner..." $ \st provider apiKey -> do
     let modelOverride = selectedModel st
         params = chatParams st
         useBeta = betaUrlSetting st
         chan = eventChan st
         providerName = fromMaybe "-" (selectedProvider st)
-    startRunner "Running tool-calling runner..."
-    let modelId = resolveModelId provider modelOverride
+        modelId = resolveModelId provider modelOverride
         tools = buildTools
         systemMsg = T.unlines
           [ "你是一个很有帮助的助手。"
@@ -187,7 +181,7 @@ runToolCallingAction = do
                                           ]
                                     in pure (ToolCallingCompleted "Tool-calling runner failed." output)
                                   Right action -> action
-    runWithDebug info0 reqJson0 handler0
+    pure (info0, reqJson0, handler0)
 
 decodeChatResponse :: BL.ByteString -> Either Text ChatCompletionResponse
 decodeChatResponse body =
