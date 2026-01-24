@@ -318,7 +318,7 @@ cancelDebugRequest =
     , debugRequestError = Nothing
     , debugRequestInfo = Nothing
     , debugPendingAction = Nothing
-    , activeList = debugDialogReturnFocus s
+    , activeList = RunnerList
     , statusText = "Debug request cancelled."
     })
 

@@ -43,6 +43,7 @@ import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
 import qualified Oasis.Types as Types
 import Oasis.Types
   ( Message(..)
+  , messageContentText
   , Tool(..)
   , ToolFunctionSpec(..)
   , ToolCall(..)
@@ -145,12 +146,16 @@ runToolCallingAction = do
                                       else Right $ do
                                         let reqMessages1 = messages reqBody1'
                                             hooks1 = withMessageListHooks chan reqMessages1 emptyClientHooks
+                                            toolSection' =
+                                              case lastToolContent reqMessages1 of
+                                                Nothing -> toolSection
+                                                Just tmsg -> mdTextSection "Tool Result" tmsg
                                         secondResp <- sendChatCompletionRawWithHooks hooks1 provider apiKey reqBody1' useBeta
                                         case secondResp of
                                           Left err ->
                                             let output = mdConcat
                                                   [ firstSection
-                                                  , toolSection
+                                                  , toolSection'
                                                   , mdTextSection "Final Assistant" ("Error: " <> renderClientError err)
                                                   ]
                                             in pure (ToolCallingCompleted "Tool-calling runner failed." output)
@@ -159,7 +164,7 @@ runToolCallingAction = do
                                               Left err ->
                                                 let output = mdConcat
                                                       [ firstSection
-                                                      , toolSection
+                                                      , toolSection'
                                                       , mdTextSection "Final Assistant" ("Error: " <> err)
                                                       ]
                                                 in pure (ToolCallingCompleted "Tool-calling runner failed." output)
@@ -167,7 +172,7 @@ runToolCallingAction = do
                                                 let finalText = fromMaybe "No assistant message returned." (extractAssistantContent response2)
                                                     output = mdConcat
                                                       [ firstSection
-                                                      , toolSection
+                                                      , toolSection'
                                                       , mdTextSection "Final Assistant" finalText
                                                       ]
                                                 in pure (ToolCallingCompleted "Tool-calling runner completed." output)
@@ -253,3 +258,9 @@ getLocation (Aeson.Object obj) =
     Just (Aeson.String t) -> Just t
     _ -> Nothing
 getLocation _ = Nothing
+
+lastToolContent :: [Message] -> Maybe Text
+lastToolContent msgs =
+  case reverse [messageContentText (content m) | m <- msgs, role m == "tool"] of
+    (t:_) | not (T.null (T.strip t)) -> Just t
+    _ -> Nothing
