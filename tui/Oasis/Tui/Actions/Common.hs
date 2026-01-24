@@ -100,8 +100,7 @@ buildDebugInfo providerName modelName endpoint headers =
     }
 
 formatHeaders :: [(HeaderName, BS8.ByteString)] -> [Text]
-formatHeaders headers =
-  map render headers
+formatHeaders = map render
   where
     render (name, value) =
       let nameText = TE.decodeUtf8Lenient (original name)

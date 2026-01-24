@@ -36,16 +36,12 @@ keyHistory :: Text
 keyHistory = "l"
 
 tipsFor :: AppState -> Text
-tipsFor st =
-  if verboseRoleDialogOpen st
-    then "[↑/↓] move  [enter] select  [esc] cancel"
-    else if isJust (verboseDeleteConfirm st)
-      then "[y] confirm  [n] cancel"
-      else if paramDialogOpen st
-    then "[space] toggle " <> commonInputTips
-    else if modelInputDialogOpen st
-    then commonInputTips
-    else case paneKind (activeList st) of
+tipsFor st
+  | verboseRoleDialogOpen st = "[↑/↓] move  [enter] select  [esc] cancel"
+  | isJust (verboseDeleteConfirm st) = "[y] confirm  [n] cancel"
+  | paramDialogOpen st = "[space] toggle " <> commonInputTips
+  | modelInputDialogOpen st = commonInputTips
+  | otherwise = case paneKind (activeList st) of
       ListPane | activeList st == VerboseMessageList -> "[↑/↓] move  [a] append  [i] insert  [e] edit  [del/bs] delete"
       ListPane -> "[↑/↓] move  [enter] select"
       OutputPane -> "[↓/↑/→/←] scroll  [ctrl-v/alt-v/alt+,/alt+.] page  [x] lab"

@@ -92,17 +92,11 @@ appEvent (VtyEvent ev) =
             then openRoleDialogForAppend
             else openParamDialog
         Vty.EvKey (Vty.KChar 'i') [] ->
-          if activeList st == VerboseMessageList
-            then openRoleDialogForInsert
-            else pure ()
+          when (activeList st == VerboseMessageList) openRoleDialogForInsert
         Vty.EvKey Vty.KDel [] ->
-          if activeList st == VerboseMessageList
-            then startDeleteConfirm
-            else pure ()
+          when (activeList st == VerboseMessageList) startDeleteConfirm
         Vty.EvKey Vty.KBS [] ->
-          if activeList st == VerboseMessageList
-            then startDeleteConfirm
-            else pure ()
+          when (activeList st == VerboseMessageList) startDeleteConfirm
         Vty.EvKey (Vty.KChar 'x') [] -> toggleTestPane
         Vty.EvKey Vty.KEnter [] -> applySelection
         Vty.EvKey Vty.KUp [] -> handleUpDown (-1)

@@ -6,7 +6,7 @@ cradle:
     - path: "cli/Main.hs"
       component: "oasis:exe:oasis-cli"
 
-    - path: "tui/Main.hs"
+    - path: "tui"
       component: "oasis:exe:oasis-tui"
 
     - path: "tools/VtyWidthTable/Main.hs"
