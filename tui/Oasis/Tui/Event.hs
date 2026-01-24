@@ -261,6 +261,7 @@ handlePromptEvent ev =
     Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
       st <- get
       copyAllFromEditor (promptEditor st)
+    Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restorePromptEditor
     Vty.EvKey Vty.KEnter [] -> submitPrompt
     Vty.EvKey Vty.KEsc [] -> cancelPrompt
     _ -> do
@@ -279,9 +280,9 @@ handleDebugRequestEvent ev =
     Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
       st <- get
       copyAllFromEditor (debugRequestEditor st)
+    Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restoreDebugRequest
     Vty.EvKey Vty.KEnter [] -> submitDebugRequest
     Vty.EvKey Vty.KEsc [] -> cancelDebugRequest
-    Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restoreDebugRequest
     _ -> do
       st <- get
       (editor', _) <- nestEventM (debugRequestEditor st) (handleEditorEvent (VtyEvent ev))
@@ -341,6 +342,30 @@ restoreDebugRequest = do
     , debugRequestError = Nothing
     })
 
+restorePromptEditor :: EventM Name AppState ()
+restorePromptEditor = do
+  st <- get
+  modify (\s -> s
+    { promptEditor = editor PromptEditor (Just 5) (promptDefault st)
+    , promptPristine = True
+    })
+
+restoreChatInput :: EventM Name AppState ()
+restoreChatInput =
+  modify (\s -> s { chatInputEditor = editor ChatInputEditor (Just 3) "" })
+
+restoreVerboseContent :: EventM Name AppState ()
+restoreVerboseContent = do
+  st <- get
+  case verboseEditIndex st of
+    Nothing -> pure ()
+    Just idx ->
+      case drop idx (chatMessages st) of
+        (msg:_) ->
+          let original = messageContentText (content msg)
+          in modify (\s -> s { verboseContentEditor = editor VerboseContentEditor (Just 8) original })
+        _ -> pure ()
+
 applyDebugRequestUpdate :: Text -> EventM Name AppState ()
 applyDebugRequestUpdate payload =
   case (decodeJsonText payload :: Either Text ChatCompletionRequest) of
@@ -393,14 +418,26 @@ handleParamEditorEvent ev = do
 handleParamDialogEvent :: Vty.Event -> EventM Name AppState ()
 handleParamDialogEvent ev =
   case ev of
+    Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> copyParamField
+    Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restoreParamDialog
     Vty.EvKey Vty.KEnter [] -> submitParamDialog
     Vty.EvKey Vty.KEsc [] -> cancelParamDialog
     Vty.EvKey Vty.KUp [] -> moveParamFocus (-1)
     Vty.EvKey Vty.KDown [] -> moveParamFocus 1
-    Vty.EvKey (Vty.KChar '\t') [] -> moveParamFocus 1
-    Vty.EvKey Vty.KBackTab [] -> moveParamFocus (-1)
     Vty.EvKey (Vty.KChar ' ') [] -> toggleBetaWhenFocused
     _ -> handleParamEditorEvent ev
+
+copyParamField :: EventM Name AppState ()
+copyParamField = do
+  st <- get
+  case paramDialogFocus st of
+    ParamBetaUrl ->
+      let val = if paramDialogBetaValue st then "true" else "false"
+      in copyAllFromEditor (editor ParamBetaUrlEditor (Just 1) val)
+    ParamTemperature -> copyAllFromEditor (paramTemperatureEditor st)
+    ParamTopP -> copyAllFromEditor (paramTopPEditor st)
+    ParamMaxCompletionTokens -> copyAllFromEditor (paramMaxCompletionTokensEditor st)
+    ParamStop -> copyAllFromEditor (paramStopEditor st)
 
 toggleBetaWhenFocused :: EventM Name AppState ()
 toggleBetaWhenFocused = do
@@ -434,20 +471,13 @@ handleChatInputEvent ev =
     Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
       st <- get
       copyAllFromEditor (chatInputEditor st)
-    Vty.EvKey Vty.KEnter [] -> insertChatNewline ev
-    Vty.EvKey (Vty.KChar 's') [Vty.MCtrl] -> submitChatInput
+    Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restoreChatInput
+    Vty.EvKey Vty.KEnter [] -> submitChatInput
     Vty.EvKey Vty.KEsc [] -> cancelChatInput
     _ -> do
       st <- get
       (editor', _) <- nestEventM (chatInputEditor st) (handleEditorEvent (VtyEvent ev))
       modify (\s -> s { chatInputEditor = editor' })
-
-insertChatNewline :: Vty.Event -> EventM Name AppState ()
-insertChatNewline _ = do
-  st <- get
-  let newlineEvent = Vty.EvKey Vty.KEnter []
-  (editor', _) <- nestEventM (chatInputEditor st) (handleEditorEvent (VtyEvent newlineEvent))
-  modify (\s -> s { chatInputEditor = editor' })
 
 cancelChatInput :: EventM Name AppState ()
 cancelChatInput =
@@ -582,7 +612,8 @@ handleVerboseContentEvent ev =
     Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
       st <- get
       copyAllFromEditor (verboseContentEditor st)
-    Vty.EvKey (Vty.KChar 's') [Vty.MCtrl] -> saveVerboseContent
+    Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restoreVerboseContent
+    Vty.EvKey Vty.KEnter [] -> saveVerboseContent
     Vty.EvKey Vty.KEsc [] -> cancelVerboseContent
     _ -> do
       st <- get
@@ -700,6 +731,23 @@ openParamDialog = do
     , paramTopPEditor = editor ParamTopPEditor (Just 1) topPText
     , paramMaxCompletionTokensEditor = editor ParamMaxCompletionTokensEditor (Just 1) maxTokensText
     , paramStopEditor = editor ParamStopEditor (Just 1) stopText
+    })
+
+restoreParamDialog :: EventM Name AppState ()
+restoreParamDialog = do
+  st <- get
+  let ChatParams{..} = chatParams st
+      tempText = maybe "" show paramTemperature
+      topPText = maybe "" show paramTopP
+      maxTokensText = maybe "" show paramMaxCompletionTokens
+      stopText = maybe "" renderStopParam paramStop
+  modify (\s -> s
+    { paramDialogBetaValue = betaUrlSetting s
+    , paramTemperatureEditor = editor ParamTemperatureEditor (Just 1) tempText
+    , paramTopPEditor = editor ParamTopPEditor (Just 1) topPText
+    , paramMaxCompletionTokensEditor = editor ParamMaxCompletionTokensEditor (Just 1) maxTokensText
+    , paramStopEditor = editor ParamStopEditor (Just 1) stopText
+    , paramDialogError = Nothing
     })
 
 renderStopParam :: StopParam -> Text

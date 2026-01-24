@@ -207,13 +207,11 @@ drawUI st =
                 borderWithLabel (txt "debug: request preview") $
                   padAll 1 $
                     vBox
-                      ( infoLines
-                      <> [ padTop (Pad 1) $ renderEditor (txt . unlines) True (debugRequestEditor st')
-                         , padTop (Pad 1) $
-                             txt "[Enter] Send  [Esc] Cancel  [Ctrl+R] Restore"
+                       ( infoLines
+                       <> [ padTop (Pad 1) $ renderEditor (txt . unlines) True (debugRequestEditor st')
                          ]
-                      <> errorLines
-                      )
+                       <> errorLines
+                       )
 
     roleDialog st' =
       centerLayer $
