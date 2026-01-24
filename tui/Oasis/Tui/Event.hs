@@ -21,14 +21,14 @@ import qualified Graphics.Vty as Vty
 import System.Process (CreateProcess(..), StdStream(..), createProcess, proc, waitForProcess)
 import System.IO (Handle, hClose, hPutStr, hSetEncoding, utf8)
 import Oasis.Client.OpenAI.Param (ChatParams(..))
-import Oasis.Tui.Actions.Models ( providerModels )
+import Oasis.Tui.Actions.Models ( providerModels, customModelItem )
 import Oasis.Tui.Actions.Chat (runChatAction)
 import Oasis.Tui.Actions.Common (openDebugDialog, runInBackground, decodeJsonText)
 import Oasis.Client.OpenAI (ChatCompletionRequest(..))
 import Oasis.Tui.Registry (RunnerAction(..), RunnerSpec(..), lookupRunner)
 import Oasis.Tui.State (AppState(..), Name(..), ParamField(..), TuiEvent(..))
 import Oasis.Chat.Message (assistantMessage, userMessage)
-import Oasis.Types (Message(..), MessageContent(..), StopParam(..), messageContentText)
+import Oasis.Types (Config, Message(..), MessageContent(..), StopParam(..), messageContentText)
 
 appEvent :: BrickEvent Name TuiEvent -> EventM Name AppState ()
 appEvent (AppEvent evt) =
@@ -64,6 +64,8 @@ appEvent (VtyEvent ev) =
           then handleTestPaneEvent ev
           else if paramDialogOpen st
           then handleParamDialogEvent ev
+          else if modelInputDialogOpen st
+            then handleModelInputEvent ev
           else if promptDialogOpen st
             then handlePromptEvent ev
             else if debugDialogOpen st
@@ -274,6 +276,20 @@ handlePromptEvent ev =
       let pristine' = not (isPromptInputStart ev) && promptPristine st
       modify (\s -> s { promptEditor = editor', promptPristine = pristine' })
 
+handleModelInputEvent :: Vty.Event -> EventM Name AppState ()
+handleModelInputEvent ev =
+  case ev of
+    Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
+      st <- get
+      copyAllFromEditor (modelInputEditor st)
+    Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restoreModelInput
+    Vty.EvKey Vty.KEnter [] -> submitModelInput
+    Vty.EvKey Vty.KEsc [] -> cancelModelInput
+    _ -> do
+      st <- get
+      (editor', _) <- nestEventM (modelInputEditor st) (handleEditorEvent (VtyEvent ev))
+      modify (\s -> s { modelInputEditor = editor' })
+
 handleDebugRequestEvent :: Vty.Event -> EventM Name AppState ()
 handleDebugRequestEvent ev =
   case ev of
@@ -353,6 +369,11 @@ restorePromptEditor = do
 restoreChatInput :: EventM Name AppState ()
 restoreChatInput =
   modify (\s -> s { chatInputEditor = editor ChatInputEditor (Just 3) "" })
+
+restoreModelInput :: EventM Name AppState ()
+restoreModelInput = do
+  st <- get
+  modify (\s -> s { modelInputEditor = editor ModelInputEditor (Just 1) (modelInputDefault st) })
 
 restoreVerboseContent :: EventM Name AppState ()
 restoreVerboseContent = do
@@ -733,6 +754,17 @@ openParamDialog = do
     , paramStopEditor = editor ParamStopEditor (Just 1) stopText
     })
 
+openModelInputDialog :: EventM Name AppState ()
+openModelInputDialog = do
+  st <- get
+  let defaultText = fromMaybe "" (selectedModel st)
+  modify (\s -> s
+    { modelInputDialogOpen = True
+    , modelInputDefault = defaultText
+    , modelInputEditor = editor ModelInputEditor (Just 1) defaultText
+    , activeList = ModelInputEditor
+    })
+
 restoreParamDialog :: EventM Name AppState ()
 restoreParamDialog = do
   st <- get
@@ -780,6 +812,41 @@ cancelPrompt =
     { promptDialogOpen = False
     , activeList = RunnerList
     , statusText = "Prompt cancelled."
+    })
+
+submitModelInput :: EventM Name AppState ()
+submitModelInput = do
+  st <- get
+  let raw = editorTextRaw (modelInputEditor st)
+      trimmed = T.strip raw
+  if T.null trimmed
+    then cancelModelInput
+    else if trimmed == customModelItem
+      then modify (\s -> s { statusText = "Invalid model name." })
+      else do
+        let customModels' = List.nub (customModels st <> [trimmed])
+        let models = case selectedProvider st of
+              Nothing -> customModels'
+              Just providerName -> buildModelItems (config st) providerName customModels'
+        let modelListBase = L.list ModelList (V.fromList models) 1
+        let modelList' = case List.elemIndex trimmed models of
+              Nothing -> modelListBase
+              Just idx -> L.listMoveTo idx modelListBase
+        modify (\s -> s
+          { modelInputDialogOpen = False
+          , selectedModel = Just trimmed
+          , customModels = customModels'
+          , modelList = modelList'
+          , activeList = RunnerList
+          , statusText = "Model override: " <> trimmed
+          })
+
+cancelModelInput :: EventM Name AppState ()
+cancelModelInput =
+  modify (\s -> s
+    { modelInputDialogOpen = False
+    , activeList = ModelList
+    , statusText = "Model override cancelled."
     })
 
 submitParamDialog :: EventM Name AppState ()
@@ -905,6 +972,13 @@ isPromptInputStart = \case
   Vty.EvKey Vty.KDel _ -> True
   _ -> False
 
+buildModelItems :: Config -> Text -> [Text] -> [Text]
+buildModelItems cfg providerName customModels =
+  let baseModels = filter (/= customModelItem) (providerModels cfg providerName)
+      customModels' = filter (/= customModelItem) customModels
+      merged = List.nub (baseModels <> customModels')
+  in merged <> [customModelItem]
+
 applySelection :: EventM Name AppState ()
 applySelection = do
   st <- get
@@ -913,12 +987,14 @@ applySelection = do
       case L.listSelectedElement (providerList st) of
         Nothing -> pure ()
         Just (_, providerName) -> do
-          let models = providerModels (config st) providerName
+          let customModels' = []
+          let models = buildModelItems (config st) providerName customModels'
           let modelList' = L.list ModelList (V.fromList models) 1
           modify (\s -> s
             { selectedProvider = Just providerName
             , selectedModel = listToMaybe models
             , modelList = modelList'
+            , customModels = customModels'
             , activeList = ModelList
             , statusText = "Selected provider: " <> providerName
             })
@@ -926,11 +1002,13 @@ applySelection = do
       case L.listSelectedElement (modelList st) of
         Nothing -> pure ()
         Just (_, modelName) ->
-          modify (\s -> s
-            { selectedModel = Just modelName
-            , activeList = RunnerList
-            , statusText = "Selected model: " <> modelName
-            })
+          if modelName == customModelItem
+            then openModelInputDialog
+            else modify (\s -> s
+              { selectedModel = Just modelName
+              , activeList = RunnerList
+              , statusText = "Selected model: " <> modelName
+              })
     RunnerList ->
       case L.listSelectedElement (runnerList st) of
         Nothing -> pure ()

@@ -17,6 +17,9 @@ data PaneKind
   | OutputPane
   | InputPane
 
+commonInputTips :: Text
+commonInputTips = "[enter] submit  [esc] cancel  [ctrl-c] copy  [ctrl-r] restore"
+
 keyProvider :: Text
 keyProvider = "p"
 
@@ -39,12 +42,14 @@ tipsFor st =
     else if isJust (verboseDeleteConfirm st)
       then "[y] confirm  [n] cancel"
       else if paramDialogOpen st
-    then "[space] toggle  [enter] save  [esc] cancel  [ctrl-c] copy  [ctrl-r] restore"
+    then "[space] toggle " <> commonInputTips
+    else if modelInputDialogOpen st
+    then commonInputTips
     else case paneKind (activeList st) of
       ListPane | activeList st == VerboseMessageList -> "[↑/↓] move  [a] append  [i] insert  [e] edit  [del/bs] delete"
       ListPane -> "[↑/↓] move  [enter] select"
       OutputPane -> "[↓/↑/→/←] scroll  [ctrl-v/alt-v/alt+,/alt+.] page  [x] lab"
-      InputPane -> "[enter] submit  [esc] cancel  [ctrl-c] copy  [ctrl-r] restore"
+      InputPane -> commonInputTips
 
 paneKind :: Name -> PaneKind
 paneKind = \case
@@ -56,6 +61,7 @@ paneKind = \case
   MainViewport -> OutputPane
   ChatViewport -> OutputPane
   PromptEditor -> InputPane
+  ModelInputEditor -> InputPane
   ChatInputEditor -> InputPane
   VerboseContentEditor -> InputPane
   DebugRequestEditor -> InputPane

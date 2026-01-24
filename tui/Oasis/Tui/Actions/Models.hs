@@ -2,6 +2,7 @@ module Oasis.Tui.Actions.Models
   ( runResponsesAction
   , runModelsAction
   , runEmbeddingsAction
+  , customModelItem
   , providerModels
   ) where
 
@@ -198,4 +199,8 @@ providerModels cfg providerName =
   case M.lookup providerName (providers cfg) of
     Nothing -> []
     Just Provider{chat_model_id, coder_model_id, reasoner_model_id} ->
-      List.nub [chat_model_id, coder_model_id, reasoner_model_id]
+      let models = List.nub [chat_model_id, coder_model_id, reasoner_model_id]
+      in models <> [customModelItem]
+
+customModelItem :: Text
+customModelItem = "<···>"

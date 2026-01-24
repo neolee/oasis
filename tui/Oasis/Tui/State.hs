@@ -84,6 +84,7 @@ data Name
   | RunnerList
   | MainViewport
   | PromptEditor
+  | ModelInputEditor
   | ChatViewport
   | ChatInputEditor
   | VerboseMessageList
@@ -110,6 +111,7 @@ data AppState = AppState
   , eventChan :: BChan TuiEvent
   , providerList :: L.List Name Text
   , modelList :: L.List Name Text
+  , customModels :: [Text]
   , runnerList :: L.List Name Text
   , verboseMessageList :: L.List Name Message
   , activeList :: Name
@@ -138,6 +140,9 @@ data AppState = AppState
   , debugDialogReturnFocus :: Name
   , testPaneOpen :: Bool
   , promptDialogOpen :: Bool
+  , modelInputDialogOpen :: Bool
+  , modelInputDefault :: Text
+  , modelInputEditor :: Editor Text Name
   , promptDefault :: Text
   , promptPristine :: Bool
   , lastPrompt :: Text
@@ -172,6 +177,7 @@ mkState chan cfg providers models runners outputText statusText =
     , eventChan = chan
     , providerList = L.list ProviderList (V.fromList providers) 1
     , modelList = L.list ModelList (V.fromList models) 1
+    , customModels = []
     , runnerList = L.list RunnerList (V.fromList runners) 1
     , verboseMessageList = L.list VerboseMessageList V.empty 1
     , activeList = ProviderList
@@ -200,6 +206,9 @@ mkState chan cfg providers models runners outputText statusText =
     , debugDialogReturnFocus = MainViewport
     , testPaneOpen = False
     , promptDialogOpen = False
+    , modelInputDialogOpen = False
+    , modelInputDefault = ""
+    , modelInputEditor = editor ModelInputEditor (Just 1) ""
     , promptDefault = defaultPrompt
     , promptPristine = False
     , lastPrompt = defaultPrompt

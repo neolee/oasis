@@ -37,6 +37,8 @@ drawUI st =
          then [roleDialog st, baseUi]
          else if paramDialogOpen st
          then [paramDialog st, baseUi]
+         else if modelInputDialogOpen st
+           then [modelDialog st, baseUi]
          else if promptDialogOpen st
            then [promptDialog st, baseUi]
            else if debugDialogOpen st
@@ -163,6 +165,18 @@ drawUI st =
                   padAll 1 $
                     vBox
                       [ renderEditor (txt . unlines) True (promptEditor st')
+                      ]
+
+    modelDialog st' =
+      centerLayer $
+        hLimit 80 $
+          vLimit 8 $
+            withAttr (attrName "promptDialog") $
+              overrideAttr borderAttr (attrName "promptDialogBorder") $
+                borderWithLabel (txt "model override") $
+                  padAll 1 $
+                    vBox
+                      [ renderEditor (txt . unlines) True (modelInputEditor st')
                       ]
 
     paramDialog st' =
