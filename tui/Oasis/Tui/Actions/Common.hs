@@ -15,7 +15,6 @@ module Oasis.Tui.Actions.Common
   , decodeJsonText
   , parseRawResponseStrict
   , selectBaseUrl
-  , truncateText
   , extractAssistantContent
   , messageListHooks
   , withMessageListHooks
@@ -31,7 +30,6 @@ import Control.Monad.State.Class (get, modify)
 import Oasis.Config (resolveProvider)
 import Oasis.Tui.Render.Output (RequestContext(..))
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..), DebugRequestInfo(..), DebugRequestHandler)
-import Oasis.Tui.Util.Text (truncateTextDots)
 import Oasis.Types (Provider(..), Message(..), messageContentText)
 import Oasis.Chat.Message (assistantMessage)
 import Oasis.Client.OpenAI (ChatCompletionResponse(..), ChatChoice(..), ClientHooks(..), emptyClientHooks, ClientError, renderClientError)
@@ -183,9 +181,6 @@ selectBaseUrl Provider{base_url, beta_base_url} useBeta =
     nonEmpty t =
       let trimmed = T.strip t
       in if T.null trimmed then Nothing else Just trimmed
-
-truncateText :: Int -> Text -> Text
-truncateText = truncateTextDots
 
 extractAssistantContent :: ChatCompletionResponse -> Maybe Text
 extractAssistantContent ChatCompletionResponse{choices} =

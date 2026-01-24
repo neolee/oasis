@@ -1,6 +1,5 @@
 module Oasis.Tui.Render.MessageList
   ( renderMessageList
-  , messageListLine
   ) where
 
 import Relude

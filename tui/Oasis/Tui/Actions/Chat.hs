@@ -45,11 +45,11 @@ import Oasis.Tui.Actions.Common
   , decodeJsonText
   , parseRawResponseStrict
   , selectBaseUrl
-  , truncateText
   , extractAssistantContent
   , withMessageListHooks
   , mergeClientHooks
   )
+import Oasis.Tui.Util.Text (truncateTextDots)
 import Oasis.Tui.Render.Output
   ( RequestContext(..)
   , prettyJson
@@ -353,7 +353,7 @@ runHooksWithLog extraHooks provider apiKey useBeta reqCtx reqBody = do
             )
       pure ("Hooks runner failed.", output)
     Right body -> do
-      let responseText = truncateText 800 (TE.decodeUtf8Lenient (BL.toStrict body))
+      let responseText = truncateTextDots 800 (TE.decodeUtf8Lenient (BL.toStrict body))
           output = mdConcat
             ( requestSections reqCtx
               <> [ mdTextSection "Hook Log" logText
