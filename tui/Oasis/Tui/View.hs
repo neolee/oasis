@@ -18,6 +18,7 @@ import Oasis.Tui.Render.MessageList (renderMessageList)
 import Oasis.Tui.State (AppState(..), Name(..), ParamField(..), DebugRequestInfo(..))
 import Oasis.Tui.Registry (runnerRequiresPrompt)
 import Oasis.Tui.X (renderTestPane)
+import Oasis.Tui.Util.Text (truncateTextEllipsis)
 import Oasis.Types (Message(..), messageContentText)
 
 drawUI :: AppState -> [Widget Name]
@@ -278,7 +279,7 @@ promptSummary :: AppState -> Text
 promptSummary st =
   let raw = lastPrompt st
       cleaned = if T.null (T.strip raw) then "-" else raw
-  in truncateText 80 cleaned
+  in truncateTextEllipsis 80 cleaned
 
 runnerPromptLines :: AppState -> [Widget Name]
 runnerPromptLines st =
@@ -289,12 +290,6 @@ runnerPromptLines st =
             [txt ("Prompt: " <> promptSummary st) | runnerRequiresPrompt (selectedRunner st)]
       in [txt ("Runner: " <> runnerName)] <> promptLines
     else []
-
-truncateText :: Int -> Text -> Text
-truncateText maxLen t =
-  if T.length t > maxLen
-    then T.take (maxLen - 1) t <> "…"
-    else t
 
 modeIndicators :: AppState -> Text
 modeIndicators st =

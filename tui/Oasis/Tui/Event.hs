@@ -9,7 +9,7 @@ module Oasis.Tui.Event
 import Relude
 import Brick.Main (halt, viewportScroll, vScrollBy, hScrollBy, vScrollToEnd)
 import Brick.Types (BrickEvent(..), EventM, nestEventM)
-import Brick.Widgets.Edit (editor, handleEditorEvent)
+import Brick.Widgets.Edit (editor)
 import qualified Brick.Widgets.List as L
 import Control.Monad.State.Class (get, modify)
 import qualified Data.Vector as V
@@ -25,7 +25,7 @@ import Oasis.Tui.Event.Dialog
   , openParamDialog
   , openModelInputDialog
   )
-import Oasis.Tui.Event.Editor (editorText, editorTextRaw)
+import Oasis.Tui.Event.Editor (editorText, editorTextRaw, handleSimpleEditorEvent)
 import Oasis.Tui.Event.Utils
   ( copyAllFromEditor
   , isBlank
@@ -279,18 +279,16 @@ restoreVerboseContent = do
         _ -> pure ()
 
 handleChatInputEvent :: Vty.Event -> EventM Name AppState ()
-handleChatInputEvent ev =
-  case ev of
-    Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
-      st <- get
-      copyAllFromEditor (chatInputEditor st)
-    Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restoreChatInput
-    Vty.EvKey Vty.KEnter [] -> submitChatInput
-    Vty.EvKey Vty.KEsc [] -> cancelChatInput
-    _ -> do
-      st <- get
-      (editor', _) <- nestEventM (chatInputEditor st) (handleEditorEvent (VtyEvent ev))
-      modify (\s -> s { chatInputEditor = editor' })
+handleChatInputEvent ev = do
+  st <- get
+  handleSimpleEditorEvent
+    ev
+    (chatInputEditor st)
+    (\ed s -> s { chatInputEditor = ed })
+    (copyAllFromEditor (chatInputEditor st))
+    restoreChatInput
+    submitChatInput
+    cancelChatInput
 
 cancelChatInput :: EventM Name AppState ()
 cancelChatInput =
@@ -413,18 +411,16 @@ openVerboseEditor = do
         })
 
 handleVerboseContentEvent :: Vty.Event -> EventM Name AppState ()
-handleVerboseContentEvent ev =
-  case ev of
-    Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
-      st <- get
-      copyAllFromEditor (verboseContentEditor st)
-    Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restoreVerboseContent
-    Vty.EvKey Vty.KEnter [] -> saveVerboseContent
-    Vty.EvKey Vty.KEsc [] -> cancelVerboseContent
-    _ -> do
-      st <- get
-      (editor', _) <- nestEventM (verboseContentEditor st) (handleEditorEvent (VtyEvent ev))
-      modify (\s -> s { verboseContentEditor = editor' })
+handleVerboseContentEvent ev = do
+  st <- get
+  handleSimpleEditorEvent
+    ev
+    (verboseContentEditor st)
+    (\ed s -> s { verboseContentEditor = ed })
+    (copyAllFromEditor (verboseContentEditor st))
+    restoreVerboseContent
+    saveVerboseContent
+    cancelVerboseContent
 
 saveVerboseContent :: EventM Name AppState ()
 saveVerboseContent = do

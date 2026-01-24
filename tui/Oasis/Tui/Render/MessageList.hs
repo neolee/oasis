@@ -7,9 +7,9 @@ import Relude
 import Brick.Types (Widget(..), getContext, availWidthL, Size(..))
 import Brick.Widgets.Core (txt)
 import qualified Brick.Widgets.List as L
-import qualified Data.Text as T
 import Oasis.Types (Message(..), messageContentText)
 import Lens.Micro ((^.))
+import Oasis.Tui.Util.Text (truncateTextEllipsis)
 
 renderMessageList :: (Ord n, Show n) => Bool -> L.List n Message -> Widget n
 renderMessageList isFocused lst =
@@ -27,10 +27,4 @@ messageListLine idx msg =
 
 drawMessageRow :: Int -> Bool -> Int -> Message -> Widget n
 drawMessageRow maxWidth _ idx msg =
-  txt (truncateText maxWidth (messageListLine idx msg))
-
-truncateText :: Int -> Text -> Text
-truncateText maxLen t
-  | maxLen <= 0 = ""
-  | T.length t > maxLen = T.take (maxLen - 1) t <> "…"
-  | otherwise = t
+  txt (truncateTextEllipsis maxWidth (messageListLine idx msg))

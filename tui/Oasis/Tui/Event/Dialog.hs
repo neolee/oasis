@@ -35,7 +35,7 @@ import Oasis.Client.OpenAI (ChatCompletionRequest(..))
 import Oasis.Client.OpenAI.Param (ChatParams(..))
 import Oasis.Tui.Actions.Common (decodeJsonText, runInBackground)
 import Oasis.Tui.Actions.Models (customModelItem)
-import Oasis.Tui.Event.Editor (editorText, editorTextRaw, isPromptInputStart)
+import Oasis.Tui.Event.Editor (editorText, editorTextRaw, isPromptInputStart, handleSimpleEditorEvent)
 import Oasis.Tui.Event.Utils
   ( copyAllFromEditor
   , isBlank
@@ -68,35 +68,31 @@ handlePromptEvent ev =
       modify (\s -> s { promptEditor = editor', promptPristine = pristine' })
 
 handleModelInputEvent :: Vty.Event -> EventM Name AppState ()
-handleModelInputEvent ev =
-  case ev of
-    Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
-      st <- get
-      copyAllFromEditor (modelInputEditor st)
-    Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restoreModelInput
-    Vty.EvKey Vty.KEnter [] -> submitModelInput
-    Vty.EvKey Vty.KEsc [] -> cancelModelInput
-    _ -> do
-      st <- get
-      (editor', _) <- nestEventM (modelInputEditor st) (handleEditorEvent (VtyEvent ev))
-      modify (\s -> s { modelInputEditor = editor' })
+handleModelInputEvent ev = do
+  st <- get
+  handleSimpleEditorEvent
+    ev
+    (modelInputEditor st)
+    (\ed s -> s { modelInputEditor = ed })
+    (copyAllFromEditor (modelInputEditor st))
+    restoreModelInput
+    submitModelInput
+    cancelModelInput
 
 handleDebugRequestEvent :: Vty.Event -> EventM Name AppState ()
-handleDebugRequestEvent ev =
-  case ev of
-    Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
-      st <- get
-      copyAllFromEditor (debugRequestEditor st)
-    Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restoreDebugRequest
-    Vty.EvKey Vty.KEnter [] -> submitDebugRequest
-    Vty.EvKey Vty.KEsc [] -> cancelDebugRequest
-    _ -> do
-      st <- get
-      (editor', _) <- nestEventM (debugRequestEditor st) (handleEditorEvent (VtyEvent ev))
-      modify (\s -> s
-        { debugRequestEditor = editor'
-        , debugRequestDraft = editorTextRaw editor'
-        })
+handleDebugRequestEvent ev = do
+  st <- get
+  handleSimpleEditorEvent
+    ev
+    (debugRequestEditor st)
+    (\ed s -> s
+      { debugRequestEditor = ed
+      , debugRequestDraft = editorTextRaw ed
+      })
+    (copyAllFromEditor (debugRequestEditor st))
+    restoreDebugRequest
+    submitDebugRequest
+    cancelDebugRequest
 
 submitDebugRequest :: EventM Name AppState ()
 submitDebugRequest = do
