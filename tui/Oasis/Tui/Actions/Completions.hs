@@ -12,20 +12,15 @@ import Oasis.Client.OpenAI
   , CompletionRequest(..)
   , CompletionResponse(..)
   , CompletionChoice(..)
-  , ClientError
   , defaultChatRequest
   , buildChatUrl
   , buildCompletionsUrl
   , sendChatCompletionRawWithHooks
   , sendCompletionsRaw
-  , renderClientError
   , emptyClientHooks
   )
 import Oasis.Client.OpenAI.Param (applyChatParams)
 import Oasis.Model (resolveModelId)
-import Data.Aeson (FromJSON, eitherDecode)
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.Text.Encoding as TE
 import Oasis.Tui.Actions.Common
   ( resolveSelectedProvider
   , startRunner
@@ -34,6 +29,8 @@ import Oasis.Tui.Actions.Common
   , runWithDebug
   , buildDebugInfo
   , jsonRequestHeaders
+  , decodeJsonText
+  , parseRawResponseStrict
   , selectBaseUrl
   , extractAssistantContent
   , withMessageListHooks
@@ -71,16 +68,19 @@ runPartialModeAction = do
         hooks = withMessageListHooks chan messages emptyClientHooks
         info = buildDebugInfo providerName modelId (buildChatUrl (selectBaseUrl provider useBeta)) (jsonRequestHeaders apiKey)
         handler bodyText = do
-          reqBody' <- decodeChatRequestText bodyText
+          reqBody' <- (decodeJsonText bodyText :: Either Text ChatCompletionRequest)
           let isStream = case reqBody' of
                 ChatCompletionRequest{stream} -> stream
           if isStream
             then Left "partial-mode runner requires stream=false"
             else Right $ do
-              let reqCtx = buildRequestContext (buildChatUrl (selectBaseUrl provider useBeta)) reqBody'
-              result <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody' useBeta
+              let reqMessages = case reqBody' of
+                    ChatCompletionRequest{messages} -> messages
+                  hooks' = withMessageListHooks chan reqMessages emptyClientHooks
+                  reqCtx = buildRequestContext (buildChatUrl (selectBaseUrl provider useBeta)) reqBody'
+              result <- sendChatCompletionRawWithHooks hooks' provider apiKey reqBody' useBeta
               let (statusMsg, outputMsg) =
-                    case parseRawResponseStrictLocal result of
+                    case parseRawResponseStrict result of
                       Left err ->
                         ("Partial-mode runner failed.", renderErrorOutput reqCtx err)
                       Right (raw, response) ->
@@ -137,16 +137,19 @@ runPrefixCompletionAction = do
         hooks = withMessageListHooks chan messages emptyClientHooks
         info = buildDebugInfo providerName modelId (buildChatUrl (selectBaseUrl provider useBeta)) (jsonRequestHeaders apiKey)
         handler bodyText = do
-          reqBody' <- decodeChatRequestText bodyText
+          reqBody' <- (decodeJsonText bodyText :: Either Text ChatCompletionRequest)
           let isStream = case reqBody' of
                 ChatCompletionRequest{stream} -> stream
           if isStream
             then Left "prefix-completion runner requires stream=false"
             else Right $ do
-              let reqCtx = buildRequestContext (buildChatUrl (selectBaseUrl provider useBeta)) reqBody'
-              result <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody' useBeta
+              let reqMessages = case reqBody' of
+                    ChatCompletionRequest{messages} -> messages
+                  hooks' = withMessageListHooks chan reqMessages emptyClientHooks
+                  reqCtx = buildRequestContext (buildChatUrl (selectBaseUrl provider useBeta)) reqBody'
+              result <- sendChatCompletionRawWithHooks hooks' provider apiKey reqBody' useBeta
               let (statusMsg, outputMsg) =
-                    case parseRawResponseStrictLocal result of
+                    case parseRawResponseStrict result of
                       Left err ->
                         ("Prefix-completion runner failed.", renderErrorOutput reqCtx err)
                       Right (raw, response) ->
@@ -186,7 +189,7 @@ runFimCompletionAction = do
         reqJson = encodeJsonText reqBody
         info = buildDebugInfo providerName modelId (buildCompletionsUrl (selectBaseUrl provider useBeta)) (jsonRequestHeaders apiKey)
         handler bodyText = do
-          reqBody' <- decodeCompletionRequestText bodyText
+          reqBody' <- (decodeJsonText bodyText :: Either Text CompletionRequest)
           let isStream = case reqBody' of
                 CompletionRequest{stream} -> stream
           if isStream
@@ -195,7 +198,7 @@ runFimCompletionAction = do
               let reqCtx = buildRequestContext (buildCompletionsUrl (selectBaseUrl provider useBeta)) reqBody'
               result <- sendCompletionsRaw provider apiKey reqBody' useBeta
               let (statusMsg, outputMsg) =
-                    case parseRawResponseStrictLocal result of
+                    case parseRawResponseStrict result of
                       Left err ->
                         ("FIM-completion runner failed.", renderErrorOutput reqCtx err)
                       Right (raw, response) ->
@@ -213,24 +216,3 @@ runFimCompletionAction = do
               pure (FimCompletionCompleted statusMsg outputMsg)
     runWithDebug info reqJson handler
 
-parseRawResponseStrictLocal :: FromJSON a => Either ClientError BL.ByteString -> Either Text (Text, a)
-parseRawResponseStrictLocal = \case
-  Left err -> Left (renderClientError err)
-  Right body ->
-    case eitherDecode body of
-      Left err ->
-        let raw = TE.decodeUtf8Lenient (BL.toStrict body)
-        in Left ("Failed to decode response: " <> toText err <> "\nRaw: " <> raw)
-      Right val -> Right (TE.decodeUtf8Lenient (BL.toStrict body), val)
-
-decodeChatRequestText :: Text -> Either Text ChatCompletionRequest
-decodeChatRequestText raw =
-  case eitherDecode (BL.fromStrict (TE.encodeUtf8 raw)) of
-    Left err -> Left (toText err)
-    Right req -> Right req
-
-decodeCompletionRequestText :: Text -> Either Text CompletionRequest
-decodeCompletionRequestText raw =
-  case eitherDecode (BL.fromStrict (TE.encodeUtf8 raw)) of
-    Left err -> Left (toText err)
-    Right req -> Right req

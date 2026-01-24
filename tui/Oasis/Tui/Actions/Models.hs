@@ -11,23 +11,18 @@ import Control.Monad.State.Class (get)
 import qualified Data.List as List
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
-import Data.Aeson (FromJSON, eitherDecode, eitherDecodeStrict)
 import qualified Data.Aeson as Aeson
-import qualified Data.Text.Encoding as TE
-import qualified Data.ByteString.Lazy as BL
 import Oasis.Client.OpenAI
   ( ResponsesRequest(..)
   , ResponsesResponse(..)
   , EmbeddingRequest(..)
   , EmbeddingResponse(..)
   , EmbeddingData(..)
-  , ClientError
   , buildResponsesUrl
   , buildModelsUrl
   , buildEmbeddingsUrl
   , sendResponsesRaw
   , sendEmbeddingsRaw
-  , renderClientError
   )
 import Oasis.Model (resolveModelId, resolveEmbeddingModelId)
 import Oasis.Runner.GetModels (runGetModels)
@@ -42,6 +37,8 @@ import Oasis.Tui.Actions.Common
   , buildDebugInfo
   , jsonRequestHeaders
   , modelsRequestHeaders
+  , decodeJsonText
+  , parseRawResponseStrict
   )
 import Oasis.Tui.Render.Output
   ( RequestContext(..)
@@ -68,14 +65,14 @@ runResponsesAction inputText = do
         reqJson = encodeJsonText reqBody
         info = buildDebugInfo providerName modelId (buildResponsesUrl (base_url provider)) (jsonRequestHeaders apiKey)
         handler bodyText = do
-          reqBody' <- decodeResponsesRequestText bodyText
+          reqBody' <- (decodeJsonText bodyText :: Either Text ResponsesRequest)
           if stream reqBody' == Just True
             then Left "responses runner requires stream=false"
             else Right $ do
               let reqCtx = buildRequestContext (buildResponsesUrl (base_url provider)) reqBody'
               result <- sendResponsesRaw provider apiKey reqBody'
               let (statusMsg, outputMsg) =
-                    case parseRawResponseStrictLocal result of
+                    case parseRawResponseStrict result of
                       Left err ->
                         ("Responses runner failed.", renderErrorOutput reqCtx err)
                       Right (raw, response) ->
@@ -129,12 +126,12 @@ runEmbeddingsAction inputText = do
         reqJson = encodeJsonText reqBody
         info = buildDebugInfo providerName modelId (buildEmbeddingsUrl (base_url provider)) (jsonRequestHeaders apiKey)
         handler bodyText = do
-          reqBody' <- decodeEmbeddingRequestText bodyText
+          reqBody' <- (decodeJsonText bodyText :: Either Text EmbeddingRequest)
           Right $ do
             let reqCtx = buildRequestContext (buildEmbeddingsUrl (base_url provider)) reqBody'
             result <- sendEmbeddingsRaw provider apiKey reqBody'
             let (statusMsg, outputMsg) =
-                  case parseRawResponseStrictLocal result of
+                  case parseRawResponseStrict result of
                     Left err ->
                       let output = mdConcat
                             ( requestSections reqCtx
@@ -195,27 +192,6 @@ embeddingSummary EmbeddingResponse{data_} =
       let items = map (T.pack . show) (take n xs)
       in "[" <> T.intercalate ", " items <> if length xs > n then ", ...]" else "]"
 
-decodeResponsesRequestText :: Text -> Either Text ResponsesRequest
-decodeResponsesRequestText raw =
-  case eitherDecodeStrict (TE.encodeUtf8 raw) of
-    Left err -> Left (toText err)
-    Right req -> Right req
-
-decodeEmbeddingRequestText :: Text -> Either Text EmbeddingRequest
-decodeEmbeddingRequestText raw =
-  case eitherDecodeStrict (TE.encodeUtf8 raw) of
-    Left err -> Left (toText err)
-    Right req -> Right req
-
-parseRawResponseStrictLocal :: FromJSON a => Either ClientError BL.ByteString -> Either Text (Text, a)
-parseRawResponseStrictLocal = \case
-  Left err -> Left (renderClientError err)
-  Right body ->
-    case eitherDecode body of
-      Left err ->
-        let raw = TE.decodeUtf8Lenient (BL.toStrict body)
-        in Left ("Failed to decode response: " <> toText err <> "\nRaw: " <> raw)
-      Right val -> Right (TE.decodeUtf8Lenient (BL.toStrict body), val)
 
 providerModels :: Config -> Text -> [Text]
 providerModels cfg providerName =

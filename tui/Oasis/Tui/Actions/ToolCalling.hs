@@ -36,6 +36,7 @@ import Oasis.Tui.Actions.Common
   , withMessageListHooks
   , extractAssistantContent
   , jsonRequestHeaders
+  , decodeJsonText
   )
 import Oasis.Tui.Render.Output (mdJsonSection, mdTextSection, mdConcat)
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
@@ -80,11 +81,12 @@ runToolCallingAction = do
         endpoint = buildChatUrl (selectBaseUrl provider useBeta)
         info0 = buildDebugInfo providerName modelId endpoint (jsonRequestHeaders apiKey)
         handler0 bodyText = do
-          reqBody0' <- decodeChatRequestText bodyText
+          reqBody0' <- (decodeJsonText bodyText :: Either Text ChatCompletionRequest)
           if stream reqBody0'
             then Left "tool-calling runner requires stream=false"
             else Right $ do
-              let hooks0 = withMessageListHooks chan messages0 emptyClientHooks
+              let reqMessages0 = messages reqBody0'
+                  hooks0 = withMessageListHooks chan reqMessages0 emptyClientHooks
               firstResp <- sendChatCompletionRawWithHooks hooks0 provider apiKey reqBody0' useBeta
               case firstResp of
                 Left err ->
@@ -137,11 +139,12 @@ runToolCallingAction = do
                                   reqJson1 = encodeJsonText reqBody1
                                   info1 = buildDebugInfo providerName modelId endpoint (jsonRequestHeaders apiKey)
                                   handler1 bodyText1 = do
-                                    reqBody1' <- decodeChatRequestText bodyText1
+                                    reqBody1' <- (decodeJsonText bodyText1 :: Either Text ChatCompletionRequest)
                                     if stream reqBody1'
                                       then Left "tool-calling runner requires stream=false"
                                       else Right $ do
-                                        let hooks1 = withMessageListHooks chan messages1 emptyClientHooks
+                                        let reqMessages1 = messages reqBody1'
+                                            hooks1 = withMessageListHooks chan reqMessages1 emptyClientHooks
                                         secondResp <- sendChatCompletionRawWithHooks hooks1 provider apiKey reqBody1' useBeta
                                         case secondResp of
                                           Left err ->
@@ -186,12 +189,6 @@ decodeChatResponse body =
   case eitherDecode body of
     Left err -> Left (toText err)
     Right resp -> Right resp
-
-decodeChatRequestText :: Text -> Either Text ChatCompletionRequest
-decodeChatRequestText raw =
-  case eitherDecode (BL.fromStrict (TE.encodeUtf8 raw)) of
-    Left err -> Left (toText err)
-    Right req -> Right req
 
 extractToolCallLocal :: ChatCompletionResponse -> Maybe (Message, ToolCall)
 extractToolCallLocal ChatCompletionResponse{choices} =

@@ -20,7 +20,8 @@ import qualified Graphics.Vty as Vty
 import Oasis.Client.OpenAI.Param (ChatParams(..))
 import Oasis.Tui.Actions.Models ( providerModels )
 import Oasis.Tui.Actions.Chat (runChatAction)
-import Oasis.Tui.Actions.Common (openDebugDialog, runInBackground)
+import Oasis.Tui.Actions.Common (openDebugDialog, runInBackground, decodeJsonText)
+import Oasis.Client.OpenAI (ChatCompletionRequest(..))
 import Oasis.Tui.Registry (RunnerAction(..), RunnerSpec(..), lookupRunner)
 import Oasis.Tui.State (AppState(..), Name(..), ParamField(..), TuiEvent(..))
 import Oasis.Chat.Message (assistantMessage, userMessage)
@@ -287,6 +288,7 @@ submitDebugRequest = do
       payload = if T.null (T.strip draft)
         then debugRequestOriginal st
         else draft
+  applyDebugRequestUpdate payload
   case debugPendingAction st of
     Nothing ->
       modify (\s -> s
@@ -329,6 +331,37 @@ restoreDebugRequest = do
     , debugRequestDraft = original
     , debugRequestError = Nothing
     })
+
+applyDebugRequestUpdate :: Text -> EventM Name AppState ()
+applyDebugRequestUpdate payload =
+  case (decodeJsonText payload :: Either Text ChatCompletionRequest) of
+    Left _ -> pure ()
+    Right req -> do
+      let reqMessages = messages req
+          needsAssistant = stream req && not (hasAssistantTail reqMessages)
+          nextMessages = if needsAssistant
+            then reqMessages <> [assistantMessage ""]
+            else reqMessages
+          promptText = lastUserPrompt reqMessages
+      modify (\s ->
+        let list' = syncVerboseList nextMessages (verboseMessageList s)
+        in s
+          { chatMessages = nextMessages
+          , verboseMessageList = list'
+          , lastPrompt = fromMaybe (lastPrompt s) promptText
+          })
+
+hasAssistantTail :: [Message] -> Bool
+hasAssistantTail msgs =
+  case reverse msgs of
+    (m:_) -> role m == "assistant"
+    _ -> False
+
+lastUserPrompt :: [Message] -> Maybe Text
+lastUserPrompt msgs =
+  case reverse [messageContentText (content m) | m <- msgs, role m == "user"] of
+    (t:_) | not (T.null (T.strip t)) -> Just t
+    _ -> Nothing
 
 handleParamEditorEvent :: Vty.Event -> EventM Name AppState ()
 handleParamEditorEvent ev = do

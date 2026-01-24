@@ -11,6 +11,8 @@ module Oasis.Tui.Actions.Common
   , jsonRequestHeaders
   , sseRequestHeaders
   , modelsRequestHeaders
+  , decodeJsonText
+  , parseRawResponseStrict
   , selectBaseUrl
   , truncateText
   , extractAssistantContent
@@ -30,8 +32,8 @@ import Oasis.Tui.Render.Output (RequestContext(..))
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..), DebugRequestInfo(..), DebugRequestHandler)
 import Oasis.Types (Provider(..), Message(..), messageContentText)
 import Oasis.Chat.Message (assistantMessage)
-import Oasis.Client.OpenAI (ChatCompletionResponse(..), ChatChoice(..), ClientHooks(..), emptyClientHooks)
-import Data.Aeson (ToJSON, encode, eitherDecode)
+import Oasis.Client.OpenAI (ChatCompletionResponse(..), ChatChoice(..), ClientHooks(..), emptyClientHooks, ClientError, renderClientError)
+import Data.Aeson (FromJSON, ToJSON, encode, eitherDecode, eitherDecodeStrict)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
@@ -71,6 +73,22 @@ runInBackground st action =
 
 encodeJsonText :: ToJSON a => a -> Text
 encodeJsonText = TE.decodeUtf8Lenient . BL.toStrict . encode
+
+decodeJsonText :: FromJSON a => Text -> Either Text a
+decodeJsonText raw =
+  case eitherDecodeStrict (TE.encodeUtf8 raw) of
+    Left err -> Left (toText err)
+    Right req -> Right req
+
+parseRawResponseStrict :: FromJSON a => Either ClientError BL.ByteString -> Either Text (Text, a)
+parseRawResponseStrict = \case
+  Left err -> Left (renderClientError err)
+  Right body ->
+    case eitherDecode body of
+      Left err ->
+        let raw = TE.decodeUtf8Lenient (BL.toStrict body)
+        in Left ("Failed to decode response: " <> toText err <> "\nRaw: " <> raw)
+      Right val -> Right (TE.decodeUtf8Lenient (BL.toStrict body), val)
 
 buildDebugInfo :: Text -> Text -> Text -> [(HeaderName, BS8.ByteString)] -> DebugRequestInfo
 buildDebugInfo providerName modelName endpoint headers =

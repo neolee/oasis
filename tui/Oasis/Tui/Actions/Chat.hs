@@ -15,14 +15,13 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.IORef as IORef
-import Data.Aeson (FromJSON, Value, eitherDecode, eitherDecodeStrict)
+import Data.Aeson (Value, eitherDecodeStrict)
 import qualified Data.Aeson as Aeson
 import Oasis.Client.OpenAI
   ( ChatCompletionRequest(..)
   , ChatCompletionStreamChunk(..)
   , StreamChoice(..)
   , StreamDelta(..)
-  , ClientError
   , defaultChatRequest
   , setChatStream
   , buildChatUrl
@@ -45,6 +44,8 @@ import Oasis.Tui.Actions.Common
   , buildDebugInfo
   , jsonRequestHeaders
   , sseRequestHeaders
+  , decodeJsonText
+  , parseRawResponseStrict
   , selectBaseUrl
   , truncateText
   , extractAssistantContent
@@ -86,16 +87,19 @@ runBasicAction prompt = do
         hooks = withMessageListHooks chan [userMessage prompt] emptyClientHooks
         info = buildDebugInfo providerName modelId (buildChatUrl baseUrl) (jsonRequestHeaders apiKey)
         handler bodyText = do
-          reqBody' <- decodeChatRequestText bodyText
+          reqBody' <- (decodeJsonText bodyText :: Either Text ChatCompletionRequest)
           let isStream = case reqBody' of
                 ChatCompletionRequest{stream} -> stream
           if isStream
             then Left "basic runner requires stream=false"
             else Right $ do
-              let reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody'
-              result <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody' useBeta
+              let reqMessages = case reqBody' of
+                    ChatCompletionRequest{messages} -> messages
+                  hooks' = withMessageListHooks chan reqMessages emptyClientHooks
+                  reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody'
+              result <- sendChatCompletionRawWithHooks hooks' provider apiKey reqBody' useBeta
               let (statusMsg, outputMsg) =
-                    case parseRawResponseStrictLocal result of
+                    case parseRawResponseStrict result of
                       Left err ->
                         ("Basic runner failed.", renderErrorOutput reqCtx err)
                       Right (raw, response) ->
@@ -129,14 +133,17 @@ runHooksAction prompt = do
         hooks = withMessageListHooks chan [userMessage prompt] emptyClientHooks
         info = buildDebugInfo providerName modelId (buildChatUrl baseUrl) (jsonRequestHeaders apiKey)
         handler bodyText = do
-          reqBody' <- decodeChatRequestText bodyText
+          reqBody' <- (decodeJsonText bodyText :: Either Text ChatCompletionRequest)
           let isStream = case reqBody' of
                 ChatCompletionRequest{stream} -> stream
           if isStream
             then Left "hooks runner requires stream=false"
             else Right $ do
-              let reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody'
-              (statusMsg, outputMsg) <- runHooksWithLog hooks provider apiKey useBeta reqCtx reqBody'
+              let reqMessages = case reqBody' of
+                    ChatCompletionRequest{messages} -> messages
+                  hooks' = withMessageListHooks chan reqMessages emptyClientHooks
+                  reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody'
+              (statusMsg, outputMsg) <- runHooksWithLog hooks' provider apiKey useBeta reqCtx reqBody'
               pure (HooksCompleted statusMsg outputMsg)
     runWithDebug info reqJson handler
 
@@ -172,14 +179,16 @@ runStructuredAction responseFormat runnerLabel = do
         reqJson = encodeJsonText reqBody
         info = buildDebugInfo providerName modelId (buildChatUrl (selectBaseUrl provider useBeta)) (sseRequestHeaders apiKey)
         handler bodyText = do
-          reqBody' <- decodeChatRequestText bodyText
+          reqBody' <- (decodeJsonText bodyText :: Either Text ChatCompletionRequest)
           let isStream = case reqBody' of
                 ChatCompletionRequest{stream} -> stream
           if not isStream
             then Left (runnerLabel <> " runner requires stream=true")
             else Right $ do
+              let reqMessages = case reqBody' of
+                    ChatCompletionRequest{messages} -> messages
+                  hooks = withMessageListHooks chan reqMessages emptyClientHooks
               accumRef <- IORef.newIORef ""
-              let hooks = withMessageListHooks chan reqMessages emptyClientHooks
               result <- streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody' (handleStructuredChunk chan accumRef) useBeta
               rawText <- IORef.readIORef accumRef
               unless (T.null (T.strip rawText)) $
@@ -220,12 +229,6 @@ forEachDeltaContent ChatCompletionStreamChunk{choices} f =
 deltaContent :: StreamDelta -> [Text]
 deltaContent StreamDelta{content} = maybe [] pure content
 
-decodeChatRequestText :: Text -> Either Text ChatCompletionRequest
-decodeChatRequestText raw =
-  case eitherDecodeStrict (encodeUtf8 raw) of
-    Left err -> Left (toText err)
-    Right req -> Right req
-
 runChatInitAction :: EventM Name AppState ()
 runChatInitAction =
   modify (\s -> s
@@ -252,12 +255,15 @@ runChatAction messages = do
         hooks = withMessageListHooks chan messages emptyClientHooks
         info = buildDebugInfo providerName modelId (buildChatUrl (selectBaseUrl provider useBeta)) (sseRequestHeaders apiKey)
         handler bodyText = do
-          reqBody' <- decodeChatRequestText bodyText
+          reqBody' <- (decodeJsonText bodyText :: Either Text ChatCompletionRequest)
           let isStream = case reqBody' of
                 ChatCompletionRequest{stream} -> stream
           if not isStream
             then Left "chat runner requires stream=true"
             else Right $ do
+              let reqMessages = case reqBody' of
+                    ChatCompletionRequest{messages} -> messages
+                  hooks = withMessageListHooks chan reqMessages emptyClientHooks
               result <- streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody' (handleChatChunk chan) useBeta
               case result of
                 Left err -> pure (ChatCompleted ("Chat failed: " <> renderClientError err))
@@ -276,16 +282,6 @@ chatDeltaText ChatCompletionStreamChunk{choices} =
       case delta of
         Nothing -> []
         Just StreamDelta{content} -> maybe [] pure content
-
-parseRawResponseStrictLocal :: FromJSON a => Either ClientError BL.ByteString -> Either Text (Text, a)
-parseRawResponseStrictLocal = \case
-  Left err -> Left (renderClientError err)
-  Right body ->
-    case eitherDecode body of
-      Left err ->
-        let raw = TE.decodeUtf8Lenient (BL.toStrict body)
-        in Left ("Failed to decode response: " <> toText err <> "\nRaw: " <> raw)
-      Right val -> Right (TE.decodeUtf8Lenient (BL.toStrict body), val)
 
 parseJsonText :: Text -> Either Text Text
 parseJsonText raw =
