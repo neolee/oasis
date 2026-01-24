@@ -43,6 +43,7 @@ dependencies:
 - vty
 - vty-crossplatform
 - microlens
+- process
 
 default-extensions:
 - NoImplicitPrelude

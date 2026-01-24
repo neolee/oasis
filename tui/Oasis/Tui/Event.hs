@@ -11,12 +11,15 @@ import Brick.Main (halt, viewportScroll, vScrollBy, hScrollBy, vScrollToEnd)
 import Brick.Types (BrickEvent(..), EventM, nestEventM)
 import Brick.Widgets.Edit (Editor, editor, getEditContents, handleEditorEvent)
 import qualified Brick.Widgets.List as L
+import Control.Exception (SomeException, displayException, try)
 import Control.Monad.State.Class (get, modify)
 import Data.Char (isSpace)
 import qualified Data.List as List
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Graphics.Vty as Vty
+import System.Process (CreateProcess(..), StdStream(..), createProcess, proc, waitForProcess)
+import System.IO (Handle, hClose, hPutStr, hSetEncoding, utf8)
 import Oasis.Client.OpenAI.Param (ChatParams(..))
 import Oasis.Tui.Actions.Models ( providerModels )
 import Oasis.Tui.Actions.Chat (runChatAction)
@@ -255,6 +258,9 @@ moveListWrap delta lst =
 handlePromptEvent :: Vty.Event -> EventM Name AppState ()
 handlePromptEvent ev =
   case ev of
+    Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
+      st <- get
+      copyAllFromEditor (promptEditor st)
     Vty.EvKey Vty.KEnter [] -> submitPrompt
     Vty.EvKey Vty.KEsc [] -> cancelPrompt
     _ -> do
@@ -270,6 +276,9 @@ handlePromptEvent ev =
 handleDebugRequestEvent :: Vty.Event -> EventM Name AppState ()
 handleDebugRequestEvent ev =
   case ev of
+    Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
+      st <- get
+      copyAllFromEditor (debugRequestEditor st)
     Vty.EvKey Vty.KEnter [] -> submitDebugRequest
     Vty.EvKey Vty.KEsc [] -> cancelDebugRequest
     Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restoreDebugRequest
@@ -422,6 +431,9 @@ paramFieldName = \case
 handleChatInputEvent :: Vty.Event -> EventM Name AppState ()
 handleChatInputEvent ev =
   case ev of
+    Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
+      st <- get
+      copyAllFromEditor (chatInputEditor st)
     Vty.EvKey Vty.KEnter [] -> insertChatNewline ev
     Vty.EvKey (Vty.KChar 's') [Vty.MCtrl] -> submitChatInput
     Vty.EvKey Vty.KEsc [] -> cancelChatInput
@@ -567,6 +579,9 @@ openVerboseEditor = do
 handleVerboseContentEvent :: Vty.Event -> EventM Name AppState ()
 handleVerboseContentEvent ev =
   case ev of
+    Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
+      st <- get
+      copyAllFromEditor (verboseContentEditor st)
     Vty.EvKey (Vty.KChar 's') [Vty.MCtrl] -> saveVerboseContent
     Vty.EvKey Vty.KEsc [] -> cancelVerboseContent
     _ -> do
@@ -809,6 +824,27 @@ editorText = T.strip . mconcat . getEditContents
 
 editorTextRaw :: Editor Text Name -> Text
 editorTextRaw = T.intercalate "\n" . getEditContents
+
+copyAllFromEditor :: Editor Text Name -> EventM Name AppState ()
+copyAllFromEditor ed = do
+  let content = editorTextRaw ed
+  result <- liftIO (copyToClipboard content)
+  case result of
+    Left err -> modify (\s -> s { statusText = "Copy failed: " <> err })
+    Right () -> modify (\s -> s { statusText = "Copied all text." })
+
+copyToClipboard :: Text -> IO (Either Text ())
+copyToClipboard content = do
+  result <- try $ do
+    (Just hin, _, _, ph) <- createProcess (proc "pbcopy" []) { std_in = CreatePipe }
+    hSetEncoding hin utf8
+    hPutStr hin (toString content)
+    hClose hin
+    _ <- waitForProcess ph
+    pure ()
+  case result of
+    Left (err :: SomeException) -> pure (Left (T.pack (displayException err)))
+    Right _ -> pure (Right ())
 
 
 isBlank :: Text -> Bool
