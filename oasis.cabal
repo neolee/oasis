@@ -165,6 +165,9 @@ executable oasis-tui
       Oasis.Tui.Actions.Models
       Oasis.Tui.Actions.ToolCalling
       Oasis.Tui.Event
+      Oasis.Tui.Event.Dialog
+      Oasis.Tui.Event.Editor
+      Oasis.Tui.Event.Utils
       Oasis.Tui.Keymap
       Oasis.Tui.Registry
       Oasis.Tui.Render.Markdown

@@ -9,26 +9,37 @@ module Oasis.Tui.Event
 import Relude
 import Brick.Main (halt, viewportScroll, vScrollBy, hScrollBy, vScrollToEnd)
 import Brick.Types (BrickEvent(..), EventM, nestEventM)
-import Brick.Widgets.Edit (Editor, editor, getEditContents, handleEditorEvent)
+import Brick.Widgets.Edit (editor, handleEditorEvent)
 import qualified Brick.Widgets.List as L
-import Control.Exception (SomeException, displayException, try)
 import Control.Monad.State.Class (get, modify)
-import Data.Char (isSpace)
-import qualified Data.List as List
-import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Graphics.Vty as Vty
-import System.Process (CreateProcess(..), StdStream(..), createProcess, proc, waitForProcess)
-import System.IO (Handle, hClose, hPutStr, hSetEncoding, utf8)
-import Oasis.Client.OpenAI.Param (ChatParams(..))
-import Oasis.Tui.Actions.Models ( providerModels, customModelItem )
+import Oasis.Tui.Actions.Models (customModelItem)
 import Oasis.Tui.Actions.Chat (runChatAction)
-import Oasis.Tui.Actions.Common (openDebugDialog, runInBackground, decodeJsonText)
-import Oasis.Client.OpenAI (ChatCompletionRequest(..))
+import Oasis.Tui.Actions.Common (openDebugDialog)
+import Oasis.Tui.Event.Dialog
+  ( handlePromptEvent
+  , handleModelInputEvent
+  , handleDebugRequestEvent
+  , handleParamDialogEvent
+  , openParamDialog
+  , openModelInputDialog
+  )
+import Oasis.Tui.Event.Editor (editorText, editorTextRaw)
+import Oasis.Tui.Event.Utils
+  ( copyAllFromEditor
+  , isBlank
+  , syncVerboseList
+  , clearVerboseList
+  , insertMessageAt
+  , updateMessageAt
+  , deleteMessageAt
+  , buildModelItems
+  )
 import Oasis.Tui.Registry (RunnerAction(..), RunnerSpec(..), lookupRunner)
-import Oasis.Tui.State (AppState(..), Name(..), ParamField(..), TuiEvent(..))
+import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
 import Oasis.Chat.Message (assistantMessage, userMessage)
-import Oasis.Types (Config, Message(..), MessageContent(..), StopParam(..), messageContentText)
+import Oasis.Types (Message(..), MessageContent(..), messageContentText)
 
 appEvent :: BrickEvent Name TuiEvent -> EventM Name AppState ()
 appEvent (AppEvent evt) =
@@ -251,123 +262,9 @@ moveListWrap delta lst =
               | otherwise = current
         in L.listMoveTo next lst
 
-handlePromptEvent :: Vty.Event -> EventM Name AppState ()
-handlePromptEvent ev =
-  case ev of
-    Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
-      st <- get
-      copyAllFromEditor (promptEditor st)
-    Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restorePromptEditor
-    Vty.EvKey Vty.KEnter [] -> submitPrompt
-    Vty.EvKey Vty.KEsc [] -> cancelPrompt
-    _ -> do
-      st <- get
-      let shouldClear = promptPristine st && isPromptInputStart ev
-          baseEditor = if shouldClear
-            then editor PromptEditor (Just 5) ""
-            else promptEditor st
-      (editor', _) <- nestEventM baseEditor (handleEditorEvent (VtyEvent ev))
-      let pristine' = not (isPromptInputStart ev) && promptPristine st
-      modify (\s -> s { promptEditor = editor', promptPristine = pristine' })
-
-handleModelInputEvent :: Vty.Event -> EventM Name AppState ()
-handleModelInputEvent ev =
-  case ev of
-    Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
-      st <- get
-      copyAllFromEditor (modelInputEditor st)
-    Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restoreModelInput
-    Vty.EvKey Vty.KEnter [] -> submitModelInput
-    Vty.EvKey Vty.KEsc [] -> cancelModelInput
-    _ -> do
-      st <- get
-      (editor', _) <- nestEventM (modelInputEditor st) (handleEditorEvent (VtyEvent ev))
-      modify (\s -> s { modelInputEditor = editor' })
-
-handleDebugRequestEvent :: Vty.Event -> EventM Name AppState ()
-handleDebugRequestEvent ev =
-  case ev of
-    Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
-      st <- get
-      copyAllFromEditor (debugRequestEditor st)
-    Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restoreDebugRequest
-    Vty.EvKey Vty.KEnter [] -> submitDebugRequest
-    Vty.EvKey Vty.KEsc [] -> cancelDebugRequest
-    _ -> do
-      st <- get
-      (editor', _) <- nestEventM (debugRequestEditor st) (handleEditorEvent (VtyEvent ev))
-      modify (\s -> s
-        { debugRequestEditor = editor'
-        , debugRequestDraft = editorTextRaw editor'
-        })
-
-submitDebugRequest :: EventM Name AppState ()
-submitDebugRequest = do
-  st <- get
-  let draft = editorTextRaw (debugRequestEditor st)
-      payload = if T.null (T.strip draft)
-        then debugRequestOriginal st
-        else draft
-  applyDebugRequestUpdate payload
-  case debugPendingAction st of
-    Nothing ->
-      modify (\s -> s
-        { debugDialogOpen = False
-        , debugRequestError = Nothing
-        , debugRequestInfo = Nothing
-        , activeList = debugDialogReturnFocus s
-        })
-    Just handler ->
-      case handler payload of
-        Left err ->
-          modify (\s -> s { debugRequestError = Just err })
-        Right action -> do
-          modify (\s -> s
-            { debugDialogOpen = False
-            , debugRequestError = Nothing
-            , debugRequestInfo = Nothing
-            , debugPendingAction = Nothing
-            , activeList = debugDialogReturnFocus s
-            })
-          runInBackground st action
-
-cancelDebugRequest :: EventM Name AppState ()
-cancelDebugRequest =
-  modify (\s -> s
-    { debugDialogOpen = False
-    , debugRequestError = Nothing
-    , debugRequestInfo = Nothing
-    , debugPendingAction = Nothing
-    , activeList = RunnerList
-    , statusText = "Debug request cancelled."
-    })
-
-restoreDebugRequest :: EventM Name AppState ()
-restoreDebugRequest = do
-  st <- get
-  let original = debugRequestOriginal st
-  modify (\s -> s
-    { debugRequestEditor = editor DebugRequestEditor (Just 12) original
-    , debugRequestDraft = original
-    , debugRequestError = Nothing
-    })
-
-restorePromptEditor :: EventM Name AppState ()
-restorePromptEditor = do
-  st <- get
-  modify (\s -> s
-    { promptEditor = editor PromptEditor (Just 5) (promptDefault st)
-    , promptPristine = True
-    })
-
 restoreChatInput :: EventM Name AppState ()
 restoreChatInput =
   modify (\s -> s { chatInputEditor = editor ChatInputEditor (Just 3) "" })
-
-restoreModelInput :: EventM Name AppState ()
-restoreModelInput = do
-  st <- get
-  modify (\s -> s { modelInputEditor = editor ModelInputEditor (Just 1) (modelInputDefault st) })
 
 restoreVerboseContent :: EventM Name AppState ()
 restoreVerboseContent = do
@@ -380,105 +277,6 @@ restoreVerboseContent = do
           let original = messageContentText (content msg)
           in modify (\s -> s { verboseContentEditor = editor VerboseContentEditor (Just 8) original })
         _ -> pure ()
-
-applyDebugRequestUpdate :: Text -> EventM Name AppState ()
-applyDebugRequestUpdate payload =
-  case (decodeJsonText payload :: Either Text ChatCompletionRequest) of
-    Left _ -> pure ()
-    Right req -> do
-      let reqMessages = messages req
-          needsAssistant = stream req && not (hasAssistantTail reqMessages)
-          nextMessages = if needsAssistant
-            then reqMessages <> [assistantMessage ""]
-            else reqMessages
-          promptText = lastUserPrompt reqMessages
-      modify (\s ->
-        let list' = syncVerboseList nextMessages (verboseMessageList s)
-        in s
-          { chatMessages = nextMessages
-          , verboseMessageList = list'
-          , lastPrompt = fromMaybe (lastPrompt s) promptText
-          })
-
-hasAssistantTail :: [Message] -> Bool
-hasAssistantTail msgs =
-  case reverse msgs of
-    (m:_) -> role m == "assistant"
-    _ -> False
-
-lastUserPrompt :: [Message] -> Maybe Text
-lastUserPrompt msgs =
-  case reverse [messageContentText (content m) | m <- msgs, role m == "user"] of
-    (t:_) | not (T.null (T.strip t)) -> Just t
-    _ -> Nothing
-
-handleParamEditorEvent :: Vty.Event -> EventM Name AppState ()
-handleParamEditorEvent ev = do
-  st <- get
-  case paramDialogFocus st of
-    ParamBetaUrl -> pure ()
-    ParamTemperature -> do
-      (editor', _) <- nestEventM (paramTemperatureEditor st) (handleEditorEvent (VtyEvent ev))
-      modify (\s -> s { paramTemperatureEditor = editor' })
-    ParamTopP -> do
-      (editor', _) <- nestEventM (paramTopPEditor st) (handleEditorEvent (VtyEvent ev))
-      modify (\s -> s { paramTopPEditor = editor' })
-    ParamMaxCompletionTokens -> do
-      (editor', _) <- nestEventM (paramMaxCompletionTokensEditor st) (handleEditorEvent (VtyEvent ev))
-      modify (\s -> s { paramMaxCompletionTokensEditor = editor' })
-    ParamStop -> do
-      (editor', _) <- nestEventM (paramStopEditor st) (handleEditorEvent (VtyEvent ev))
-      modify (\s -> s { paramStopEditor = editor' })
-
-handleParamDialogEvent :: Vty.Event -> EventM Name AppState ()
-handleParamDialogEvent ev =
-  case ev of
-    Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> copyParamField
-    Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restoreParamDialog
-    Vty.EvKey Vty.KEnter [] -> submitParamDialog
-    Vty.EvKey Vty.KEsc [] -> cancelParamDialog
-    Vty.EvKey Vty.KUp [] -> moveParamFocus (-1)
-    Vty.EvKey Vty.KDown [] -> moveParamFocus 1
-    Vty.EvKey (Vty.KChar ' ') [] -> toggleBetaWhenFocused
-    _ -> handleParamEditorEvent ev
-
-copyParamField :: EventM Name AppState ()
-copyParamField = do
-  st <- get
-  case paramDialogFocus st of
-    ParamBetaUrl ->
-      let val = if paramDialogBetaValue st then "true" else "false"
-      in copyAllFromEditor (editor ParamBetaUrlEditor (Just 1) val)
-    ParamTemperature -> copyAllFromEditor (paramTemperatureEditor st)
-    ParamTopP -> copyAllFromEditor (paramTopPEditor st)
-    ParamMaxCompletionTokens -> copyAllFromEditor (paramMaxCompletionTokensEditor st)
-    ParamStop -> copyAllFromEditor (paramStopEditor st)
-
-toggleBetaWhenFocused :: EventM Name AppState ()
-toggleBetaWhenFocused = do
-  st <- get
-  when (paramDialogFocus st == ParamBetaUrl) $
-    modify (\s -> s { paramDialogBetaValue = not (paramDialogBetaValue s) })
-
-moveParamFocus :: Int -> EventM Name AppState ()
-moveParamFocus delta =
-  modify (\s ->
-    let order = [ParamBetaUrl, ParamTemperature, ParamTopP, ParamMaxCompletionTokens, ParamStop]
-        current = paramDialogFocus s
-        idx = fromMaybe 0 (List.elemIndex current order)
-        nextIdx = (idx + delta) `mod` length order
-        nextField = order List.!! nextIdx
-        nextName = paramFieldName nextField
-    in s { paramDialogFocus = nextField, activeList = nextName }
-  )
-
-paramFieldName :: ParamField -> Name
-paramFieldName = \case
-  ParamBetaUrl -> ParamBetaUrlEditor
-  ParamTemperature -> ParamTemperatureEditor
-  ParamTopP -> ParamTopPEditor
-  ParamMaxCompletionTokens -> ParamMaxCompletionTokensEditor
-  ParamStop -> ParamStopEditor
 
 handleChatInputEvent :: Vty.Event -> EventM Name AppState ()
 handleChatInputEvent ev =
@@ -531,13 +329,6 @@ appendAssistantDelta deltaText msgs =
               nextMsg = msg { content = ContentText (current <> deltaText) }
           in reverse (nextMsg : rest)
     _ -> msgs
-
-syncVerboseList :: [Message] -> L.List Name Message -> L.List Name Message
-syncVerboseList msgs lst =
-  L.listReplace (V.fromList msgs) (L.listSelected lst) lst
-
-clearVerboseList :: L.List Name Message -> L.List Name Message
-clearVerboseList = L.listReplace V.empty Nothing
 
 applyMessages :: [Message] -> Maybe Int -> AppState -> AppState
 applyMessages msgs sel s =
@@ -700,278 +491,6 @@ cancelDelete =
     { verboseDeleteConfirm = Nothing
     , statusText = "Delete cancelled."
     })
-
-insertMessageAt :: Int -> Message -> [Message] -> [Message]
-insertMessageAt idx msg msgs =
-  let (before, after) = splitAt idx msgs
-  in before <> [msg] <> after
-
-updateMessageAt :: Int -> Text -> [Message] -> [Message]
-updateMessageAt idx contentText msgs =
-  if idx < 0 || idx >= length msgs
-    then msgs
-    else
-      let (before, after) = splitAt idx msgs
-      in case after of
-           [] -> msgs
-           (m:rest) -> before <> [m { content = ContentText contentText }] <> rest
-
-deleteMessageAt :: Int -> [Message] -> [Message]
-deleteMessageAt idx msgs =
-  if idx < 0 || idx >= length msgs
-    then msgs
-    else
-      let (before, after) = splitAt idx msgs
-      in case after of
-           [] -> msgs
-           (_:rest) -> before <> rest
-
-openParamDialog :: EventM Name AppState ()
-openParamDialog = do
-  st <- get
-  let ChatParams{..} = chatParams st
-      tempText = maybe "" show paramTemperature
-      topPText = maybe "" show paramTopP
-      maxTokensText = maybe "" show paramMaxCompletionTokens
-      stopText = maybe "" renderStopParam paramStop
-  modify (\s -> s
-    { paramDialogOpen = True
-    , paramDialogError = Nothing
-    , paramDialogFocus = ParamBetaUrl
-    , paramDialogReturnFocus = activeList s
-    , activeList = ParamBetaUrlEditor
-    , promptDialogOpen = False
-    , paramDialogBetaValue = betaUrlSetting s
-    , paramTemperatureEditor = editor ParamTemperatureEditor (Just 1) tempText
-    , paramTopPEditor = editor ParamTopPEditor (Just 1) topPText
-    , paramMaxCompletionTokensEditor = editor ParamMaxCompletionTokensEditor (Just 1) maxTokensText
-    , paramStopEditor = editor ParamStopEditor (Just 1) stopText
-    })
-
-openModelInputDialog :: EventM Name AppState ()
-openModelInputDialog = do
-  st <- get
-  let defaultText = fromMaybe "" (selectedModel st)
-  modify (\s -> s
-    { modelInputDialogOpen = True
-    , modelInputDefault = defaultText
-    , modelInputEditor = editor ModelInputEditor (Just 1) defaultText
-    , activeList = ModelInputEditor
-    })
-
-restoreParamDialog :: EventM Name AppState ()
-restoreParamDialog = do
-  st <- get
-  let ChatParams{..} = chatParams st
-      tempText = maybe "" show paramTemperature
-      topPText = maybe "" show paramTopP
-      maxTokensText = maybe "" show paramMaxCompletionTokens
-      stopText = maybe "" renderStopParam paramStop
-  modify (\s -> s
-    { paramDialogBetaValue = betaUrlSetting s
-    , paramTemperatureEditor = editor ParamTemperatureEditor (Just 1) tempText
-    , paramTopPEditor = editor ParamTopPEditor (Just 1) topPText
-    , paramMaxCompletionTokensEditor = editor ParamMaxCompletionTokensEditor (Just 1) maxTokensText
-    , paramStopEditor = editor ParamStopEditor (Just 1) stopText
-    , paramDialogError = Nothing
-    })
-
-renderStopParam :: StopParam -> Text
-renderStopParam = \case
-  StopText t -> quote t
-  StopList xs -> T.intercalate ", " (map quote xs)
-  where
-    quote t = "\"" <> t <> "\""
-
-submitPrompt :: EventM Name AppState ()
-submitPrompt = do
-  st <- get
-  let rawPrompt = unlines (getEditContents (promptEditor st))
-      prompt = if isBlank rawPrompt then promptDefault st else rawPrompt
-  modify (\s -> s
-    { promptDialogOpen = False
-    , activeList = RunnerList
-    , lastPrompt = prompt
-    , promptPristine = False
-    })
-  case selectedRunner st >>= lookupRunner of
-    Just RunnerSpec{runnerAction = NeedsPrompt action} -> action prompt
-    Just RunnerSpec{runnerAction = Unsupported} ->
-      modify (\s -> s { statusText = "Runner not supported yet." })
-    _ -> modify (\s -> s { statusText = "Runner not supported yet." })
-
-cancelPrompt :: EventM Name AppState ()
-cancelPrompt =
-  modify (\s -> s
-    { promptDialogOpen = False
-    , activeList = RunnerList
-    , statusText = "Prompt cancelled."
-    })
-
-submitModelInput :: EventM Name AppState ()
-submitModelInput = do
-  st <- get
-  let raw = editorTextRaw (modelInputEditor st)
-      trimmed = T.strip raw
-  if T.null trimmed
-    then cancelModelInput
-    else if trimmed == customModelItem
-      then modify (\s -> s { statusText = "Invalid model name." })
-      else do
-        let customModels' = List.nub (customModels st <> [trimmed])
-        let models = case selectedProvider st of
-              Nothing -> customModels'
-              Just providerName -> buildModelItems (config st) providerName customModels'
-        let modelListBase = L.list ModelList (V.fromList models) 1
-        let modelList' = case List.elemIndex trimmed models of
-              Nothing -> modelListBase
-              Just idx -> L.listMoveTo idx modelListBase
-        modify (\s -> s
-          { modelInputDialogOpen = False
-          , selectedModel = Just trimmed
-          , customModels = customModels'
-          , modelList = modelList'
-          , activeList = RunnerList
-          , statusText = "Model override: " <> trimmed
-          })
-
-cancelModelInput :: EventM Name AppState ()
-cancelModelInput =
-  modify (\s -> s
-    { modelInputDialogOpen = False
-    , activeList = ModelList
-    , statusText = "Model override cancelled."
-    })
-
-submitParamDialog :: EventM Name AppState ()
-submitParamDialog = do
-  st <- get
-  let tempRaw = editorText (paramTemperatureEditor st)
-      topPRaw = editorText (paramTopPEditor st)
-      maxTokensRaw = editorText (paramMaxCompletionTokensEditor st)
-      stopRaw = editorText (paramStopEditor st)
-  case parseParamInputs tempRaw topPRaw maxTokensRaw stopRaw of
-    Left err ->
-      modify (\s -> s { paramDialogError = Just err })
-    Right (tempVal, topPVal, maxTokensVal, stopVal) -> do
-      let params0 = chatParams st
-          params1 = params0
-            { paramTemperature = tempVal
-            , paramTopP = topPVal
-            , paramMaxCompletionTokens = maxTokensVal
-            , paramStop = stopVal
-            }
-      modify (\s -> s
-        { chatParams = params1
-        , betaUrlSetting = paramDialogBetaValue s
-        , paramDialogOpen = False
-        , paramDialogError = Nothing
-        , activeList = paramDialogReturnFocus s
-        , statusText = "Chat parameters updated."
-        })
-
-cancelParamDialog :: EventM Name AppState ()
-cancelParamDialog =
-  modify (\s -> s
-    { paramDialogOpen = False
-    , paramDialogError = Nothing
-    , activeList = paramDialogReturnFocus s
-    , statusText = "Chat parameter update cancelled."
-    })
-
-parseParamInputs
-  :: Text
-  -> Text
-  -> Text
-  -> Text
-  -> Either Text (Maybe Double, Maybe Double, Maybe Int, Maybe StopParam)
-parseParamInputs tempRaw topPRaw maxTokensRaw stopRaw = do
-  tempVal <- parseMaybeDouble "temperature" tempRaw
-  topPVal <- parseMaybeDouble "top_p" topPRaw
-  maxTokensVal <- parseMaybeInt "max_completion_tokens" maxTokensRaw
-  stopVal <- parseMaybeStop stopRaw
-  pure (tempVal, topPVal, maxTokensVal, stopVal)
-
-parseMaybeDouble :: Text -> Text -> Either Text (Maybe Double)
-parseMaybeDouble label raw =
-  let trimmed = T.strip raw
-  in if T.null trimmed
-      then Right Nothing
-      else case readMaybe (toString trimmed) of
-        Nothing -> Left (label <> ": expected a number")
-        Just val -> Right (Just val)
-
-parseMaybeInt :: Text -> Text -> Either Text (Maybe Int)
-parseMaybeInt label raw =
-  let trimmed = T.strip raw
-  in if T.null trimmed
-      then Right Nothing
-      else case readMaybe (toString trimmed) of
-        Nothing -> Left (label <> ": expected an integer")
-        Just val -> Right (Just val)
-
-parseMaybeStop :: Text -> Either Text (Maybe StopParam)
-parseMaybeStop raw =
-  let trimmed = T.strip raw
-  in if T.null trimmed
-      then Right Nothing
-      else do
-        parts <- traverse parseQuoted (filter (not . T.null) (map T.strip (T.splitOn "," trimmed)))
-        case parts of
-          [] -> Right Nothing
-          [x] -> Right (Just (StopText x))
-          xs -> Right (Just (StopList xs))
-
-parseQuoted :: Text -> Either Text Text
-parseQuoted t
-  | T.length t >= 2 && T.head t == '"' && T.last t == '"' =
-      Right (T.dropEnd 1 (T.drop 1 t))
-  | otherwise = Left "stop: expected quoted strings like \"foo\", \"bar\""
-
-editorText :: Editor Text Name -> Text
-editorText = T.strip . mconcat . getEditContents
-
-editorTextRaw :: Editor Text Name -> Text
-editorTextRaw = T.intercalate "\n" . getEditContents
-
-copyAllFromEditor :: Editor Text Name -> EventM Name AppState ()
-copyAllFromEditor ed = do
-  let content = editorTextRaw ed
-  result <- liftIO (copyToClipboard content)
-  case result of
-    Left err -> modify (\s -> s { statusText = "Copy failed: " <> err })
-    Right () -> modify (\s -> s { statusText = "Copied all text." })
-
-copyToClipboard :: Text -> IO (Either Text ())
-copyToClipboard content = do
-  result <- try $ do
-    (Just hin, _, _, ph) <- createProcess (proc "pbcopy" []) { std_in = CreatePipe }
-    hSetEncoding hin utf8
-    hPutStr hin (toString content)
-    hClose hin
-    _ <- waitForProcess ph
-    pure ()
-  case result of
-    Left (err :: SomeException) -> pure (Left (T.pack (displayException err)))
-    Right _ -> pure (Right ())
-
-
-isBlank :: Text -> Bool
-isBlank = all isSpace . toString
-
-isPromptInputStart :: Vty.Event -> Bool
-isPromptInputStart = \case
-  Vty.EvKey (Vty.KChar _) _ -> True
-  Vty.EvKey Vty.KBS _ -> True
-  Vty.EvKey Vty.KDel _ -> True
-  _ -> False
-
-buildModelItems :: Config -> Text -> [Text] -> [Text]
-buildModelItems cfg providerName customModels =
-  let baseModels = filter (/= customModelItem) (providerModels cfg providerName)
-      customModels' = filter (/= customModelItem) customModels
-      merged = List.nub (baseModels <> customModels')
-  in merged <> [customModelItem]
 
 applySelection :: EventM Name AppState ()
 applySelection = do
