@@ -15,7 +15,7 @@ import qualified Data.Text as T
 import Oasis.Tui.Keymap (keyMain, keyModel, keyProvider, keyRunner, keyHistory, tipsFor)
 import Oasis.Tui.Render.Markdown (renderMarkdown)
 import Oasis.Tui.Render.MessageList (renderMessageList)
-import Oasis.Tui.State (AppState(..), Name(..), ParamField(..))
+import Oasis.Tui.State (AppState(..), Name(..), ParamField(..), DebugRequestInfo(..))
 import Oasis.Tui.Registry (runnerRequiresPrompt)
 import Oasis.Tui.X (renderTestPane)
 import Oasis.Types (Message(..), messageContentText)
@@ -186,18 +186,34 @@ drawUI st =
                       )
 
     debugDialog st' =
-      centerLayer $
-        hLimit 90 $
-          vLimit 20 $
+      let infoLines =
+            case debugRequestInfo st' of
+              Nothing -> []
+              Just info ->
+                [ txt ("provider: " <> debugProviderName info)
+                , txt ("model: " <> debugModelName info)
+                , txt ("endpoint: " <> debugEndpoint info)
+                , txt "headers:"
+                ] <> map txt (debugHeaders info)
+          errorLines =
+            case debugRequestError st' of
+              Nothing -> []
+              Just err -> [ padTop (Pad 1) $ txt ("Error: " <> err) ]
+      in centerLayer $
+        hLimit 110 $
+          vLimit 28 $
             withAttr (attrName "promptDialog") $
               overrideAttr borderAttr (attrName "promptDialogBorder") $
                 borderWithLabel (txt "debug: request preview") $
                   padAll 1 $
                     vBox
-                      [ renderEditor (txt . unlines) True (debugRequestEditor st')
-                      , padTop (Pad 1) $
-                          txt "[Enter] Send  [Esc] Cancel  [Ctrl+R] Restore"
-                      ]
+                      ( infoLines
+                      <> [ padTop (Pad 1) $ renderEditor (txt . unlines) True (debugRequestEditor st')
+                         , padTop (Pad 1) $
+                             txt "[Enter] Send  [Esc] Cancel  [Ctrl+R] Restore"
+                         ]
+                      <> errorLines
+                      )
 
     roleDialog st' =
       centerLayer $

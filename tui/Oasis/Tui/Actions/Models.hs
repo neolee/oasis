@@ -11,16 +11,23 @@ import Control.Monad.State.Class (get)
 import qualified Data.List as List
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
+import Data.Aeson (FromJSON, eitherDecode, eitherDecodeStrict)
 import qualified Data.Aeson as Aeson
+import qualified Data.Text.Encoding as TE
+import qualified Data.ByteString.Lazy as BL
 import Oasis.Client.OpenAI
   ( ResponsesRequest(..)
   , ResponsesResponse(..)
   , EmbeddingRequest(..)
   , EmbeddingResponse(..)
   , EmbeddingData(..)
+  , ClientError
   , buildResponsesUrl
   , buildModelsUrl
   , buildEmbeddingsUrl
+  , sendResponsesRaw
+  , sendEmbeddingsRaw
+  , renderClientError
   )
 import Oasis.Model (resolveModelId, resolveEmbeddingModelId)
 import Oasis.Runner.GetModels (runGetModels)
@@ -29,8 +36,12 @@ import qualified Oasis.Runner.Responses as Responses
 import Oasis.Tui.Actions.Common
   ( resolveSelectedProvider
   , startRunner
-  , runInBackground
   , buildRequestContext
+  , encodeJsonText
+  , runWithDebug
+  , buildDebugInfo
+  , jsonRequestHeaders
+  , modelsRequestHeaders
   )
 import Oasis.Tui.Render.Output
   ( RequestContext(..)
@@ -50,48 +61,59 @@ runResponsesAction inputText = do
   forM_ mResolved $ \(provider, apiKey) -> do
     let modelOverride = selectedModel st
         params = Responses.emptyResponsesParams
+        providerName = fromMaybe "-" (selectedProvider st)
     startRunner "Running responses runner..."
-    runInBackground st $ do
-      let modelId = resolveModelId provider modelOverride
-          reqBody = buildResponsesRequest modelId params inputText
-          reqCtx = buildRequestContext (buildResponsesUrl (base_url provider)) reqBody
-      result <- Responses.runResponses provider apiKey modelOverride params inputText
-      let (statusMsg, outputMsg) =
-            case result of
-              Left err ->
-                ("Responses runner failed.", renderErrorOutput reqCtx err)
-              Right rr ->
-                let assistantContent = response rr >>= \r -> output_text r
-                    output = mdConcat
-                      ( requestSections reqCtx
-                        <> catMaybes
-                            [ Just (mdJsonSection "Response" (responseJson rr))
-                            , fmap (mdTextSection "Assistant") assistantContent
-                            ]
-                      )
-                in ("Responses runner completed.", output)
-      pure (ResponsesCompleted statusMsg outputMsg)
+    let modelId = resolveModelId provider modelOverride
+        reqBody = buildResponsesRequest modelId params inputText
+        reqJson = encodeJsonText reqBody
+        info = buildDebugInfo providerName modelId (buildResponsesUrl (base_url provider)) (jsonRequestHeaders apiKey)
+        handler bodyText = do
+          reqBody' <- decodeResponsesRequestText bodyText
+          if stream reqBody' == Just True
+            then Left "responses runner requires stream=false"
+            else Right $ do
+              let reqCtx = buildRequestContext (buildResponsesUrl (base_url provider)) reqBody'
+              result <- sendResponsesRaw provider apiKey reqBody'
+              let (statusMsg, outputMsg) =
+                    case parseRawResponseStrictLocal result of
+                      Left err ->
+                        ("Responses runner failed.", renderErrorOutput reqCtx err)
+                      Right (raw, response) ->
+                        let assistantContent = output_text response
+                            output = mdConcat
+                              ( requestSections reqCtx
+                                <> catMaybes
+                                    [ Just (mdJsonSection "Response" raw)
+                                    , fmap (mdTextSection "Assistant") assistantContent
+                                    ]
+                              )
+                        in ("Responses runner completed.", output)
+              pure (ResponsesCompleted statusMsg outputMsg)
+    runWithDebug info reqJson handler
 
 runModelsAction :: EventM Name AppState ()
 runModelsAction = do
   st <- get
   mResolved <- resolveSelectedProvider
   forM_ mResolved $ \(provider, apiKey) -> do
+    let providerName = fromMaybe "-" (selectedProvider st)
     startRunner "Running models runner..."
-    runInBackground st $ do
-      let reqCtx = RequestContext (buildModelsUrl (base_url provider)) ""
-      result <- runGetModels provider apiKey
-      let (statusMsg, outputMsg) =
-            case result of
-              Left err ->
-                ("Models runner failed.", renderErrorOutput reqCtx err)
-              Right rr ->
-                let output = mdConcat
-                      ( requestSections reqCtx
-                        <> [mdJsonSection "Response" (responseJson rr)]
-                      )
-                in ("Models runner completed.", output)
-      pure (ModelsCompleted statusMsg outputMsg)
+    let reqCtx = RequestContext (buildModelsUrl (base_url provider)) ""
+        info = buildDebugInfo providerName "-" (buildModelsUrl (base_url provider)) (modelsRequestHeaders apiKey)
+        handler _ = Right $ do
+          result <- runGetModels provider apiKey
+          let (statusMsg, outputMsg) =
+                case result of
+                  Left err ->
+                    ("Models runner failed.", renderErrorOutput reqCtx err)
+                  Right rr ->
+                    let output = mdConcat
+                          ( requestSections reqCtx
+                            <> [mdJsonSection "Response" (responseJson rr)]
+                          )
+                    in ("Models runner completed.", output)
+          pure (ModelsCompleted statusMsg outputMsg)
+    runWithDebug info "" handler
 
 runEmbeddingsAction :: Text -> EventM Name AppState ()
 runEmbeddingsAction inputText = do
@@ -100,34 +122,39 @@ runEmbeddingsAction inputText = do
   forM_ mResolved $ \(provider, apiKey) -> do
     let modelOverride = selectedModel st
         params = Embeddings.emptyEmbeddingParams
+        providerName = fromMaybe "-" (selectedProvider st)
     startRunner "Running embeddings runner..."
-    runInBackground st $ do
-      let modelId = resolveEmbeddingModelId provider modelOverride
-          reqBody = buildEmbeddingsRequest modelId params inputText
-          reqCtx = buildRequestContext (buildEmbeddingsUrl (base_url provider)) reqBody
-      result <- Embeddings.runEmbeddings provider apiKey modelOverride params inputText
-      let (statusMsg, outputMsg) =
-            case result of
-              Left err ->
-                let output = mdConcat
-                      ( requestSections reqCtx
-                        <> [ mdTextSection "Actual Model" modelId
-                           , mdTextSection "Error" err
-                           ]
-                      )
-                in ("Embeddings runner failed.", output)
-              Right rr ->
-                let summaryText = embeddingSummary <$> response rr
-                    output = mdConcat
-                      ( requestSections reqCtx
-                        <> [ mdTextSection "Actual Model" modelId ]
-                        <> catMaybes
-                            [ Just (mdJsonSection "Response" (responseJson rr))
-                            , fmap (mdTextSection "Summary") summaryText
-                            ]
-                      )
-                in ("Embeddings runner completed.", output)
-      pure (EmbeddingsCompleted statusMsg outputMsg)
+    let modelId = resolveEmbeddingModelId provider modelOverride
+        reqBody = buildEmbeddingsRequest modelId params inputText
+        reqJson = encodeJsonText reqBody
+        info = buildDebugInfo providerName modelId (buildEmbeddingsUrl (base_url provider)) (jsonRequestHeaders apiKey)
+        handler bodyText = do
+          reqBody' <- decodeEmbeddingRequestText bodyText
+          Right $ do
+            let reqCtx = buildRequestContext (buildEmbeddingsUrl (base_url provider)) reqBody'
+            result <- sendEmbeddingsRaw provider apiKey reqBody'
+            let (statusMsg, outputMsg) =
+                  case parseRawResponseStrictLocal result of
+                    Left err ->
+                      let output = mdConcat
+                            ( requestSections reqCtx
+                              <> [ mdTextSection "Actual Model" modelId
+                                 , mdTextSection "Error" err
+                                 ]
+                            )
+                      in ("Embeddings runner failed.", output)
+                    Right (raw, response) ->
+                      let summaryText = embeddingSummary response
+                          output = mdConcat
+                            ( requestSections reqCtx
+                              <> [ mdTextSection "Actual Model" modelId ]
+                              <> [ mdJsonSection "Response" raw
+                                 , mdTextSection "Summary" summaryText
+                                 ]
+                            )
+                      in ("Embeddings runner completed.", output)
+            pure (EmbeddingsCompleted statusMsg outputMsg)
+    runWithDebug info reqJson handler
 
 buildResponsesRequest :: Text -> Responses.ResponsesParams -> Text -> ResponsesRequest
 buildResponsesRequest modelId params inputText =
@@ -167,6 +194,28 @@ embeddingSummary EmbeddingResponse{data_} =
     formatPreview n xs =
       let items = map (T.pack . show) (take n xs)
       in "[" <> T.intercalate ", " items <> if length xs > n then ", ...]" else "]"
+
+decodeResponsesRequestText :: Text -> Either Text ResponsesRequest
+decodeResponsesRequestText raw =
+  case eitherDecodeStrict (TE.encodeUtf8 raw) of
+    Left err -> Left (toText err)
+    Right req -> Right req
+
+decodeEmbeddingRequestText :: Text -> Either Text EmbeddingRequest
+decodeEmbeddingRequestText raw =
+  case eitherDecodeStrict (TE.encodeUtf8 raw) of
+    Left err -> Left (toText err)
+    Right req -> Right req
+
+parseRawResponseStrictLocal :: FromJSON a => Either ClientError BL.ByteString -> Either Text (Text, a)
+parseRawResponseStrictLocal = \case
+  Left err -> Left (renderClientError err)
+  Right body ->
+    case eitherDecode body of
+      Left err ->
+        let raw = TE.decodeUtf8Lenient (BL.toStrict body)
+        in Left ("Failed to decode response: " <> toText err <> "\nRaw: " <> raw)
+      Right val -> Right (TE.decodeUtf8Lenient (BL.toStrict body), val)
 
 providerModels :: Config -> Text -> [Text]
 providerModels cfg providerName =

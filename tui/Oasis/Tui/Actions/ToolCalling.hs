@@ -18,19 +18,24 @@ import Oasis.Client.OpenAI
   , ChatChoice(..)
   , ChatCompletionRequest(..)
   , defaultChatRequest
-  , requestChatWithHooks
+  , buildChatUrl
+  , sendChatCompletionRawWithHooks
   , renderClientError
   , emptyClientHooks
   )
+import Oasis.Client.OpenAI.Param (applyChatParams)
 import Oasis.Model (resolveModelId)
 import Oasis.Service.Amap (getWeatherText)
 import Oasis.Tui.Actions.Common
   ( resolveSelectedProvider
   , startRunner
-  , runInBackground
   , encodeJsonText
-  , extractAssistantContent
+  , runWithDebug
+  , buildDebugInfo
+  , selectBaseUrl
   , withMessageListHooks
+  , extractAssistantContent
+  , jsonRequestHeaders
   )
 import Oasis.Tui.Render.Output (mdJsonSection, mdTextSection, mdConcat)
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
@@ -52,107 +57,141 @@ runToolCallingAction = do
         params = chatParams st
         useBeta = betaUrlSetting st
         chan = eventChan st
+        providerName = fromMaybe "-" (selectedProvider st)
     startRunner "Running tool-calling runner..."
-    runInBackground st $ do
-      let modelId = resolveModelId provider modelOverride
-          tools = buildTools
-          systemMsg = T.unlines
-            [ "你是一个很有帮助的助手。"
-            , "如果用户提问关于天气的问题，请调用 ‘get_current_weather’ 函数；"
-            , "如果用户提问关于时间的问题，请调用 ‘get_current_time’ 函数。"
-            , "请以友好的语气回答问题。"
-            ]
-          messages0 =
-            [ systemMessage systemMsg
-            , userMessage "上海天气"
-            ]
-          reqBase0 = (defaultChatRequest modelId messages0)
-            { tools = Just tools
-            , parallel_tool_calls = Just True
-            }
-          hooks0 = withMessageListHooks chan messages0 emptyClientHooks
-      firstResp <- requestChatWithHooks hooks0 provider apiKey params reqBase0 useBeta
-      (statusMsg, outputMsg) <- case firstResp of
-        Left err ->
-          let output = mdConcat
-                [ mdTextSection "First Response" ("Error: " <> renderClientError err)
-                , mdTextSection "Tool Result" "Skipped due to request error."
-                , mdTextSection "Final Assistant" "Skipped due to request error."
-                ]
-          in pure ("Tool-calling runner failed.", output)
-        Right body ->
-          case decodeChatResponse body of
-            Left err ->
-              let output = mdConcat
-                    [ mdTextSection "First Response" ("Error: " <> err)
-                    , mdTextSection "Tool Result" "Skipped due to decode error."
-                    , mdTextSection "Final Assistant" "Skipped due to decode error."
-                    ]
-              in pure ("Tool-calling runner failed.", output)
-            Right response0 ->
-              case extractToolCallLocal response0 of
-                Nothing ->
-                  let assistantText = fromMaybe "No assistant message returned." (extractAssistantContent response0)
-                      output = mdConcat
-                        [ mdTextSection "First Response" assistantText
-                        , mdTextSection "Tool Result" "No tool call returned."
-                        , mdTextSection "Final Assistant" "Skipped because no tool call was returned."
+    let modelId = resolveModelId provider modelOverride
+        tools = buildTools
+        systemMsg = T.unlines
+          [ "你是一个很有帮助的助手。"
+          , "如果用户提问关于天气的问题，请调用 ‘get_current_weather’ 函数；"
+          , "如果用户提问关于时间的问题，请调用 ‘get_current_time’ 函数。"
+          , "请以友好的语气回答问题。"
+          ]
+        messages0 =
+          [ systemMessage systemMsg
+          , userMessage "上海天气"
+          ]
+        reqBase0 = (defaultChatRequest modelId messages0)
+          { tools = Just tools
+          , parallel_tool_calls = Just True
+          }
+        reqBody0 = applyChatParams params reqBase0
+        reqJson0 = encodeJsonText reqBody0
+        endpoint = buildChatUrl (selectBaseUrl provider useBeta)
+        info0 = buildDebugInfo providerName modelId endpoint (jsonRequestHeaders apiKey)
+        handler0 bodyText = do
+          reqBody0' <- decodeChatRequestText bodyText
+          if stream reqBody0'
+            then Left "tool-calling runner requires stream=false"
+            else Right $ do
+              let hooks0 = withMessageListHooks chan messages0 emptyClientHooks
+              firstResp <- sendChatCompletionRawWithHooks hooks0 provider apiKey reqBody0' useBeta
+              case firstResp of
+                Left err ->
+                  let output = mdConcat
+                        [ mdTextSection "First Response" ("Error: " <> renderClientError err)
+                        , mdTextSection "Tool Result" "Skipped due to request error."
+                        , mdTextSection "Final Assistant" "Skipped due to request error."
                         ]
-                  in pure ("Tool-calling runner completed.", output)
-                Just (assistantMsg, toolCall) -> do
-                  toolResult <- executeToolCall toolCall
-                  let firstSection = mdJsonSection "First Response (Tool Call)" (encodeJsonText toolCall)
-                      toolSection = case toolResult of
-                        Left terr -> mdTextSection "Tool Result" ("Error: " <> terr)
-                        Right tmsg -> mdTextSection "Tool Result" tmsg
-                  case toolResult of
-                    Left _ ->
+                  in pure (ToolCallingCompleted "Tool-calling runner failed." output)
+                Right body ->
+                  case decodeChatResponse body of
+                    Left err ->
                       let output = mdConcat
-                            [ firstSection
-                            , toolSection
-                            , mdTextSection "Final Assistant" "Skipped due to tool error."
+                            [ mdTextSection "First Response" ("Error: " <> err)
+                            , mdTextSection "Tool Result" "Skipped due to decode error."
+                            , mdTextSection "Final Assistant" "Skipped due to decode error."
                             ]
-                      in pure ("Tool-calling runner failed.", output)
-                    Right toolMsgText -> do
-                      let toolMsg = toolMessage (Types.id toolCall) toolMsgText
-                          messages1 = messages0 <> [assistantMsg, toolMsg]
-                          reqBase1 = (defaultChatRequest modelId messages1)
-                            { tools = Just tools
-                            }
-                          hooks1 = withMessageListHooks chan messages1 emptyClientHooks
-                      secondResp <- requestChatWithHooks hooks1 provider apiKey params reqBase1 useBeta
-                      case secondResp of
-                        Left err ->
-                          let output = mdConcat
-                                [ firstSection
-                                , toolSection
-                                , mdTextSection "Final Assistant" ("Error: " <> renderClientError err)
+                      in pure (ToolCallingCompleted "Tool-calling runner failed." output)
+                    Right response0 ->
+                      case extractToolCallLocal response0 of
+                        Nothing ->
+                          let assistantText = fromMaybe "No assistant message returned." (extractAssistantContent response0)
+                              output = mdConcat
+                                [ mdTextSection "First Response" assistantText
+                                , mdTextSection "Tool Result" "No tool call returned."
+                                , mdTextSection "Final Assistant" "Skipped because no tool call was returned."
                                 ]
-                          in pure ("Tool-calling runner failed.", output)
-                        Right body2 ->
-                          case decodeChatResponse body2 of
-                            Left err ->
+                          in pure (ToolCallingCompleted "Tool-calling runner completed." output)
+                        Just (assistantMsg, toolCall) -> do
+                          toolResult <- executeToolCall toolCall
+                          let firstSection = mdJsonSection "First Response (Tool Call)" (encodeJsonText toolCall)
+                              toolSection = case toolResult of
+                                Left terr -> mdTextSection "Tool Result" ("Error: " <> terr)
+                                Right tmsg -> mdTextSection "Tool Result" tmsg
+                          case toolResult of
+                            Left _ ->
                               let output = mdConcat
                                     [ firstSection
                                     , toolSection
-                                    , mdTextSection "Final Assistant" ("Error: " <> err)
+                                    , mdTextSection "Final Assistant" "Skipped due to tool error."
                                     ]
-                              in pure ("Tool-calling runner failed.", output)
-                            Right response2 ->
-                              let finalText = fromMaybe "No assistant message returned." (extractAssistantContent response2)
-                                  output = mdConcat
-                                    [ firstSection
-                                    , toolSection
-                                    , mdTextSection "Final Assistant" finalText
-                                    ]
-                              in pure ("Tool-calling runner completed.", output)
-      pure (ToolCallingCompleted statusMsg outputMsg)
+                              in pure (ToolCallingCompleted "Tool-calling runner failed." output)
+                            Right toolMsgText -> do
+                              let toolMsg = toolMessage (Types.id toolCall) toolMsgText
+                                  messages1 = messages0 <> [assistantMsg, toolMsg]
+                                  reqBase1 = (defaultChatRequest modelId messages1)
+                                    { tools = Just tools
+                                    }
+                                  reqBody1 = applyChatParams params reqBase1
+                                  reqJson1 = encodeJsonText reqBody1
+                                  info1 = buildDebugInfo providerName modelId endpoint (jsonRequestHeaders apiKey)
+                                  handler1 bodyText1 = do
+                                    reqBody1' <- decodeChatRequestText bodyText1
+                                    if stream reqBody1'
+                                      then Left "tool-calling runner requires stream=false"
+                                      else Right $ do
+                                        let hooks1 = withMessageListHooks chan messages1 emptyClientHooks
+                                        secondResp <- sendChatCompletionRawWithHooks hooks1 provider apiKey reqBody1' useBeta
+                                        case secondResp of
+                                          Left err ->
+                                            let output = mdConcat
+                                                  [ firstSection
+                                                  , toolSection
+                                                  , mdTextSection "Final Assistant" ("Error: " <> renderClientError err)
+                                                  ]
+                                            in pure (ToolCallingCompleted "Tool-calling runner failed." output)
+                                          Right body2 ->
+                                            case decodeChatResponse body2 of
+                                              Left err ->
+                                                let output = mdConcat
+                                                      [ firstSection
+                                                      , toolSection
+                                                      , mdTextSection "Final Assistant" ("Error: " <> err)
+                                                      ]
+                                                in pure (ToolCallingCompleted "Tool-calling runner failed." output)
+                                              Right response2 ->
+                                                let finalText = fromMaybe "No assistant message returned." (extractAssistantContent response2)
+                                                    output = mdConcat
+                                                      [ firstSection
+                                                      , toolSection
+                                                      , mdTextSection "Final Assistant" finalText
+                                                      ]
+                                                in pure (ToolCallingCompleted "Tool-calling runner completed." output)
+                              if debugEnabled st
+                                then pure (DebugRequestOpen info1 reqJson1 handler1 (activeList st))
+                                else case handler1 reqJson1 of
+                                  Left err ->
+                                    let output = mdConcat
+                                          [ firstSection
+                                          , toolSection
+                                          , mdTextSection "Final Assistant" ("Error: " <> err)
+                                          ]
+                                    in pure (ToolCallingCompleted "Tool-calling runner failed." output)
+                                  Right action -> action
+    runWithDebug info0 reqJson0 handler0
 
 decodeChatResponse :: BL.ByteString -> Either Text ChatCompletionResponse
 decodeChatResponse body =
   case eitherDecode body of
     Left err -> Left (toText err)
     Right resp -> Right resp
+
+decodeChatRequestText :: Text -> Either Text ChatCompletionRequest
+decodeChatRequestText raw =
+  case eitherDecode (BL.fromStrict (TE.encodeUtf8 raw)) of
+    Left err -> Left (toText err)
+    Right req -> Right req
 
 extractToolCallLocal :: ChatCompletionResponse -> Maybe (Message, ToolCall)
 extractToolCallLocal ChatCompletionResponse{choices} =

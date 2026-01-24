@@ -15,13 +15,14 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.IORef as IORef
-import Data.Aeson (Value, eitherDecodeStrict)
+import Data.Aeson (FromJSON, Value, eitherDecode, eitherDecodeStrict)
 import qualified Data.Aeson as Aeson
 import Oasis.Client.OpenAI
   ( ChatCompletionRequest(..)
   , ChatCompletionStreamChunk(..)
   , StreamChoice(..)
   , StreamDelta(..)
+  , ClientError
   , defaultChatRequest
   , setChatStream
   , buildChatUrl
@@ -35,12 +36,15 @@ import qualified Oasis.Client.OpenAI as OpenAI
 import Oasis.Client.OpenAI.Param (applyChatParams)
 import Oasis.Chat.Message (assistantMessage, userMessage, systemMessage)
 import Oasis.Model (resolveModelId)
-import Oasis.Runner.Basic (runBasicWithHooks)
 import Oasis.Tui.Actions.Common
   ( resolveSelectedProvider
   , startRunner
-  , runInBackground
   , buildRequestContext
+  , encodeJsonText
+  , runWithDebug
+  , buildDebugInfo
+  , jsonRequestHeaders
+  , sseRequestHeaders
   , selectBaseUrl
   , truncateText
   , extractAssistantContent
@@ -58,7 +62,7 @@ import Oasis.Tui.Render.Output
   , renderErrorOutput
   )
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
-import Oasis.Types (Message, Provider(..), RequestResponse(..))
+import Oasis.Types (Message, Provider(..))
 import Network.HTTP.Client (Request(..))
 import Network.HTTP.Types.Header (HeaderName, hAuthorization)
 import Network.HTTP.Types.Status (Status, statusCode)
@@ -73,29 +77,39 @@ runBasicAction prompt = do
         params = chatParams st
         useBeta = betaUrlSetting st
         chan = eventChan st
+        providerName = fromMaybe "-" (selectedProvider st)
     startRunner "Running basic runner..."
-    runInBackground st $ do
-      let modelId = resolveModelId provider modelOverride
-          baseUrl = selectBaseUrl provider useBeta
-          reqBody = applyChatParams params (defaultChatRequest modelId [userMessage prompt])
-          reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody
-          hooks = withMessageListHooks chan [userMessage prompt] emptyClientHooks
-      result <- runBasicWithHooks hooks provider apiKey modelOverride params prompt useBeta
-      let (statusMsg, outputMsg) =
-            case result of
-              Left err ->
-                ("Basic runner failed.", renderErrorOutput reqCtx err)
-              Right rr ->
-                let assistantContent = response rr >>= extractAssistantContent
-                    output = mdConcat
-                      ( requestSections reqCtx
-                        <> catMaybes
-                            [ Just (mdJsonSection "Response" (responseJson rr))
-                            , fmap (mdTextSection "Assistant") assistantContent
-                            ]
-                      )
-                in ("Basic runner completed.", output)
-      pure (BasicCompleted statusMsg outputMsg)
+    let modelId = resolveModelId provider modelOverride
+        baseUrl = selectBaseUrl provider useBeta
+        reqBody = applyChatParams params (defaultChatRequest modelId [userMessage prompt])
+        reqJson = encodeJsonText reqBody
+        hooks = withMessageListHooks chan [userMessage prompt] emptyClientHooks
+        info = buildDebugInfo providerName modelId (buildChatUrl baseUrl) (jsonRequestHeaders apiKey)
+        handler bodyText = do
+          reqBody' <- decodeChatRequestText bodyText
+          let isStream = case reqBody' of
+                ChatCompletionRequest{stream} -> stream
+          if isStream
+            then Left "basic runner requires stream=false"
+            else Right $ do
+              let reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody'
+              result <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody' useBeta
+              let (statusMsg, outputMsg) =
+                    case parseRawResponseStrictLocal result of
+                      Left err ->
+                        ("Basic runner failed.", renderErrorOutput reqCtx err)
+                      Right (raw, response) ->
+                        let assistantContent = extractAssistantContent response
+                            output = mdConcat
+                              ( requestSections reqCtx
+                                <> catMaybes
+                                    [ Just (mdJsonSection "Response" raw)
+                                    , fmap (mdTextSection "Assistant") assistantContent
+                                    ]
+                              )
+                        in ("Basic runner completed.", output)
+              pure (BasicCompleted statusMsg outputMsg)
+    runWithDebug info reqJson handler
 
 runHooksAction :: Text -> EventM Name AppState ()
 runHooksAction prompt = do
@@ -106,15 +120,25 @@ runHooksAction prompt = do
         params = chatParams st
         useBeta = betaUrlSetting st
         chan = eventChan st
+        providerName = fromMaybe "-" (selectedProvider st)
     startRunner "Running hooks runner..."
-    runInBackground st $ do
-      let modelId = resolveModelId provider modelOverride
-          baseUrl = selectBaseUrl provider useBeta
-          reqBody = applyChatParams params (defaultChatRequest modelId [userMessage prompt])
-          reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody
-          hooks = withMessageListHooks chan [userMessage prompt] emptyClientHooks
-      (statusMsg, outputMsg) <- runHooksWithLog hooks provider apiKey useBeta reqCtx reqBody
-      pure (HooksCompleted statusMsg outputMsg)
+    let modelId = resolveModelId provider modelOverride
+        baseUrl = selectBaseUrl provider useBeta
+        reqBody = applyChatParams params (defaultChatRequest modelId [userMessage prompt])
+        reqJson = encodeJsonText reqBody
+        hooks = withMessageListHooks chan [userMessage prompt] emptyClientHooks
+        info = buildDebugInfo providerName modelId (buildChatUrl baseUrl) (jsonRequestHeaders apiKey)
+        handler bodyText = do
+          reqBody' <- decodeChatRequestText bodyText
+          let isStream = case reqBody' of
+                ChatCompletionRequest{stream} -> stream
+          if isStream
+            then Left "hooks runner requires stream=false"
+            else Right $ do
+              let reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody'
+              (statusMsg, outputMsg) <- runHooksWithLog hooks provider apiKey useBeta reqCtx reqBody'
+              pure (HooksCompleted statusMsg outputMsg)
+    runWithDebug info reqJson handler
 
 runStructuredJsonAction :: EventM Name AppState ()
 runStructuredJsonAction = runStructuredAction jsonObjectFormat "structured-json"
@@ -131,45 +155,55 @@ runStructuredAction responseFormat runnerLabel = do
         params = chatParams st
         useBeta = betaUrlSetting st
         chan = eventChan st
+        providerName = fromMaybe "-" (selectedProvider st)
     startRunner ("Running " <> runnerLabel <> " runner...")
-    runInBackground st $ do
-      let modelId = resolveModelId provider modelOverride
-          reqMessages =
-            [ systemMessage structuredSystemMessage
-            , userMessage structuredQuestionText
-            ]
-          reqBase = defaultChatRequest modelId reqMessages
-          ChatCompletionRequest{..} = applyChatParams params reqBase
-          reqBody = ChatCompletionRequest
-            { OpenAI.stream = True
-            , OpenAI.response_format = Just responseFormat
-            , ..
-            }
-      accumRef <- IORef.newIORef ""
-      let hooks = withMessageListHooks chan reqMessages emptyClientHooks
-      result <- streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody (handleStructuredChunk chan accumRef) useBeta
-      rawText <- IORef.readIORef accumRef
-      unless (T.null (T.strip rawText)) $
-        writeBChan chan (MessageListSynced (reqMessages <> [assistantMessage rawText]))
-      let (statusMsg, outputMsg) =
-            case result of
-              Left err ->
-                let output = mdConcat
-                      [ mdCodeSection "Raw Stream" "text" rawText
-                      , mdTextSection "Parsed JSON" ("Error: " <> renderClientError err)
-                      ]
-                in (runnerLabel <> " runner failed.", output)
-              Right _ ->
-                let parsedSection =
-                      case parseJsonText rawText of
-                        Left perr -> mdTextSection "Parsed JSON" ("Invalid JSON: " <> perr)
-                        Right pretty -> mdCodeSection "Parsed JSON" "json" pretty
-                    output = mdConcat
-                      [ mdCodeSection "Raw Stream" "text" rawText
-                      , parsedSection
-                      ]
-                in (runnerLabel <> " runner completed.", output)
-      pure (StructuredCompleted statusMsg outputMsg)
+    let modelId = resolveModelId provider modelOverride
+        reqMessages =
+          [ systemMessage structuredSystemMessage
+          , userMessage structuredQuestionText
+          ]
+        reqBase = defaultChatRequest modelId reqMessages
+        ChatCompletionRequest{..} = applyChatParams params reqBase
+        reqBody = ChatCompletionRequest
+          { OpenAI.stream = True
+          , OpenAI.response_format = Just responseFormat
+          , ..
+          }
+        reqJson = encodeJsonText reqBody
+        info = buildDebugInfo providerName modelId (buildChatUrl (selectBaseUrl provider useBeta)) (sseRequestHeaders apiKey)
+        handler bodyText = do
+          reqBody' <- decodeChatRequestText bodyText
+          let isStream = case reqBody' of
+                ChatCompletionRequest{stream} -> stream
+          if not isStream
+            then Left (runnerLabel <> " runner requires stream=true")
+            else Right $ do
+              accumRef <- IORef.newIORef ""
+              let hooks = withMessageListHooks chan reqMessages emptyClientHooks
+              result <- streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody' (handleStructuredChunk chan accumRef) useBeta
+              rawText <- IORef.readIORef accumRef
+              unless (T.null (T.strip rawText)) $
+                writeBChan chan (MessageListSynced (reqMessages <> [assistantMessage rawText]))
+              let (statusMsg, outputMsg) =
+                    case result of
+                      Left err ->
+                        let output = mdConcat
+                              [ mdCodeSection "Raw Stream" "text" rawText
+                              , mdTextSection "Parsed JSON" ("Error: " <> renderClientError err)
+                              ]
+                        in (runnerLabel <> " runner failed.", output)
+                      Right _ ->
+                        let parsedSection =
+                              case parseJsonText rawText of
+                                Left perr -> mdTextSection "Parsed JSON" ("Invalid JSON: " <> perr)
+                                Right pretty -> mdCodeSection "Parsed JSON" "json" pretty
+                            output = mdConcat
+                              [ mdCodeSection "Raw Stream" "text" rawText
+                              , parsedSection
+                              ]
+                        in (runnerLabel <> " runner completed.", output)
+              pure (StructuredCompleted statusMsg outputMsg)
+    runWithDebug info reqJson handler
 
 handleStructuredChunk :: BChan TuiEvent -> IORef.IORef Text -> ChatCompletionStreamChunk -> IO ()
 handleStructuredChunk chan accumRef chunk =
@@ -185,6 +219,12 @@ forEachDeltaContent ChatCompletionStreamChunk{choices} f =
 
 deltaContent :: StreamDelta -> [Text]
 deltaContent StreamDelta{content} = maybe [] pure content
+
+decodeChatRequestText :: Text -> Either Text ChatCompletionRequest
+decodeChatRequestText raw =
+  case eitherDecodeStrict (encodeUtf8 raw) of
+    Left err -> Left (toText err)
+    Right req -> Right req
 
 runChatInitAction :: EventM Name AppState ()
 runChatInitAction =
@@ -203,16 +243,26 @@ runChatAction messages = do
         params = chatParams st
         useBeta = betaUrlSetting st
         chan = eventChan st
+        providerName = fromMaybe "-" (selectedProvider st)
     startRunner "Running chat..."
-    runInBackground st $ do
-      let modelId = resolveModelId provider modelOverride
-          reqBase = defaultChatRequest modelId messages
-          reqBody = applyChatParams params (setChatStream True reqBase)
-          hooks = withMessageListHooks chan messages emptyClientHooks
-      result <- streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody (handleChatChunk chan) useBeta
-      case result of
-        Left err -> pure (ChatCompleted ("Chat failed: " <> renderClientError err))
-        Right _ -> pure (ChatCompleted "Chat completed.")
+    let modelId = resolveModelId provider modelOverride
+        reqBase = defaultChatRequest modelId messages
+        reqBody = applyChatParams params (setChatStream True reqBase)
+        reqJson = encodeJsonText reqBody
+        hooks = withMessageListHooks chan messages emptyClientHooks
+        info = buildDebugInfo providerName modelId (buildChatUrl (selectBaseUrl provider useBeta)) (sseRequestHeaders apiKey)
+        handler bodyText = do
+          reqBody' <- decodeChatRequestText bodyText
+          let isStream = case reqBody' of
+                ChatCompletionRequest{stream} -> stream
+          if not isStream
+            then Left "chat runner requires stream=true"
+            else Right $ do
+              result <- streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody' (handleChatChunk chan) useBeta
+              case result of
+                Left err -> pure (ChatCompleted ("Chat failed: " <> renderClientError err))
+                Right _ -> pure (ChatCompleted "Chat completed.")
+    runWithDebug info reqJson handler
 
 handleChatChunk :: BChan TuiEvent -> ChatCompletionStreamChunk -> IO ()
 handleChatChunk chan chunk =
@@ -226,6 +276,16 @@ chatDeltaText ChatCompletionStreamChunk{choices} =
       case delta of
         Nothing -> []
         Just StreamDelta{content} -> maybe [] pure content
+
+parseRawResponseStrictLocal :: FromJSON a => Either ClientError BL.ByteString -> Either Text (Text, a)
+parseRawResponseStrictLocal = \case
+  Left err -> Left (renderClientError err)
+  Right body ->
+    case eitherDecode body of
+      Left err ->
+        let raw = TE.decodeUtf8Lenient (BL.toStrict body)
+        in Left ("Failed to decode response: " <> toText err <> "\nRaw: " <> raw)
+      Right val -> Right (TE.decodeUtf8Lenient (BL.toStrict body), val)
 
 parseJsonText :: Text -> Either Text Text
 parseJsonText raw =

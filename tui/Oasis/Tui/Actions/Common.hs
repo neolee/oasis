@@ -4,6 +4,13 @@ module Oasis.Tui.Actions.Common
   , runInBackground
   , buildRequestContext
   , encodeJsonText
+  , openDebugDialog
+  , runWithDebug
+  , buildDebugInfo
+  , formatHeaders
+  , jsonRequestHeaders
+  , sseRequestHeaders
+  , modelsRequestHeaders
   , selectBaseUrl
   , truncateText
   , extractAssistantContent
@@ -15,11 +22,12 @@ module Oasis.Tui.Actions.Common
 import Relude
 import Brick.BChan (BChan, writeBChan)
 import Brick.Types (EventM)
+import Brick.Widgets.Edit (editor)
 import Control.Concurrent (forkIO)
 import Control.Monad.State.Class (get, modify)
 import Oasis.Config (resolveProvider)
 import Oasis.Tui.Render.Output (RequestContext(..))
-import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
+import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..), DebugRequestInfo(..), DebugRequestHandler)
 import Oasis.Types (Provider(..), Message(..), messageContentText)
 import Oasis.Chat.Message (assistantMessage)
 import Oasis.Client.OpenAI (ChatCompletionResponse(..), ChatChoice(..), ClientHooks(..), emptyClientHooks)
@@ -27,6 +35,9 @@ import Data.Aeson (ToJSON, encode, eitherDecode)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Char8 as BS8
+import Network.HTTP.Types.Header (HeaderName, hAccept, hAuthorization, hContentType)
+import Data.CaseInsensitive (original)
 
 resolveSelectedProvider :: EventM Name AppState (Maybe (Provider, Text))
 resolveSelectedProvider = do
@@ -60,6 +71,71 @@ runInBackground st action =
 
 encodeJsonText :: ToJSON a => a -> Text
 encodeJsonText = TE.decodeUtf8Lenient . BL.toStrict . encode
+
+buildDebugInfo :: Text -> Text -> Text -> [(HeaderName, BS8.ByteString)] -> DebugRequestInfo
+buildDebugInfo providerName modelName endpoint headers =
+  DebugRequestInfo
+    { debugProviderName = providerName
+    , debugModelName = modelName
+    , debugEndpoint = endpoint
+    , debugHeaders = formatHeaders headers
+    }
+
+formatHeaders :: [(HeaderName, BS8.ByteString)] -> [Text]
+formatHeaders headers =
+  map render headers
+  where
+    render (name, value) =
+      let nameText = TE.decodeUtf8Lenient (original name)
+          valueText = TE.decodeUtf8Lenient value
+      in nameText <> ": " <> valueText
+
+authHeaders :: Text -> [(HeaderName, BS8.ByteString)]
+authHeaders apiKey
+  | T.null apiKey = []
+  | otherwise = [(hAuthorization, "Bearer " <> TE.encodeUtf8 apiKey)]
+
+jsonRequestHeaders :: Text -> [(HeaderName, BS8.ByteString)]
+jsonRequestHeaders apiKey =
+  [ (hContentType, "application/json")
+  , (hAccept, "application/json")
+  ] <> authHeaders apiKey
+
+sseRequestHeaders :: Text -> [(HeaderName, BS8.ByteString)]
+sseRequestHeaders apiKey =
+  [ (hContentType, "application/json")
+  , (hAccept, "text/event-stream")
+  ] <> authHeaders apiKey
+
+modelsRequestHeaders :: Text -> [(HeaderName, BS8.ByteString)]
+modelsRequestHeaders apiKey =
+  [ (hAccept, "application/json")
+  ] <> authHeaders apiKey
+
+openDebugDialog :: Name -> DebugRequestInfo -> Text -> DebugRequestHandler -> EventM Name AppState ()
+openDebugDialog returnFocus info original handler =
+  modify (\s -> s
+    { debugDialogOpen = True
+    , debugRequestInfo = Just info
+    , debugRequestOriginal = original
+    , debugRequestDraft = original
+    , debugRequestError = Nothing
+    , debugPendingAction = Just handler
+    , debugDialogReturnFocus = returnFocus
+    , debugRequestEditor = editor DebugRequestEditor (Just 12) original
+    , activeList = DebugRequestEditor
+    })
+
+runWithDebug :: DebugRequestInfo -> Text -> DebugRequestHandler -> EventM Name AppState ()
+runWithDebug info original handler = do
+  st <- get
+  if debugEnabled st
+    then openDebugDialog (activeList st) info original handler
+    else case handler original of
+      Left err ->
+        modify (\s -> s { statusText = "Request build failed: " <> err })
+      Right action ->
+        runInBackground st action
 
 buildRequestContext :: ToJSON a => Text -> a -> RequestContext
 buildRequestContext url reqBody =

@@ -3,6 +3,8 @@ module Oasis.Tui.State
   , ParamField(..)
   , TuiEvent(..)
   , AppState(..)
+  , DebugRequestInfo(..)
+  , DebugRequestHandler
   , mkState
   , defaultOutputText
   ) where
@@ -19,6 +21,12 @@ data TuiEvent
   = BasicCompleted
       { eventStatus :: Text
       , eventOutput :: Text
+      }
+  | DebugRequestOpen
+      { eventDebugInfo :: DebugRequestInfo
+      , eventDebugOriginal :: Text
+      , eventDebugHandler :: DebugRequestHandler
+      , eventDebugReturnFocus :: Name
       }
   | ChatStreaming
     { eventDelta :: Text
@@ -125,6 +133,9 @@ data AppState = AppState
   , debugRequestOriginal :: Text
   , debugRequestDraft :: Text
   , debugRequestError :: Maybe Text
+  , debugRequestInfo :: Maybe DebugRequestInfo
+  , debugPendingAction :: Maybe DebugRequestHandler
+  , debugDialogReturnFocus :: Name
   , testPaneOpen :: Bool
   , promptDialogOpen :: Bool
   , promptDefault :: Text
@@ -144,6 +155,15 @@ data AppState = AppState
   , outputText :: Text
   , statusText :: Text
   }
+
+data DebugRequestInfo = DebugRequestInfo
+  { debugProviderName :: Text
+  , debugModelName :: Text
+  , debugEndpoint :: Text
+  , debugHeaders :: [Text]
+  } deriving (Show, Eq)
+
+type DebugRequestHandler = Text -> Either Text (IO TuiEvent)
 
 mkState :: BChan TuiEvent -> Config -> [Text] -> [Text] -> [Text] -> Text -> Text -> AppState
 mkState chan cfg providers models runners outputText statusText =
@@ -175,6 +195,9 @@ mkState chan cfg providers models runners outputText statusText =
     , debugRequestOriginal = ""
     , debugRequestDraft = ""
     , debugRequestError = Nothing
+    , debugRequestInfo = Nothing
+    , debugPendingAction = Nothing
+    , debugDialogReturnFocus = MainViewport
     , testPaneOpen = False
     , promptDialogOpen = False
     , promptDefault = defaultPrompt

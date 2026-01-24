@@ -20,6 +20,7 @@ import qualified Graphics.Vty as Vty
 import Oasis.Client.OpenAI.Param (ChatParams(..))
 import Oasis.Tui.Actions.Models ( providerModels )
 import Oasis.Tui.Actions.Chat (runChatAction)
+import Oasis.Tui.Actions.Common (openDebugDialog, runInBackground)
 import Oasis.Tui.Registry (RunnerAction(..), RunnerSpec(..), lookupRunner)
 import Oasis.Tui.State (AppState(..), Name(..), ParamField(..), TuiEvent(..))
 import Oasis.Chat.Message (assistantMessage, userMessage)
@@ -28,6 +29,8 @@ import Oasis.Types (Message(..), MessageContent(..), StopParam(..), messageConte
 appEvent :: BrickEvent Name TuiEvent -> EventM Name AppState ()
 appEvent (AppEvent evt) =
   case evt of
+    DebugRequestOpen{eventDebugInfo, eventDebugOriginal, eventDebugHandler, eventDebugReturnFocus} ->
+      openDebugDialog eventDebugReturnFocus eventDebugInfo eventDebugOriginal eventDebugHandler
     ChatStreaming{eventDelta} ->
       do
         modify (applyChatDelta eventDelta)
@@ -59,6 +62,8 @@ appEvent (VtyEvent ev) =
           then handleParamDialogEvent ev
           else if promptDialogOpen st
             then handlePromptEvent ev
+            else if debugDialogOpen st
+              then handleDebugRequestEvent ev
             else if activeList st == VerboseContentEditor
               then handleVerboseContentEvent ev
               else if activeList st == ChatInputEditor
@@ -260,6 +265,70 @@ handlePromptEvent ev =
       (editor', _) <- nestEventM baseEditor (handleEditorEvent (VtyEvent ev))
       let pristine' = not (isPromptInputStart ev) && promptPristine st
       modify (\s -> s { promptEditor = editor', promptPristine = pristine' })
+
+handleDebugRequestEvent :: Vty.Event -> EventM Name AppState ()
+handleDebugRequestEvent ev =
+  case ev of
+    Vty.EvKey Vty.KEnter [] -> submitDebugRequest
+    Vty.EvKey Vty.KEsc [] -> cancelDebugRequest
+    Vty.EvKey (Vty.KChar 'r') [Vty.MCtrl] -> restoreDebugRequest
+    _ -> do
+      st <- get
+      (editor', _) <- nestEventM (debugRequestEditor st) (handleEditorEvent (VtyEvent ev))
+      modify (\s -> s
+        { debugRequestEditor = editor'
+        , debugRequestDraft = editorTextRaw editor'
+        })
+
+submitDebugRequest :: EventM Name AppState ()
+submitDebugRequest = do
+  st <- get
+  let draft = editorTextRaw (debugRequestEditor st)
+      payload = if T.null (T.strip draft)
+        then debugRequestOriginal st
+        else draft
+  case debugPendingAction st of
+    Nothing ->
+      modify (\s -> s
+        { debugDialogOpen = False
+        , debugRequestError = Nothing
+        , debugRequestInfo = Nothing
+        , activeList = debugDialogReturnFocus s
+        })
+    Just handler ->
+      case handler payload of
+        Left err ->
+          modify (\s -> s { debugRequestError = Just err })
+        Right action -> do
+          modify (\s -> s
+            { debugDialogOpen = False
+            , debugRequestError = Nothing
+            , debugRequestInfo = Nothing
+            , debugPendingAction = Nothing
+            , activeList = debugDialogReturnFocus s
+            })
+          runInBackground st action
+
+cancelDebugRequest :: EventM Name AppState ()
+cancelDebugRequest =
+  modify (\s -> s
+    { debugDialogOpen = False
+    , debugRequestError = Nothing
+    , debugRequestInfo = Nothing
+    , debugPendingAction = Nothing
+    , activeList = debugDialogReturnFocus s
+    , statusText = "Debug request cancelled."
+    })
+
+restoreDebugRequest :: EventM Name AppState ()
+restoreDebugRequest = do
+  st <- get
+  let original = debugRequestOriginal st
+  modify (\s -> s
+    { debugRequestEditor = editor DebugRequestEditor (Just 12) original
+    , debugRequestDraft = original
+    , debugRequestError = Nothing
+    })
 
 handleParamEditorEvent :: Vty.Event -> EventM Name AppState ()
 handleParamEditorEvent ev = do
