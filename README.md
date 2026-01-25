@@ -1,27 +1,20 @@
 # Oasis: Haskell LLM Integration Library
 
-Oasis is a Haskell library and set of apps that provide a unified interface for multiple LLM providers. It focuses on type safety, configuration-driven provider selection, and streaming support.
-
-## Overview
-
-- **Unified API** for Chat, Structured Output, Tool Calling, Embeddings, and Completions.
-- **Configuration-driven** provider/model selection via TOML.
-- **Streaming-first** design with structured chunks.
-- **Pluggable runners** for different LLM workflows.
+Oasis is a Haskell library and set of apps that provide a unified interface for different LLM providers. It focuses on configuration-driven provider selection, unified type-safe request and response handling, and advanced context management with hook mechanisms.
 
 ---
 
-## 1) Library: src/
+## The Library
 
-The library is layered to keep protocol logic pure and keep UI/printing in apps.
+The library (`./src`) is layered to keep protocol logic pure and keep UI/printing in apps.
 
-### Public API (Exposed Modules)
+### Public API
 
 **Core**
 
 - `Oasis.Types`: protocol-level types (messages, tools, usage, errors).
-- `Oasis.Model`: model/provider resolution and high-level model abstractions.
 - `Oasis.Config`: TOML configuration parsing and defaults.
+- `Oasis.Model`: model/provider resolution and high-level model abstractions.
 
 **OpenAI-Compatible Client**
 
@@ -30,34 +23,193 @@ The library is layered to keep protocol logic pure and keep UI/printing in apps.
 
 **Chat Session Support**
 
-- `Oasis.Chat.History`: conversation history and editing.
-- `Oasis.Chat.Log`: session logging helpers.
 - `Oasis.Chat.Message`: message constructors and helpers.
-- `Oasis.Chat.Prompt`: prompt composition (extensible).
+- `Oasis.Chat.History`: conversation history and editing.
 
 **Runners (LLM Capabilities)**
 
-- `Oasis.Runner.Chat`: multi-turn chat with streaming toggle.
+- `Oasis.Runner.GetModels`: fetch available models from provider.
 - `Oasis.Runner.Basic`: single-turn, non-streaming, JSON-in/JSON-out.
-- `Oasis.Runner.StructuredOutput`: structured JSON or JSON schema output.
-- `Oasis.Runner.ToolCalling`: tool calling.
+- `Oasis.Runner.Chat`: multi-turn chat with streaming toggle.
 - `Oasis.Runner.Embeddings`: embeddings.
-- `Oasis.Runner.PrefixCompletion`, `Oasis.Runner.FIMCompletion`: completion modes.
-- `Oasis.Runner.PartialMode`, `Oasis.Runner.Responses`, `Oasis.Runner.Hooks`, `Oasis.Runner.GetModels`.
+- `Oasis.Runner.StructuredOutput`: structured JSON or JSON schema output.
+- `Oasis.Runner.PartialMode`, `Oasis.Runner.PrefixCompletion`, `Oasis.Runner.FIMCompletion`: partial and prefix completion modes.
+- `Oasis.Runner.ToolCalling`: tool calling.
+- `Oasis.Runner.Responses`: OpenAI Responses API.
+- `Oasis.Runner.Hooks`: request/response interception hooks.
 
 **Service Layer**
 
-- `Oasis.Service.Amap`: external service integration (geo/demo usage).
+- `Oasis.Service.Amap`: external service integration (used in tool calling runner).
+
+**Demos**
+
+- `Oasis.Demo.StructuredOutput`: structured output message/format examples.
+- `Oasis.Demo.ToolCalling`: tool calling message/tool examples.
+- `Oasis.Demo.Completions`: partial/prefix/FIM completion examples.
 
 **Typical use**: load config, resolve provider/model, then call a client or runner using those settings.
 
-### Internal Modules (Not Exposed)
+### Usage Scenarios 
 
-Modules under `Oasis.Client.OpenAI.*` (HTTP, request building, streaming, and internal types) and `Oasis.Runner.*` internal helpers are implementation details and may change without notice.
+#### 1) Resolve a provider by alias and list preset models
+
+```hs
+import Oasis.Config (findConfig, loadConfig, resolveProvider)
+import Oasis.Types (Config(..), Provider(..))
+import qualified Data.Map.Strict as M
+
+-- Load config and resolve alias
+Just path <- findConfig
+Right cfg <- loadConfig path
+Just (provider, apiKey) <- resolveProvider cfg "deepseek"
+
+-- Available provider names (before alias expansion)
+let providerNames = M.keys (providers cfg)
+
+-- Preset model list (from providers.toml)
+let presetModels = [chat_model_id provider, coder_model_id provider, reasoner_model_id provider]
+```
+
+#### 2) Fetch available models (remote API)
+
+```hs
+import Oasis.Runner.GetModels (runGetModels)
+
+result <- runGetModels provider apiKey
+-- result :: Either Text (RequestResponse Value)
+```
+
+Implementation references: [src/Oasis/Runner/GetModels.hs](src/Oasis/Runner/GetModels.hs) and CLI dispatch in [cli/Main.hs](cli/Main.hs).
+
+#### 3) Build a request from prompt and call LLM (non-streaming)
+
+```hs
+import Oasis.Runner.Basic (runBasic)
+import Oasis.Client.OpenAI.Param (emptyChatParams)
+
+result <- runBasic provider apiKey modelOverride emptyChatParams "Hi, how are you?" False
+```
+
+#### 4) Same as above, but streaming (SSE)
+
+```hs
+import Oasis.Runner.Chat (streamChatOnce, ChatStreamEvent(..))
+import Oasis.Chat.Message (userMessage)
+import Oasis.Client.OpenAI.Param (emptyChatParams)
+
+let messages = [userMessage "Explain hash tables in three points" ]
+let onEvent ev = case ev of
+  ChatThinking t -> putStrLn ("[thinking] " <> toString t)
+  ChatAnswer t -> putStrLn (toString t)
+
+_ <- streamChatOnce provider apiKey modelOverride emptyChatParams messages onEvent False
+```
+
+Full implementation: [src/Oasis/Runner/Chat.hs](src/Oasis/Runner/Chat.hs).
+
+#### 5) Get embeddings from input text
+
+```hs
+import Oasis.Runner.Embeddings (runEmbeddings, emptyEmbeddingParams)
+
+result <- runEmbeddings provider apiKey modelOverride emptyEmbeddingParams "Hello world"
+```
+
+#### 6) Structured output with a schema
+
+```hs
+import Oasis.Runner.StructuredOutput (runStructuredOutput)
+import Oasis.Client.OpenAI.Param (emptyChatParams)
+import Oasis.Chat.Message (systemMessage, userMessage)
+import Data.Aeson ((.=))
+import qualified Data.Aeson as Aeson
+
+let messages =
+  [ systemMessage "Parse the input into JSON with fields question and answer"
+  , userMessage "Which is the highest mountain in the world? Mount Everest."
+  ]
+let responseFormat = Aeson.object
+  [ "type" .= ("json_schema" :: Text)
+  , "json_schema" .= Aeson.object
+      [ "name" .= ("qa" :: Text)
+      , "schema" .= Aeson.object
+      [ "type" .= ("object" :: Text)
+      , "properties" .= Aeson.object
+      [ "question" .= Aeson.object ["type" .= ("string" :: Text)]
+      , "answer" .= Aeson.object ["type" .= ("string" :: Text)]
+      ]
+      , "required" .= (["question", "answer"] :: [Text])
+      ]
+      ]
+  ]
+
+result <- runStructuredOutput provider apiKey modelOverride emptyChatParams messages responseFormat False
+```
+
+Reference example: [src/Oasis/Demo/StructuredOutput.hs](src/Oasis/Demo/StructuredOutput.hs).
+
+#### 7) Tool Calling
+
+```hs
+import Oasis.Runner.ToolCalling
+import Oasis.Client.OpenAI.Param (emptyChatParams)
+import Oasis.Demo.ToolCalling (toolCallingMessages, toolCallingTools)
+
+let input = ToolCallingInput
+  { toolMessages = toolCallingMessages
+  , toolDefs = toolCallingTools
+  , toolParallelCalls = Just False
+  }
+let executeToolCall tc = do
+  -- Call your real tool here
+  pure (Right "tool result")
+
+result <- runToolCalling provider apiKey modelOverride emptyChatParams input executeToolCall False
+```
+
+Tool and message examples: [src/Oasis/Demo/ToolCalling.hs](src/Oasis/Demo/ToolCalling.hs).
+
+#### 8) Partial mode / Prefix completion / FIM completion
+
+```hs
+import Oasis.Runner.PartialMode (runPartialMode)
+import Oasis.Runner.PrefixCompletion (runPrefixCompletion)
+import Oasis.Runner.FIMCompletion (runFIMCompletion)
+import Oasis.Client.OpenAI.Param (emptyChatParams)
+import Oasis.Demo.Completions (partialModeMessages, prefixCompletionMessages, fimCompletionRequest)
+
+_ <- runPartialMode provider apiKey modelOverride emptyChatParams partialModeMessages False
+_ <- runPrefixCompletion provider apiKey modelOverride emptyChatParams prefixCompletionMessages False
+_ <- runFIMCompletion provider apiKey modelOverride fimCompletionRequest False
+```
+
+Reference examples: [src/Oasis/Demo/Completions.hs](src/Oasis/Demo/Completions.hs).
+
+#### 9) Use hooks to intercept LLM requests (log request/response)
+
+```hs
+import Oasis.Runner.Hooks (runHooks, HooksResult(..))
+import Oasis.Client.OpenAI.Param (emptyChatParams)
+
+result <- runHooks provider apiKey modelOverride emptyChatParams "Hello hooks" False
+case result of
+  Left err -> putStrLn (toString err)
+  Right HooksResult{..} -> do
+    putStrLn ("--- log ---\n" <> toString hookLogText)
+    putStrLn ("--- request ---\n" <> toString requestJsonText)
+    putStrLn ("--- response ---\n" <> toString responseJsonText)
+```
+
+Reference implementation: [src/Oasis/Runner/Hooks.hs](src/Oasis/Runner/Hooks.hs).
+
+### Internal Modules
+
+Modules under `Oasis.Client.OpenAI.*` (`Types`, `Http`, `Request`, `Stream`, `Param`, `Context` and internal `Types`) and `Oasis.Runner.*` internal helpers (`Result` and `Stream`) are implementation details and may change without notice.
 
 ---
 
-## 2) CLI Application
+## CLI Application
 
 The CLI exposes the library via a single command with runner selection. It is designed for quick experiments and reproducible JSON-based testing.
 
@@ -123,7 +275,7 @@ oasis-cli qwen - responses "Hello responses"
 
 ---
 
-## 3) TUI Application
+## TUI Application
 
 The TUI provides an interactive chat-focused UI with multi-pane views and streaming output. It is designed to keep the UI responsive during network requests.
 
@@ -157,7 +309,7 @@ Use Debug Mode to verify request shape, test parameters, and reproduce issues.
 
 ---
 
-## Installation, Setup, and Run Guide
+## Setup and Run Applications
 
 ### Prerequisites
 
