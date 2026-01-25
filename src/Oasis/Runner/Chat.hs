@@ -1,140 +1,85 @@
 module Oasis.Runner.Chat
-  ( ChatOptions(..)
-  , runChat
+  ( ChatStreamEvent(..)
+  , ChatResult(..)
+  , runChatOnce
+  , streamChatOnce
   ) where
 
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
 import Oasis.Client.OpenAI.Types (setChatStream)
-import Oasis.Chat.History
-import qualified Oasis.Chat.Message as Msg
 import Oasis.Model (resolveModelId)
 import Oasis.Client.OpenAI.Param (ChatParams, applyChatParams)
 import Oasis.Client.OpenAI.Context (extractAssistantContent)
 import Oasis.Runner.Stream (forEachDelta, deltaReasoningText)
 import Oasis.Runner.Result (parseRawResponseStrict)
 import qualified Data.Text as T
-import qualified System.IO as SIO
 import Control.Monad (foldM)
 
-data ChatOptions = ChatOptions
-  { streaming    :: Bool
-  , showThinking :: Bool
-  , useBeta      :: Bool
+data ChatStreamEvent
+  = ChatThinking Text
+  | ChatAnswer Text
+  deriving (Show, Eq)
+
+data ChatResult = ChatResult
+  { thinkingText :: Text
+  , answerText :: Text
   } deriving (Show, Eq)
 
-runChat :: Provider -> Text -> Maybe Text -> ChatParams -> ChatOptions -> Maybe Text -> IO (Either Text ())
-runChat provider apiKey modelOverride params opts initialPrompt = do
+runChatOnce :: Provider -> Text -> Maybe Text -> ChatParams -> [Message] -> Bool -> IO (Either Text ChatResult)
+runChatOnce provider apiKey modelOverride params messages useBeta = do
   let modelId = resolveModelId provider modelOverride
-  putTextLn "--- Chat ---"
-  putTextLn "Type /help for commands."
-  historyAfterFirst <- case initialPrompt of
-    Nothing -> pure (Right emptyHistory)
-    Just firstLine -> do
-      result <- chatOnce modelId emptyHistory firstLine
-      pure (fmap snd result)
-  case historyAfterFirst of
+      reqBase = defaultChatRequest modelId messages
+      reqBody = applyChatParams params reqBase
+  raw <- sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody useBeta
+  case parseRawResponseStrict raw of
     Left err -> pure (Left err)
-    Right h -> loop modelId h
-  where
-    loop modelId history = do
-      putText ">>> "
-      SIO.hFlush SIO.stdout
-      input <- getLine
-      let line = T.strip (toText input)
-      if T.null line
-        then loop modelId history
-        else if T.isPrefixOf "/" line
-          then handleCommand history line >>= loop modelId
-          else do
-            result <- chatOnce modelId history line
-            case result of
-              Left err -> pure (Left err)
-              Right (_, newHistory) -> loop modelId newHistory
+    Right (_, response) ->
+      case extractAssistantContent response of
+        Nothing -> pure (Left "No assistant message returned.")
+        Just content ->
+          let (_, parts) = processContentWithTags InAnswer content
+              (thinking, answer) = collectParts ("", "") parts
+          in pure (Right (ChatResult thinking answer))
 
-    chatOnce modelId history line = do
-      let history' = appendMessage (Msg.userMessage line) history
-          msgs = getMessages history'
-      result <- if streaming opts
-        then streamOnce modelId msgs
-        else nonStreamOnce modelId msgs
-      case result of
-        Left err -> pure (Left err)
-        Right answer -> pure (Right (answer, appendMessage (Msg.assistantMessage answer) history'))
+streamChatOnce
+  :: Provider
+  -> Text
+  -> Maybe Text
+  -> ChatParams
+  -> [Message]
+  -> (ChatStreamEvent -> IO ())
+  -> Bool
+  -> IO (Either Text ChatResult)
+streamChatOnce provider apiKey modelOverride params messages onEvent useBeta = do
+  let modelId = resolveModelId provider modelOverride
+      reqBase = defaultChatRequest modelId messages
+      reqBaseStream = setChatStream True reqBase
+      reqBody = applyChatParams params reqBaseStream
+      initState = StreamState InAnswer "" ""
+  stateRef <- newIORef initState
+  result <- streamChatCompletionWithRequestWithHooks emptyClientHooks provider apiKey reqBody (handleChunk stateRef onEvent) useBeta
+  case result of
+    Left err -> pure (Left (renderClientError err))
+    Right _ -> do
+      StreamState{streamThinking, streamAnswer} <- readIORef stateRef
+      pure (Right (ChatResult streamThinking streamAnswer))
 
-    nonStreamOnce modelId msgs = do
-      let reqBase = defaultChatRequest modelId msgs
-          reqBody = applyChatParams params reqBase
-      raw <- sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody (useBeta opts)
-      case parseRawResponseStrict raw of
-        Left err -> pure (Left err)
-        Right (_, response) ->
-          case extractAssistantContent response of
-            Nothing -> pure (Left "No assistant message returned.")
-            Just content -> do
-              rendered <- renderNonStreaming opts content
-              putTextLn ""
-              pure (Right rendered)
-
-    streamOnce modelId msgs = do
-      let initAccum = StreamAccum InAnswer "" "" False False
-          reqBase = defaultChatRequest modelId msgs
-          reqBaseStream = setChatStream True reqBase
-          reqBody = applyChatParams params reqBaseStream
-      accumRef <- newIORef initAccum
-      result <- streamChatCompletionWithRequestWithHooks emptyClientHooks provider apiKey reqBody (handleChunk opts accumRef) (useBeta opts)
-      case result of
-        Left err -> pure (Left (renderClientError err))
-        Right _ -> do
-          StreamAccum{answerBuffer} <- readIORef accumRef
-          putTextLn ""
-          pure (Right answerBuffer)
-
-handleCommand :: History -> Text -> IO History
-handleCommand history line =
-  case T.words line of
-    ["/help"] -> do
-      putTextLn "Commands:"
-      putTextLn "/show"
-      putTextLn "/system <text>"
-      putTextLn "/insert <index> <role> <text>"
-      putTextLn "/update <index> <role> <text>"
-      putTextLn "/delete <index>"
-      putTextLn "/exit"
-      pure history
-    ["/exit"] -> do
-      putTextLn "Bye."
-      exitSuccess
-    ["/show"] -> do
-      showHistory history
-      pure history
-    ("/system":rest) -> do
-      let contentText = T.unwords rest
-      pure (setSystemMessage contentText history)
-    ("/insert":idxText:roleText:rest) ->
-      applyHistoryEdit history (mkRoleMessage roleText (T.unwords rest) >>= \msg -> insertMessage (parseIndex idxText) msg history)
-    ("/update":idxText:roleText:rest) ->
-      applyHistoryEdit history (mkRoleMessage roleText (T.unwords rest) >>= \msg -> updateMessage (parseIndex idxText) msg history)
-    ("/delete":idxText:_) ->
-      applyHistoryEdit history (deleteMessage (parseIndex idxText) history)
-    _ -> do
-      putTextLn "Unknown command. Type /help"
-      pure history
-  where
-    parseIndex t = fromMaybe (-1) (readMaybe (toString t))
-
-applyHistoryEdit :: History -> Either Text History -> IO History
-applyHistoryEdit history = \case
-  Left err -> do
-    putTextLn ("History edit failed: " <> err)
-    pure history
-  Right h -> pure h
-
-showHistory :: History -> IO ()
-showHistory history =
-  forM_ (zip [0..] (getMessages history)) $ \(idx, Message{role, content}) ->
-    putTextLn (show idx <> " [" <> role <> "] " <> messageContentText content)
+handleChunk :: IORef StreamState -> (ChatStreamEvent -> IO ()) -> ChatCompletionStreamChunk -> IO ()
+handleChunk stateRef onEvent chunk =
+  forEachDelta chunk $ \delta@StreamDelta{content} -> do
+    StreamState{streamMode, streamThinking, streamAnswer} <- readIORef stateRef
+    case deltaReasoningText delta of
+      Nothing -> pure ()
+      Just r -> do
+        onEvent (ChatThinking r)
+        writeIORef stateRef (StreamState streamMode (streamThinking <> r) streamAnswer)
+    forM_ content $ \t -> do
+      StreamState{streamMode = mode0, streamThinking = thinking0, streamAnswer = answer0} <- readIORef stateRef
+      let (newMode, parts) = processContentWithTags mode0 t
+      (thinking1, answer1) <- emitParts onEvent (thinking0, answer0) parts
+      writeIORef stateRef (StreamState newMode thinking1 answer1)
 
 data StreamMode = InAnswer | InThinking
   deriving (Show, Eq)
@@ -142,64 +87,11 @@ data StreamMode = InAnswer | InThinking
 data TokenPart = ThinkingPart Text | AnswerPart Text
   deriving (Show, Eq)
 
-data StreamAccum = StreamAccum
-  { mode            :: StreamMode
-  , thinkingBuffer  :: Text
-  , answerBuffer    :: Text
-  , printedThinking :: Bool
-  , printedAnswer   :: Bool
+data StreamState = StreamState
+  { streamMode :: StreamMode
+  , streamThinking :: Text
+  , streamAnswer :: Text
   }
-
-handleChunk :: ChatOptions -> IORef StreamAccum -> ChatCompletionStreamChunk -> IO ()
-handleChunk opts accumRef chunk =
-  forEachDelta chunk $ \delta@StreamDelta{content = deltaContent} ->
-    case deltaReasoningText delta of
-      Just r -> emitThinking (showThinking opts) accumRef r
-      Nothing -> forM_ deltaContent $ \t -> emitContent (showThinking opts) accumRef t
-
-renderNonStreaming :: ChatOptions -> Text -> IO Text
-renderNonStreaming opts content = do
-  let initAccum = StreamAccum InAnswer "" "" False False
-  accumRef <- newIORef initAccum
-  emitContent (showThinking opts) accumRef content
-  StreamAccum{answerBuffer} <- readIORef accumRef
-  pure answerBuffer
-
-emitContent :: Bool -> IORef StreamAccum -> Text -> IO ()
-emitContent showThinking accumRef text = do
-  StreamAccum{mode, thinkingBuffer, answerBuffer, printedThinking, printedAnswer} <- readIORef accumRef
-  let (newMode, parts) = processContentWithTags mode text
-  (newThinking, newAnswer, pt, pa) <- foldM (emitPart showThinking) (thinkingBuffer, answerBuffer, printedThinking, printedAnswer) parts
-  writeIORef accumRef (StreamAccum newMode newThinking newAnswer pt pa)
-
-emitThinking :: Bool -> IORef StreamAccum -> Text -> IO ()
-emitThinking showThinking accumRef text = do
-  StreamAccum{mode, thinkingBuffer, answerBuffer, printedThinking, printedAnswer} <- readIORef accumRef
-  (newThinking, newAnswer, pt, pa) <- emitPart showThinking (thinkingBuffer, answerBuffer, printedThinking, printedAnswer) (ThinkingPart text)
-  writeIORef accumRef (StreamAccum mode newThinking newAnswer pt pa)
-
-emitPart :: Bool -> (Text, Text, Bool, Bool) -> TokenPart -> IO (Text, Text, Bool, Bool)
-emitPart showThinking (thinkingBuffer, answerBuffer, printedThinking, printedAnswer) part =
-  case part of
-    ThinkingPart t
-      | T.null t -> pure (thinkingBuffer, answerBuffer, printedThinking, printedAnswer)
-      | not showThinking -> pure (thinkingBuffer <> t, answerBuffer, printedThinking, printedAnswer)
-      | otherwise -> do
-          unless printedThinking $ do
-            putTextLn ""
-            putTextLn "## Thinking"
-          putText t
-          pure (thinkingBuffer <> t, answerBuffer, True, printedAnswer)
-    AnswerPart t
-      | T.null t -> pure (thinkingBuffer, answerBuffer, printedThinking, printedAnswer)
-      | otherwise -> do
-          unless printedAnswer $ do
-            when showThinking $ do
-              putTextLn ""
-              putTextLn "## Answer"
-          unless showThinking $ pure ()
-          putText t
-          pure (thinkingBuffer, answerBuffer <> t, printedThinking, True)
 
 processContentWithTags :: StreamMode -> Text -> (StreamMode, [TokenPart])
 processContentWithTags mode text = go mode text []
@@ -221,12 +113,26 @@ processContentWithTags mode text = go mode text []
                   let remaining = T.drop 8 rest
                   in go InAnswer remaining (acc <> [ThinkingPart before])
 
-mkRoleMessage :: Text -> Text -> Either Text Message
-mkRoleMessage roleText contentText =
-  let roleLower = T.toLower (T.strip roleText)
-  in case roleLower of
-    "system" -> Right (Msg.systemMessage contentText)
-    "user" -> Right (Msg.userMessage contentText)
-    "assistant" -> Right (Msg.assistantMessage contentText)
-    "tool" -> Right (Msg.plainMessage "tool" contentText)
-    _ -> Left ("Unknown role: " <> roleText)
+collectParts :: (Text, Text) -> [TokenPart] -> (Text, Text)
+collectParts = foldl' step
+  where
+    step (thinkingAcc, answerAcc) part =
+      case part of
+        ThinkingPart t -> (thinkingAcc <> t, answerAcc)
+        AnswerPart t -> (thinkingAcc, answerAcc <> t)
+
+emitParts :: (ChatStreamEvent -> IO ()) -> (Text, Text) -> [TokenPart] -> IO (Text, Text)
+emitParts onEvent = foldM step
+  where
+    step (thinkingAcc, answerAcc) part =
+      case part of
+        ThinkingPart t
+          | T.null t -> pure (thinkingAcc, answerAcc)
+          | otherwise -> do
+              onEvent (ChatThinking t)
+              pure (thinkingAcc <> t, answerAcc)
+        AnswerPart t
+          | T.null t -> pure (thinkingAcc, answerAcc)
+          | otherwise -> do
+              onEvent (ChatAnswer t)
+              pure (thinkingAcc, answerAcc <> t)

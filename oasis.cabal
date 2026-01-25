@@ -32,6 +32,9 @@ library
       Oasis.Chat.Log
       Oasis.Chat.Message
       Oasis.Chat.Prompt
+      Oasis.Demo.StructuredOutput
+      Oasis.Demo.ToolCalling
+      Oasis.Demo.Completions
       Oasis.Output.Types
       Oasis.Output.Common
       Oasis.Output.Render
@@ -105,7 +108,9 @@ library
 executable oasis-cli
   main-is: Main.hs
   other-modules:
+      Oasis.CLI.Chat
       Oasis.CLI.Render.Text
+      Oasis.CLI.ToolCalling
       Paths_oasis
   hs-source-dirs:
       cli

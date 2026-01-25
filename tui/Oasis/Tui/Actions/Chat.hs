@@ -16,7 +16,6 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.IORef as IORef
 import Data.Aeson (Value, eitherDecodeStrict)
-import qualified Data.Aeson as Aeson
 import Oasis.Client.OpenAI
   ( ChatCompletionRequest(..)
   , ChatCompletionStreamChunk(..)
@@ -33,7 +32,12 @@ import Oasis.Client.OpenAI
   )
 import qualified Oasis.Client.OpenAI as OpenAI
 import Oasis.Client.OpenAI.Param (applyChatParams)
-import Oasis.Chat.Message (assistantMessage, userMessage, systemMessage)
+import Oasis.Chat.Message (assistantMessage, userMessage)
+import Oasis.Demo.StructuredOutput
+  ( structuredMessages
+  , jsonObjectFormat
+  , jsonSchemaFormat
+  )
 import Oasis.Model (resolveModelId)
 import Oasis.Tui.Actions.Common
   ( runProviderAction
@@ -154,10 +158,7 @@ runStructuredAction responseFormat runnerLabel =
         chan = eventChan st
         providerName = fromMaybe "-" (selectedProvider st)
         modelId = resolveModelId provider modelOverride
-        reqMessages =
-          [ systemMessage structuredSystemMessage
-          , userMessage structuredQuestionText
-          ]
+        reqMessages = structuredMessages
         reqBase = defaultChatRequest modelId reqMessages
         ChatCompletionRequest{..} = applyChatParams params reqBase
         reqBody = ChatCompletionRequest
@@ -282,46 +283,6 @@ streamingOutput rawText =
     , mdTextSection "Parsed JSON" "Streaming..."
     ]
 
-structuredSystemMessage :: Text
-structuredSystemMessage = T.unlines
-  [ "The user will provide some exam text. Please parse the \"question\" and \"answer\" and output them in JSON format."
-  , ""
-  , "EXAMPLE INPUT:"
-  , "Which is the highest mountain in the world? Mount Everest."
-  , ""
-  , "EXAMPLE JSON OUTPUT:"
-  , "{"
-  , "  \"question\": \"Which is the highest mountain in the world?\","
-  , "  \"answer\": \"Mount Everest\""
-  , "}"
-  ]
-
-structuredQuestionText :: Text
-structuredQuestionText = "Which is the longest river in the world? The Nile River."
-
-jsonObjectFormat :: Value
-jsonObjectFormat =
-  Aeson.object
-    [ "type" Aeson..= ("json_object" :: Text)
-    ]
-
-jsonSchemaFormat :: Value
-jsonSchemaFormat =
-  Aeson.object
-  [ "type" Aeson..= ("json_schema" :: Text)
-  , "json_schema" Aeson..= Aeson.object
-    [ "name" Aeson..= ("session" :: Text)
-    , "schema" Aeson..= Aeson.object
-      [ "type" Aeson..= ("object" :: Text)
-      , "properties" Aeson..= Aeson.object
-        [ "question" Aeson..= Aeson.object ["type" Aeson..= ("string" :: Text)]
-        , "answer" Aeson..= Aeson.object ["type" Aeson..= ("string" :: Text)]
-        ]
-      , "required" Aeson..= (["question", "answer"] :: [Text])
-      ]
-    , "required" Aeson..= (["session"] :: [Text])
-    ]
-  ]
 
 runHooksWithLog
   :: ClientHooks

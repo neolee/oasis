@@ -26,17 +26,8 @@ data HooksResult = HooksResult
   , requestJsonText :: Text
   } deriving (Show, Eq)
 
-runHooks :: Provider -> Text -> Maybe Text -> ChatParams -> Text -> Bool -> IO (Either Text ())
-runHooks provider apiKey modelOverride params prompt useBeta = do
-  detailed <- runHooksDetailed provider apiKey modelOverride params prompt useBeta
-  case detailed of
-    Left err -> pure (Left err)
-    Right HooksResult{hookLogText, responseJsonText} -> do
-      putTextLn "--- Hook Log ---"
-      putTextLn hookLogText
-      putTextLn "--- Response JSON (truncated) ---"
-      putTextLn responseJsonText
-      pure (Right ())
+runHooks :: Provider -> Text -> Maybe Text -> ChatParams -> Text -> Bool -> IO (Either Text HooksResult)
+runHooks = runHooksDetailed
 
 runHooksDetailed :: Provider -> Text -> Maybe Text -> ChatParams -> Text -> Bool -> IO (Either Text HooksResult)
 runHooksDetailed provider apiKey modelOverride params prompt useBeta = do

@@ -6,13 +6,13 @@ import Relude
 import Brick.BChan (BChan)
 import Brick.Types (EventM)
 import qualified Data.Aeson as Aeson
-import Data.Aeson (Value, eitherDecode, decode, (.=))
+import Data.Aeson (Value, eitherDecode, decode)
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Data.Time (getZonedTime, formatTime, defaultTimeLocale)
-import Oasis.Chat.Message (userMessage, systemMessage, toolMessage)
+import Oasis.Chat.Message (toolMessage)
 import Oasis.Client.OpenAI
   ( ChatCompletionResponse(..)
   , ChatChoice(..)
@@ -24,6 +24,10 @@ import Oasis.Client.OpenAI
   , emptyClientHooks
   )
 import Oasis.Client.OpenAI.Param (applyChatParams)
+import Oasis.Demo.ToolCalling
+  ( toolCallingMessages
+  , toolCallingTools
+  )
 import Oasis.Model (resolveModelId)
 import Oasis.Service.Amap (getWeatherText)
 import Oasis.Tui.Actions.Common
@@ -58,17 +62,8 @@ runToolCallingAction =
         chan = eventChan st
         providerName = fromMaybe "-" (selectedProvider st)
         modelId = resolveModelId provider modelOverride
-        tools = buildTools
-        systemMsg = T.unlines
-          [ "你是一个很有帮助的助手。"
-          , "如果用户提问关于天气的问题，请调用 ‘get_current_weather’ 函数；"
-          , "如果用户提问关于时间的问题，请调用 ‘get_current_time’ 函数。"
-          , "请以友好的语气回答问题。"
-          ]
-        messages0 =
-          [ systemMessage systemMsg
-          , userMessage "上海天气"
-          ]
+        tools = toolCallingTools
+        messages0 = toolCallingMessages
         reqBase0 = (defaultChatRequest modelId messages0)
           { tools = Just tools
           , parallel_tool_calls = Just True
@@ -157,38 +152,6 @@ extractToolCallLocal ChatCompletionResponse{choices} =
     (ChatChoice{message = Just msg@Message{tool_calls = Just (tc:_)}}:_) -> Just (msg, tc)
     _ -> Nothing
 
-buildTools :: [Tool]
-buildTools =
-  [ Tool
-      { type_ = "function"
-      , function = ToolFunctionSpec
-          { name = "get_current_time"
-          , description = Just "当你想知道现在的时间时非常有用。"
-          , parameters = Aeson.object
-              [ "type" .= ("object" :: Text)
-              , "properties" .= Aeson.object []
-              , "required" .= ([] :: [Text])
-              ]
-          }
-      }
-  , Tool
-      { type_ = "function"
-      , function = ToolFunctionSpec
-          { name = "get_current_weather"
-          , description = Just "当你想查询指定城市的天气时非常有用。"
-          , parameters = Aeson.object
-              [ "type" .= ("object" :: Text)
-              , "properties" .= Aeson.object
-                  [ "location" .= Aeson.object
-                      [ "type" .= ("string" :: Text)
-                      , "description" .= ("城市或县区，比如北京市、杭州市、余杭区等。" :: Text)
-                      ]
-                  ]
-              , "required" .= (["location"] :: [Text])
-              ]
-          }
-      }
-  ]
 
 executeToolCall :: ToolCall -> IO (Either Text Text)
 executeToolCall ToolCall{function = ToolCallFunction{name, arguments}} =

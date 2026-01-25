@@ -4,7 +4,22 @@ import Relude
 import Oasis.Config
 import Oasis.Types
 import Oasis.Runner.Basic
-import Oasis.Runner.Chat
+import Oasis.CLI.Chat (runChatInteractive)
+import Oasis.CLI.ToolCalling (executeDemoToolCall)
+import Oasis.Demo.StructuredOutput
+  ( structuredMessages
+  , jsonObjectFormat
+  , jsonSchemaFormat
+  )
+import Oasis.Demo.ToolCalling
+  ( toolCallingMessages
+  , toolCallingTools
+  )
+import Oasis.Demo.Completions
+  ( partialModeMessages
+  , prefixCompletionMessages
+  , fimCompletionRequest
+  )
 import Oasis.Runner.GetModels
 import Oasis.Runner.StructuredOutput
 import Oasis.Runner.Embeddings
@@ -237,7 +252,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               showThinking = "--hide-thinking" `notElem` flags
               initialPrompt = if null rest then Nothing else Just (T.unwords (map toText rest))
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runChat provider apiKey modelOverride params (ChatOptions useStream showThinking useBeta) initialPrompt
+          result <- runChatInteractive provider apiKey modelOverride params useStream showThinking useBeta initialPrompt
           case result of
             Left err -> do
               putTextLn $ "Request failed: " <> err
@@ -274,7 +289,9 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             Right p -> pure p
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runStructuredOutputDetailed provider apiKey modelOverride params JSONObject useBeta
+          let messages = structuredMessages
+              responseFormat = jsonObjectFormat
+          result <- runStructuredOutputDetailed provider apiKey modelOverride params messages responseFormat useBeta
           case result of
             Left err -> do
               putTextLn $ "Request failed: " <> err
@@ -300,7 +317,9 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             Right p -> pure p
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runStructuredOutputDetailed provider apiKey modelOverride params JSONSchema useBeta
+          let messages = structuredMessages
+              responseFormat = jsonSchemaFormat
+          result <- runStructuredOutputDetailed provider apiKey modelOverride params messages responseFormat useBeta
           case result of
             Left err -> do
               putTextLn $ "Request failed: " <> err
@@ -326,7 +345,12 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             Right p -> pure p
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runToolCallingDetailed provider apiKey modelOverride params useBeta
+          let input = ToolCallingInput
+                { toolMessages = toolCallingMessages
+                , toolDefs = toolCallingTools
+                , toolParallelCalls = Just True
+                }
+          result <- runToolCallingDetailed provider apiKey modelOverride params input executeDemoToolCall useBeta
           case result of
             Left err -> do
               let sections =
@@ -472,7 +496,8 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             Right p -> pure p
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runPartialModeDetailed provider apiKey modelOverride params useBeta
+          let messages = partialModeMessages
+          result <- runPartialModeDetailed provider apiKey modelOverride params messages useBeta
           case result of
             Left err -> do
               putTextLn $ "Request failed: " <> err
@@ -497,7 +522,8 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             Right p -> pure p
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runPrefixCompletionDetailed provider apiKey modelOverride params useBeta
+          let messages = prefixCompletionMessages
+          result <- runPrefixCompletionDetailed provider apiKey modelOverride params messages useBeta
           case result of
             Left err -> do
               putTextLn $ "Request failed: " <> err
@@ -512,7 +538,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               putTextLn (renderSectionsText sections)
     "fim-completion" -> do
       putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-      result <- runFIMCompletionDetailed provider apiKey modelOverride useBeta
+      result <- runFIMCompletionDetailed provider apiKey modelOverride fimCompletionRequest useBeta
       case result of
         Left err -> do
           putTextLn $ "Request failed: " <> err

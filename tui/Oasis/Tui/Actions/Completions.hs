@@ -20,6 +20,11 @@ import Oasis.Client.OpenAI
   )
 import Oasis.Client.OpenAI.Param (applyChatParams)
 import Oasis.Model (resolveModelId)
+import Oasis.Demo.Completions
+  ( partialModeMessages
+  , prefixCompletionMessages
+  , fimCompletionRequest
+  )
 import Oasis.Tui.Actions.Common
   ( runProviderAction
   , buildRequestContext
@@ -42,6 +47,7 @@ import Oasis.Tui.Render.Output
   )
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
 import Oasis.Types (Message(..), MessageContent(..), StopParam(..))
+import qualified Oasis.Types as Types
 
 runPartialModeAction :: EventM Name AppState ()
 runPartialModeAction =
@@ -52,10 +58,7 @@ runPartialModeAction =
         chan = eventChan st
         providerName = fromMaybe "-" (selectedProvider st)
         modelId = resolveModelId provider modelOverride
-        messages =
-          [ Message "user" (ContentText "请对“春天来了，大地”这句话进行续写，来表达春天的美好和作者的喜悦之情") Nothing Nothing Nothing Nothing
-          , Message "assistant" (ContentText "春天来了，大地") Nothing Nothing (Just True) (Just True)
-          ]
+        messages = partialModeMessages
         reqBase = defaultChatRequest modelId messages
         reqBody = applyChatParams params reqBase
         reqJson = encodeJsonText reqBody
@@ -98,17 +101,14 @@ runPrefixCompletionAction =
         chan = eventChan st
         providerName = fromMaybe "-" (selectedProvider st)
         modelId = resolveModelId provider modelOverride
-        messages =
-          [ Message "user" (ContentText "Please write quick sort code") Nothing Nothing Nothing Nothing
-          , Message "assistant" (ContentText "```python\n") Nothing Nothing (Just True) (Just True)
-          ]
+        messages = prefixCompletionMessages
         reqBase = ChatCompletionRequest
           { model = modelId
           , messages = messages
           , temperature = Nothing
           , top_p = Nothing
           , max_completion_tokens = Nothing
-          , stop = Just (StopList ["```"])
+            , stop = Just (Types.StopList ["```"])
           , presence_penalty = Nothing
           , frequency_penalty = Nothing
           , seed = Nothing
@@ -162,17 +162,18 @@ runFimCompletionAction =
         useBeta = betaUrlSetting st
         providerName = fromMaybe "-" (selectedProvider st)
         modelId = resolveModelId provider modelOverride
+        CompletionRequest{prompt, suffix, max_tokens, temperature, top_p, stream, stop, echo, logprobs} = fimCompletionRequest
         reqBody = CompletionRequest
           { model = modelId
-          , prompt = "def fib(a):"
-          , suffix = Just "    return fib(a-1) + fib(a-2)"
-          , max_tokens = Just 128
-          , temperature = Nothing
-          , top_p = Nothing
-          , stream = False
-          , stop = Nothing
-          , echo = Nothing
-          , logprobs = Nothing
+          , prompt = prompt
+          , suffix = suffix
+          , max_tokens = max_tokens
+          , temperature = temperature
+          , top_p = top_p
+          , stream = stream
+          , stop = stop
+          , echo = echo
+          , logprobs = logprobs
           }
         reqJson = encodeJsonText reqBody
         info = buildDebugInfo providerName modelId (buildCompletionsUrl (selectBaseUrl provider useBeta)) (jsonRequestHeaders apiKey)

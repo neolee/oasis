@@ -3,7 +3,7 @@ cradle:
     - path: "src"
       component: "lib:oasis"
 
-    - path: "cli/Main.hs"
+    - path: "cli"
       component: "oasis:exe:oasis-cli"
 
     - path: "tui"

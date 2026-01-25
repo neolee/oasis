@@ -12,32 +12,25 @@ import Oasis.Runner.Result (encodeRequestJson, buildRequestResponse)
 
 type FimCompletionResult = RequestResponse CompletionResponse
 
-runFIMCompletion :: Provider -> Text -> Maybe Text -> Bool -> IO (Either Text ())
-runFIMCompletion provider apiKey modelOverride useBeta = do
-  detailed <- runFIMCompletionDetailed provider apiKey modelOverride useBeta
-  case detailed of
-    Left err -> pure (Left err)
-    Right RequestResponse{response} ->
-      case response of
-        Just CompletionResponse { choices = (CompletionChoice{text}:_) } -> do
-          putTextLn text
-          pure (Right ())
-        _ -> pure (Left "No completion choices returned.")
+runFIMCompletion :: Provider -> Text -> Maybe Text -> CompletionRequest -> Bool -> IO (Either Text FimCompletionResult)
+runFIMCompletion = runFIMCompletionDetailed
 
-runFIMCompletionDetailed :: Provider -> Text -> Maybe Text -> Bool -> IO (Either Text FimCompletionResult)
-runFIMCompletionDetailed provider apiKey modelOverride useBeta = do
+runFIMCompletionDetailed :: Provider -> Text -> Maybe Text -> CompletionRequest -> Bool -> IO (Either Text FimCompletionResult)
+runFIMCompletionDetailed provider apiKey modelOverride reqBase useBeta = do
   let modelId = resolveModelId provider modelOverride
+      CompletionRequest{prompt, suffix, max_tokens, temperature, top_p, stream, stop, echo, logprobs} = (reqBase :: CompletionRequest)
+      reqBody :: CompletionRequest
       reqBody = CompletionRequest
         { model = modelId
-        , prompt = "def fib(a):"
-        , suffix = Just "    return fib(a-1) + fib(a-2)"
-        , max_tokens = Just 128
-        , temperature = Nothing
-        , top_p = Nothing
-        , stream = False
-        , stop = Nothing
-        , echo = Nothing
-        , logprobs = Nothing
+        , prompt = prompt
+        , suffix = suffix
+        , max_tokens = max_tokens
+        , temperature = temperature
+        , top_p = top_p
+        , stream = stream
+        , stop = stop
+        , echo = echo
+        , logprobs = logprobs
         }
       reqJsonText = encodeRequestJson reqBody
   result <- sendCompletionsRaw provider apiKey reqBody useBeta
