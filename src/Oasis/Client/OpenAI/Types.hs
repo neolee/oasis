@@ -348,3 +348,9 @@ renderClientError ClientError{status, statusText, requestId, errorResponse, rawB
           in "\nError: " <> message <> typeLine <> codeLine
       rawLine = if rawBody == "" then "" else "\nRaw: " <> rawBody
   in header <> reqLine <> errLine <> rawLine
+
+dropTrailingUnderscore :: String -> String
+dropTrailingUnderscore field =
+  case reverse field of
+    '_':rest -> reverse rest
+    _ -> field

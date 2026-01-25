@@ -1,4 +1,8 @@
-module Oasis.Config where
+module Oasis.Config
+  ( findConfig
+  , loadConfig
+  , resolveProvider
+  ) where
 
 import Relude
 import Oasis.Types

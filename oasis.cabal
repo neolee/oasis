@@ -28,13 +28,11 @@ library
       Oasis.Model
       Oasis.Client.OpenAI
       Oasis.Client.OpenAI.Param
-      Oasis.Chat.History
-      Oasis.Chat.Log
       Oasis.Chat.Message
-      Oasis.Chat.Prompt
+      Oasis.Chat.History
+      Oasis.Demo.Completions
       Oasis.Demo.StructuredOutput
       Oasis.Demo.ToolCalling
-      Oasis.Demo.Completions
       Oasis.Output.Types
       Oasis.Output.Common
       Oasis.Output.Render

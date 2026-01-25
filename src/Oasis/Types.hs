@@ -1,6 +1,20 @@
 {-# LANGUAGE StrictData #-}
 
-module Oasis.Types where
+module Oasis.Types
+  ( ModelType(..)
+  , Provider(..)
+  , Config(..)
+  , Defaults(..)
+  , RequestResponse(..)
+  , ToolFunctionSpec(..)
+  , Tool(..)
+  , ToolCallFunction(..)
+  , StopParam(..)
+  , ToolCall(..)
+  , MessageContent(..)
+  , Message(..)
+  , messageContentText
+  ) where
 
 import Relude
 import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), defaultOptions, fieldLabelModifier, genericToJSON, genericParseJSON, withArray, withObject, withText, (.:), (.:?), (.=), object)
