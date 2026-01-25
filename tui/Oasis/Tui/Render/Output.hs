@@ -11,21 +11,12 @@ module Oasis.Tui.Render.Output
   ) where
 
 import Relude
-import Data.Aeson (Value, eitherDecodeStrict)
-import Data.Aeson.Encode.Pretty (encodePretty)
-import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
-
-data RequestContext = RequestContext
-  { requestUrl  :: Text
-  , requestJson :: Text
-  } deriving (Show, Eq)
+import Oasis.Output.Types (RequestContext(..))
+import Oasis.Output.Render (prettyJsonText)
 
 prettyJson :: Text -> Text
-prettyJson input =
-  case eitherDecodeStrict (encodeUtf8 input) :: Either String Value of
-    Left _ -> input
-    Right val -> decodeUtf8 (LBS.toStrict (encodePretty val))
+prettyJson = prettyJsonText
 
 codeBlock :: Text -> Text -> Text
 codeBlock lang content =

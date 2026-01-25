@@ -1,6 +1,8 @@
 module Oasis.Runner.StructuredOutput
   ( StructuredMode(..)
+  , StructuredOutputResult(..)
   , runStructuredOutput
+  , runStructuredOutputDetailed
   ) where
 
 import Relude
@@ -16,6 +18,11 @@ import qualified Data.Aeson as Aeson
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
+
+data StructuredOutputResult = StructuredOutputResult
+  { rawText :: Text
+  , parsedJson :: Either Text Text
+  } deriving (Show, Eq)
 
 systemMessage :: Text
 systemMessage = T.unlines
@@ -63,6 +70,21 @@ data StructuredMode
 
 runStructuredOutput :: Provider -> Text -> Maybe Text -> ChatParams -> StructuredMode -> Bool -> IO (Either Text ())
 runStructuredOutput provider apiKey modelOverride params mode useBeta = do
+  result <- runStructuredOutputDetailed provider apiKey modelOverride params mode useBeta
+  case result of
+    Left err -> pure (Left err)
+    Right StructuredOutputResult{rawText, parsedJson} -> do
+      unless (T.null rawText) (putText rawText)
+      putTextLn ""
+      case parsedJson of
+        Left _ -> putTextLn "Warning: response is not valid JSON."
+        Right pretty -> do
+          putTextLn "--- Parsed JSON ---"
+          putTextLn pretty
+      pure (Right ())
+
+runStructuredOutputDetailed :: Provider -> Text -> Maybe Text -> ChatParams -> StructuredMode -> Bool -> IO (Either Text StructuredOutputResult)
+runStructuredOutputDetailed provider apiKey modelOverride params mode useBeta = do
   let modelId = resolveModelId provider modelOverride
       messages =
         [ Msg.systemMessage systemMessage
@@ -80,17 +102,17 @@ runStructuredOutput provider apiKey modelOverride params mode useBeta = do
   case result of
     Left err -> pure (Left (renderClientError err))
     Right _ -> do
-      putTextLn ""
       output <- readIORef accumRef
-      case (decode (BL.fromStrict (TE.encodeUtf8 output)) :: Maybe Value) of
-        Nothing -> putTextLn "Warning: response is not valid JSON."
-        Just val -> do
-          putTextLn "--- Parsed JSON ---"
-          putTextLn (TE.decodeUtf8Lenient (BL.toStrict (encode val)))
-      pure (Right ())
+      let parsed =
+            case (decode (BL.fromStrict (TE.encodeUtf8 output)) :: Maybe Value) of
+              Nothing -> Left "Invalid JSON"
+              Just val -> Right (TE.decodeUtf8Lenient (BL.toStrict (encode val)))
+      pure (Right StructuredOutputResult
+        { rawText = output
+        , parsedJson = parsed
+        })
 
 handleChunk :: IORef Text -> ChatCompletionStreamChunk -> IO ()
 handleChunk accumRef chunk =
-  forEachDeltaContent chunk $ \t -> do
-    putText t
+  forEachDeltaContent chunk $ \t ->
     modifyIORef' accumRef (<> t)

@@ -70,6 +70,9 @@ library:
   - Oasis.Chat.Log
   - Oasis.Chat.Message
   - Oasis.Chat.Prompt
+  - Oasis.Output.Types
+  - Oasis.Output.Common
+  - Oasis.Output.Render
   - Oasis.Runner.Basic
   - Oasis.Runner.Chat
   - Oasis.Runner.Embeddings

@@ -1,5 +1,7 @@
 module Oasis.Runner.ToolCalling
-  ( runToolCalling
+  ( ToolCallingResult(..)
+  , runToolCalling
+  , runToolCallingDetailed
   ) where
 
 import Relude
@@ -10,6 +12,7 @@ import qualified Oasis.Chat.Message as Msg
 import Oasis.Model (resolveModelId)
 import Oasis.Client.OpenAI.Param (ChatParams)
 import Oasis.Client.OpenAI.Context (extractAssistantContent, extractToolCall)
+import Oasis.Output.Common (encodeJsonText)
 import Oasis.Runner.Result (parseRawResponseStrict)
 import Oasis.Service.Amap (getWeatherText)
 import Data.Aeson (Value, decode, (.=))
@@ -20,8 +23,28 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
 import Data.Time (getZonedTime, formatTime, defaultTimeLocale)
 
+data ToolCallingResult
+  = ToolCallingNoToolCall Text
+  | ToolCallingToolError Text Text
+  | ToolCallingSecondError Text Text Text
+  | ToolCallingSuccess Text Text Text
+  deriving (Show, Eq)
+
 runToolCalling :: Provider -> Text -> Maybe Text -> ChatParams -> Bool -> IO (Either Text ())
 runToolCalling provider apiKey modelOverride params useBeta = do
+  detailed <- runToolCallingDetailed provider apiKey modelOverride params useBeta
+  case detailed of
+    Left err -> pure (Left err)
+    Right result -> do
+      case result of
+        ToolCallingNoToolCall content -> putTextLn content
+        ToolCallingToolError _ err -> putTextLn err
+        ToolCallingSecondError _ _ err -> putTextLn err
+        ToolCallingSuccess _ _ content -> putTextLn content
+      pure (Right ())
+
+runToolCallingDetailed :: Provider -> Text -> Maybe Text -> ChatParams -> Bool -> IO (Either Text ToolCallingResult)
+runToolCallingDetailed provider apiKey modelOverride params useBeta = do
   let modelId = resolveModelId provider modelOverride
       tools = buildTools
       systemMessage = T.unlines
@@ -46,25 +69,25 @@ runToolCalling provider apiKey modelOverride params useBeta = do
         Nothing -> do
           case extractAssistantContent response of
             Nothing -> pure (Left "No assistant message returned.")
-            Just content -> do
-              putTextLn content
-              pure (Right ())
+            Just content -> pure (Right (ToolCallingNoToolCall content))
         Just (assistantMessage, toolCall) -> do
           result <- executeToolCall toolCall
-          let toolMsg = Msg.toolMessage (OT.id toolCall) result
-              messages1 = messages0 <> [assistantMessage, toolMsg]
-              reqBase2 = (defaultChatRequest modelId messages1)
-                { tools = Just tools
-                }
-          secondResp <- requestChat provider apiKey params reqBase2 useBeta
-          case parseRawResponseStrict secondResp of
-            Left err -> pure (Left err)
-            Right (_, response2) ->
-              case extractAssistantContent response2 of
-                Nothing -> pure (Left "No assistant message returned.")
-                Just content -> do
-                  putTextLn content
-                  pure (Right ())
+          let toolCallJson = encodeJsonText toolCall
+          case result of
+            Left terr -> pure (Right (ToolCallingToolError toolCallJson terr))
+            Right toolMsgText -> do
+              let toolMsg = Msg.toolMessage (OT.id toolCall) toolMsgText
+                  messages1 = messages0 <> [assistantMessage, toolMsg]
+                  reqBase2 = (defaultChatRequest modelId messages1)
+                    { tools = Just tools
+                    }
+              secondResp <- requestChat provider apiKey params reqBase2 useBeta
+              case parseRawResponseStrict secondResp of
+                Left err -> pure (Right (ToolCallingSecondError toolCallJson toolMsgText err))
+                Right (_, response2) ->
+                  case extractAssistantContent response2 of
+                    Nothing -> pure (Left "No assistant message returned.")
+                    Just content -> pure (Right (ToolCallingSuccess toolCallJson toolMsgText content))
 
 buildTools :: [Tool]
 buildTools =
@@ -99,16 +122,16 @@ buildTools =
       }
   ]
 
-executeToolCall :: ToolCall -> IO Text
+executeToolCall :: ToolCall -> IO (Either Text Text)
 executeToolCall ToolCall{function = ToolCallFunction{name, arguments}} =
   case name of
-    "get_current_time" -> getCurrentTime
+    "get_current_time" -> Right <$> getCurrentTime
     "get_current_weather" -> do
       let argsValue = decode (BL.fromStrict (TE.encodeUtf8 arguments)) :: Maybe Value
       case argsValue >>= getLocation of
-        Nothing -> pure "无法获取城市参数。"
-        Just loc -> getCurrentWeather loc
-    _ -> pure ("Unknown tool: " <> name)
+        Nothing -> pure (Left "无法获取城市参数。")
+        Just loc -> Right <$> getCurrentWeather loc
+    _ -> pure (Left ("Unknown tool: " <> name))
 
 getLocation :: Value -> Maybe Text
 getLocation (Aeson.Object obj) =

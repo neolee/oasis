@@ -16,7 +16,29 @@ import Oasis.Runner.PrefixCompletion
 import Oasis.Runner.FIMCompletion
 import Oasis.Model (resolveModelId, resolveEmbeddingModelId)
 import Oasis.Client.OpenAI.Param (parseChatParams)
-import Oasis.CLI.Render.Text (renderRunnerResultText, renderResponseOnlyText)
+import Oasis.CLI.Render.Text
+  ( renderSectionsText
+  , requestSections
+  , responseSections
+  , textSection
+  , jsonSection
+  , warningSection
+  )
+import Oasis.Output.Common (selectBaseUrl, extractAssistantContent)
+import qualified Oasis.Output.Types as Output
+import Oasis.Output.Types (OutputSectionKind(..))
+import Oasis.Client.OpenAI
+  ( buildChatUrl
+  , buildModelsUrl
+  , buildEmbeddingsUrl
+  , buildResponsesUrl
+  , buildCompletionsUrl
+  , CompletionResponse(..)
+  , CompletionChoice(..)
+  , EmbeddingResponse(..)
+  , EmbeddingData(..)
+  , ResponsesResponse(..)
+  )
 import qualified Data.Text as T
 import qualified Data.List as L
 import qualified Data.Text.Encoding as TE
@@ -170,7 +192,14 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                     Left err -> do
                       putTextLn $ "Request failed: " <> err
                       exitFailure
-                    Right result -> putTextLn (renderRunnerResultText result)
+                    Right result -> do
+                      let baseUrl = selectBaseUrl provider useBeta
+                          ctx = Output.RequestContext (buildChatUrl baseUrl) (requestJson result)
+                          assistantSection = case response result >>= extractAssistantContent of
+                            Nothing -> []
+                            Just content -> [textSection SectionAssistant "Assistant" content]
+                          sections = requestSections ctx <> responseSections result <> assistantSection
+                      putTextLn (renderSectionsText sections)
                 Nothing -> do
                   let prompt = T.unwords (map toText restArgs2)
                   if T.null (T.strip prompt)
@@ -184,7 +213,14 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                         Left err -> do
                           putTextLn $ "Request failed: " <> err
                           exitFailure
-                        Right result -> putTextLn (renderRunnerResultText result)
+                        Right result -> do
+                          let baseUrl = selectBaseUrl provider useBeta
+                              ctx = Output.RequestContext (buildChatUrl baseUrl) (requestJson result)
+                              assistantSection = case response result >>= extractAssistantContent of
+                                Nothing -> []
+                                Just content -> [textSection SectionAssistant "Assistant" content]
+                              sections = requestSections ctx <> responseSections result <> assistantSection
+                          putTextLn (renderSectionsText sections)
     "chat" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
@@ -219,7 +255,10 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
         Left err -> do
           putTextLn $ "Request failed: " <> err
           exitFailure
-        Right result -> putTextLn (renderResponseOnlyText result)
+        Right result -> do
+          let ctx = Output.RequestContext (buildModelsUrl (base_url provider)) (requestJson result)
+              sections = requestSections ctx <> responseSections result
+          putTextLn (renderSectionsText sections)
     "structured-json" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
@@ -235,12 +274,17 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             Right p -> pure p
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runStructuredOutput provider apiKey modelOverride params JSONObject useBeta
+          result <- runStructuredOutputDetailed provider apiKey modelOverride params JSONObject useBeta
           case result of
             Left err -> do
               putTextLn $ "Request failed: " <> err
               exitFailure
-            Right _ -> pure ()
+            Right structured -> do
+              let rawSection = textSection SectionResponse "Raw Stream" (rawText structured)
+                  parsedSection = case parsedJson structured of
+                    Left perr -> textSection SectionError "Parsed JSON" ("Invalid JSON: " <> perr)
+                    Right pretty -> jsonSection SectionResponse "Parsed JSON" pretty
+              putTextLn (renderSectionsText [rawSection, parsedSection])
     "structured-schema" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
@@ -256,12 +300,17 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             Right p -> pure p
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runStructuredOutput provider apiKey modelOverride params JSONSchema useBeta
+          result <- runStructuredOutputDetailed provider apiKey modelOverride params JSONSchema useBeta
           case result of
             Left err -> do
               putTextLn $ "Request failed: " <> err
               exitFailure
-            Right _ -> pure ()
+            Right structured -> do
+              let rawSection = textSection SectionResponse "Raw Stream" (rawText structured)
+                  parsedSection = case parsedJson structured of
+                    Left perr -> textSection SectionError "Parsed JSON" ("Invalid JSON: " <> perr)
+                    Right pretty -> jsonSection SectionResponse "Parsed JSON" pretty
+              putTextLn (renderSectionsText [rawSection, parsedSection])
     "tool-calling" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
@@ -277,12 +326,38 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             Right p -> pure p
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runToolCalling provider apiKey modelOverride params useBeta
+          result <- runToolCallingDetailed provider apiKey modelOverride params useBeta
           case result of
             Left err -> do
-              putTextLn $ "Request failed: " <> err
-              exitFailure
-            Right _ -> pure ()
+              let sections =
+                    [ textSection SectionResponse "First Response" ("Error: " <> err)
+                    , textSection SectionToolResult "Tool Result" "Skipped due to request error."
+                    , textSection SectionAssistant "Final Assistant" "Skipped due to request error."
+                    ]
+              putTextLn (renderSectionsText sections)
+            Right outcome -> do
+              let sections = case outcome of
+                    ToolCallingNoToolCall content ->
+                      [ textSection SectionResponse "First Response" content
+                      , textSection SectionToolResult "Tool Result" "No tool call returned."
+                      , textSection SectionAssistant "Final Assistant" "Skipped because no tool call was returned."
+                      ]
+                    ToolCallingToolError toolCallJson terr ->
+                      [ jsonSection SectionResponse "First Response (Tool Call)" toolCallJson
+                      , textSection SectionToolResult "Tool Result" ("Error: " <> terr)
+                      , textSection SectionAssistant "Final Assistant" "Skipped due to tool error."
+                      ]
+                    ToolCallingSecondError toolCallJson toolResult err ->
+                      [ jsonSection SectionResponse "First Response (Tool Call)" toolCallJson
+                      , textSection SectionToolResult "Tool Result" toolResult
+                      , textSection SectionAssistant "Final Assistant" ("Error: " <> err)
+                      ]
+                    ToolCallingSuccess toolCallJson toolResult finalText ->
+                      [ jsonSection SectionResponse "First Response (Tool Call)" toolCallJson
+                      , textSection SectionToolResult "Tool Result" toolResult
+                      , textSection SectionAssistant "Final Assistant" finalText
+                      ]
+              putTextLn (renderSectionsText sections)
     "embeddings" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
@@ -306,7 +381,23 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                 Left err -> do
                   putTextLn $ "Request failed: " <> err
                   exitFailure
-                Right result -> putTextLn (renderRunnerResultText result)
+                Right result -> do
+                  let ctx = Output.RequestContext (buildEmbeddingsUrl (base_url provider)) (requestJson result)
+                      summarySection = case response result of
+                        Nothing -> []
+                        Just EmbeddingResponse{data_} ->
+                          let count = length data_
+                              firstEmbedding = listToMaybe data_ >>= \EmbeddingData{embedding} -> Just embedding
+                              dim = maybe 0 length firstEmbedding
+                              preview = maybe "[]" (formatPreview 6) firstEmbedding
+                              summary = T.unlines
+                                [ "Vectors: " <> show count
+                                , "Dimensions: " <> show dim
+                                , "Head: " <> preview
+                                ]
+                          in [textSection SectionResponse "Summary" summary]
+                      sections = requestSections ctx <> responseSections result <> summarySection
+                  putTextLn (renderSectionsText sections)
     "hooks" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
@@ -325,12 +416,20 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             else do
               putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-              result <- runHooks provider apiKey modelOverride params prompt useBeta
+              result <- runHooksDetailed provider apiKey modelOverride params prompt useBeta
               case result of
                 Left err -> do
                   putTextLn $ "Request failed: " <> err
                   exitFailure
-                Right _ -> pure ()
+                Right HooksResult{hookLogText, responseJsonText, requestJsonText} -> do
+                  let baseUrl = selectBaseUrl provider useBeta
+                      ctx = Output.RequestContext (buildChatUrl baseUrl) requestJsonText
+                      sections =
+                        requestSections ctx
+                        <> [ textSection SectionLog "Hook Log" hookLogText
+                           , textSection SectionResponse "Response JSON (truncated)" responseJsonText
+                           ]
+                  putTextLn (renderSectionsText sections)
     "responses" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
@@ -354,7 +453,13 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                 Left err -> do
                   putTextLn $ "Request failed: " <> err
                   exitFailure
-                Right result -> putTextLn (renderRunnerResultText result)
+                Right result -> do
+                  let ctx = Output.RequestContext (buildResponsesUrl (base_url provider)) (requestJson result)
+                      assistantSection = case response result >>= output_text of
+                        Nothing -> []
+                        Just content -> [textSection SectionAssistant "Assistant" content]
+                      sections = requestSections ctx <> responseSections result <> assistantSection
+                  putTextLn (renderSectionsText sections)
     "partial-mode" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
@@ -367,12 +472,19 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             Right p -> pure p
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runPartialMode provider apiKey modelOverride params useBeta
+          result <- runPartialModeDetailed provider apiKey modelOverride params useBeta
           case result of
             Left err -> do
               putTextLn $ "Request failed: " <> err
               exitFailure
-            Right _ -> pure ()
+            Right result -> do
+              let baseUrl = selectBaseUrl provider useBeta
+                  ctx = Output.RequestContext (buildChatUrl baseUrl) (requestJson result)
+                  assistantSection = case response result >>= extractAssistantContent of
+                    Nothing -> []
+                    Just content -> [textSection SectionAssistant "Assistant" content]
+                  sections = requestSections ctx <> responseSections result <> assistantSection
+              putTextLn (renderSectionsText sections)
     "prefix-completion" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
@@ -385,21 +497,41 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             Right p -> pure p
           putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runPrefixCompletion provider apiKey modelOverride params useBeta
+          result <- runPrefixCompletionDetailed provider apiKey modelOverride params useBeta
           case result of
             Left err -> do
               putTextLn $ "Request failed: " <> err
               exitFailure
-            Right _ -> pure ()
+            Right result -> do
+              let baseUrl = selectBaseUrl provider useBeta
+                  ctx = Output.RequestContext (buildChatUrl baseUrl) (requestJson result)
+                  assistantSection = case response result >>= extractAssistantContent of
+                    Nothing -> []
+                    Just content -> [textSection SectionAssistant "Assistant" content]
+                  sections = requestSections ctx <> responseSections result <> assistantSection
+              putTextLn (renderSectionsText sections)
     "fim-completion" -> do
       putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-      result <- runFIMCompletion provider apiKey modelOverride useBeta
+      result <- runFIMCompletionDetailed provider apiKey modelOverride useBeta
       case result of
         Left err -> do
           putTextLn $ "Request failed: " <> err
           exitFailure
-        Right _ -> pure ()
+        Right result -> do
+          let baseUrl = selectBaseUrl provider useBeta
+              ctx = Output.RequestContext (buildCompletionsUrl baseUrl) (requestJson result)
+              completionSection = case response result of
+                Just CompletionResponse{choices = (CompletionChoice{text}:_)} ->
+                  [textSection SectionCompletion "Completion" text]
+                _ -> [warningSection "Completion" "No completion choices returned."]
+              sections = requestSections ctx <> responseSections result <> completionSection
+          putTextLn (renderSectionsText sections)
     _ -> do
       putTextLn $ "Unknown runner: " <> runnerName
       putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling, embeddings, hooks, responses, partial-mode, prefix-completion, fim-completion"
       exitFailure
+
+formatPreview :: Int -> [Double] -> Text
+formatPreview n xs =
+  let items = map (T.pack . show) (take n xs)
+  in "[" <> T.intercalate ", " items <> if length xs > n then ", ...]" else "]"
