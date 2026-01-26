@@ -54,8 +54,8 @@ emptyResponsesParams = ResponsesParams Nothing Nothing Nothing Nothing Nothing
 parseResponsesParams :: Maybe Text -> Either Text ResponsesParams
 parseResponsesParams = parseExtraArgs "Responses" emptyResponsesParams
 
-runResponses :: Provider -> Text -> Maybe Text -> ResponsesParams -> Text -> IO (Either Text ResponsesResult)
-runResponses provider apiKey modelOverride params inputText = do
+runResponses :: Provider -> Text -> Maybe Text -> ResponsesParams -> Text -> Bool -> IO (Either Text ResponsesResult)
+runResponses provider apiKey modelOverride params inputText useBeta = do
   let modelId = resolveModelId provider modelOverride
       reqBody = ResponsesRequest
         { model = modelId
@@ -68,5 +68,5 @@ runResponses provider apiKey modelOverride params inputText = do
         , response_format = paramResponseFormat params
         }
       reqJsonText = encodeRequestJson reqBody
-  resp <- sendResponsesRaw provider apiKey reqBody
+  resp <- sendResponsesRaw provider apiKey reqBody useBeta
   pure (buildRequestResponse reqJsonText resp)

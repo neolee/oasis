@@ -11,7 +11,7 @@ import Oasis.Runner.Result (buildRequestResponse)
 
 type GetModelsResult = RequestResponse Value
 
-runGetModels :: Provider -> Text -> IO (Either Text GetModelsResult)
-runGetModels provider apiKey = do
-  resp <- sendModelsRaw provider apiKey
+runGetModels :: Provider -> Text -> Bool -> IO (Either Text GetModelsResult)
+runGetModels provider apiKey useBeta = do
+  resp <- sendModelsRaw provider apiKey useBeta
   pure (buildRequestResponse "" resp)

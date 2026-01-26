@@ -48,6 +48,7 @@ import Oasis.Tui.Render.Output
   )
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
 import Oasis.Types (Config(..), Provider(..), RequestResponse(..))
+import Oasis.Output.Common (selectBaseUrl)
 
 runResponsesAction :: Text -> EventM Name AppState ()
 runResponsesAction inputText =
@@ -55,17 +56,19 @@ runResponsesAction inputText =
     let modelOverride = selectedModel st
         params = Responses.emptyResponsesParams
         providerName = fromMaybe "-" (selectedProvider st)
+        useBeta = betaUrlSetting st
         modelId = resolveModelId provider modelOverride
         reqBody = buildResponsesRequest modelId params inputText
         reqJson = encodeJsonText reqBody
-        info = buildDebugInfo providerName modelId (buildResponsesUrl (base_url provider)) (jsonRequestHeaders apiKey)
+        baseUrl = selectBaseUrl provider useBeta
+        info = buildDebugInfo providerName modelId (buildResponsesUrl baseUrl) (jsonRequestHeaders apiKey)
         handler bodyText = do
           reqBody' <- (decodeJsonText bodyText :: Either Text ResponsesRequest)
           if stream reqBody' == Just True
             then Left "responses runner requires stream=false"
             else Right $ do
-              let reqCtx = buildRequestContext (buildResponsesUrl (base_url provider)) reqBody'
-              result <- sendResponsesRaw provider apiKey reqBody'
+              let reqCtx = buildRequestContext (buildResponsesUrl baseUrl) reqBody'
+              result <- sendResponsesRaw provider apiKey reqBody' useBeta
               let (statusMsg, outputMsg) =
                     case parseRawResponseStrict result of
                       Left err ->
@@ -87,10 +90,12 @@ runModelsAction :: EventM Name AppState ()
 runModelsAction =
   runProviderAction "Running models runner..." $ \st provider apiKey -> do
     let providerName = fromMaybe "-" (selectedProvider st)
-        reqCtx = RequestContext (buildModelsUrl (base_url provider)) ""
-        info = buildDebugInfo providerName "-" (buildModelsUrl (base_url provider)) (modelsRequestHeaders apiKey)
+        useBeta = betaUrlSetting st
+        baseUrl = selectBaseUrl provider useBeta
+        reqCtx = RequestContext (buildModelsUrl baseUrl) ""
+        info = buildDebugInfo providerName "-" (buildModelsUrl baseUrl) (modelsRequestHeaders apiKey)
         handler _ = Right $ do
-          result <- runGetModels provider apiKey
+          result <- runGetModels provider apiKey useBeta
           let (statusMsg, outputMsg) =
                 case result of
                   Left err ->
@@ -110,15 +115,17 @@ runEmbeddingsAction inputText =
     let modelOverride = selectedModel st
         params = Embeddings.emptyEmbeddingParams
         providerName = fromMaybe "-" (selectedProvider st)
+        useBeta = betaUrlSetting st
         modelId = resolveEmbeddingModelId provider modelOverride
         reqBody = buildEmbeddingsRequest modelId params inputText
         reqJson = encodeJsonText reqBody
-        info = buildDebugInfo providerName modelId (buildEmbeddingsUrl (base_url provider)) (jsonRequestHeaders apiKey)
+        baseUrl = selectBaseUrl provider useBeta
+        info = buildDebugInfo providerName modelId (buildEmbeddingsUrl baseUrl) (jsonRequestHeaders apiKey)
         handler bodyText = do
           reqBody' <- (decodeJsonText bodyText :: Either Text EmbeddingRequest)
           Right $ do
-            let reqCtx = buildRequestContext (buildEmbeddingsUrl (base_url provider)) reqBody'
-            result <- sendEmbeddingsRaw provider apiKey reqBody'
+            let reqCtx = buildRequestContext (buildEmbeddingsUrl baseUrl) reqBody'
+            result <- sendEmbeddingsRaw provider apiKey reqBody' useBeta
             let (statusMsg, outputMsg) =
                   case parseRawResponseStrict result of
                     Left err ->

@@ -265,13 +265,14 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
       if apiKey /= ""
         then putTextLn "API Key: Found (hidden)"
         else putTextLn "API Key: NOT FOUND (Check environment variables)"
-      result <- runGetModels provider apiKey
+      result <- runGetModels provider apiKey useBeta
       case result of
         Left err -> do
           putTextLn $ "Request failed: " <> err
           exitFailure
         Right result -> do
-          let ctx = Output.RequestContext (buildModelsUrl (base_url provider)) (requestJson result)
+          let baseUrl = selectBaseUrl provider useBeta
+              ctx = Output.RequestContext (buildModelsUrl baseUrl) (requestJson result)
               sections = requestSections ctx <> responseSections result
           putTextLn (renderSectionsText sections)
     "structured-json" -> do
@@ -400,13 +401,14 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             else do
               putTextLn $ "Using model: " <> resolveEmbeddingModelId provider modelOverride
-              result <- runEmbeddings provider apiKey modelOverride params inputText
+              result <- runEmbeddings provider apiKey modelOverride params inputText useBeta
               case result of
                 Left err -> do
                   putTextLn $ "Request failed: " <> err
                   exitFailure
                 Right result -> do
-                  let ctx = Output.RequestContext (buildEmbeddingsUrl (base_url provider)) (requestJson result)
+                  let baseUrl = selectBaseUrl provider useBeta
+                      ctx = Output.RequestContext (buildEmbeddingsUrl baseUrl) (requestJson result)
                       summarySection = case response result of
                         Nothing -> []
                         Just EmbeddingResponse{data_} ->
@@ -472,13 +474,14 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               exitFailure
             else do
               putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-              result <- runResponses provider apiKey modelOverride params inputText
+              result <- runResponses provider apiKey modelOverride params inputText useBeta
               case result of
                 Left err -> do
                   putTextLn $ "Request failed: " <> err
                   exitFailure
                 Right result -> do
-                  let ctx = Output.RequestContext (buildResponsesUrl (base_url provider)) (requestJson result)
+                  let baseUrl = selectBaseUrl provider useBeta
+                      ctx = Output.RequestContext (buildResponsesUrl baseUrl) (requestJson result)
                       assistantSection = case response result >>= output_text of
                         Nothing -> []
                         Just content -> [textSection SectionAssistant "Assistant" content]

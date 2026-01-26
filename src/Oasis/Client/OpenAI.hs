@@ -182,62 +182,62 @@ sendCompletionsRawWithManager manager hooks provider apiKey reqBody useBeta = do
   req <- buildJsonRequest url "POST" (encode reqBody) apiKey
   executeRequestWithHooks hooks req manager
 
-sendModelsRaw :: Provider -> Text -> IO (Either ClientError BL.ByteString)
-sendModelsRaw provider apiKey = do
-  sendModelsRawWithHooks emptyClientHooks provider apiKey
+sendModelsRaw :: Provider -> Text -> Bool -> IO (Either ClientError BL.ByteString)
+sendModelsRaw provider apiKey useBeta = do
+  sendModelsRawWithHooks emptyClientHooks provider apiKey useBeta
 
-sendModelsRawWithHooks :: ClientHooks -> Provider -> Text -> IO (Either ClientError BL.ByteString)
-sendModelsRawWithHooks hooks provider apiKey = do
+sendModelsRawWithHooks :: ClientHooks -> Provider -> Text -> Bool -> IO (Either ClientError BL.ByteString)
+sendModelsRawWithHooks hooks provider apiKey useBeta = do
   manager <- newTlsManager
-  sendModelsRawWithManager manager hooks provider apiKey
+  sendModelsRawWithManager manager hooks provider apiKey useBeta
 
-sendModelsRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> IO (Either ClientError BL.ByteString)
-sendModelsRawWithManager manager hooks provider apiKey = do
-  let url = buildModelsUrl (base_url provider)
+sendModelsRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> Bool -> IO (Either ClientError BL.ByteString)
+sendModelsRawWithManager manager hooks provider apiKey useBeta = do
+  let url = buildModelsUrl (selectBaseUrl provider useBeta)
   req <- buildGetRequest url apiKey
   executeRequestWithHooks hooks req manager
 
-sendEmbeddings :: Provider -> Text -> EmbeddingRequest -> IO (Either ClientError EmbeddingResponse)
-sendEmbeddings provider apiKey reqBody = do
-  resp <- sendEmbeddingsRaw provider apiKey reqBody
+sendEmbeddings :: Provider -> Text -> EmbeddingRequest -> Bool -> IO (Either ClientError EmbeddingResponse)
+sendEmbeddings provider apiKey reqBody useBeta = do
+  resp <- sendEmbeddingsRaw provider apiKey reqBody useBeta
   case resp of
     Left err -> pure (Left err)
     Right body -> pure (decodeOrError body)
 
-sendEmbeddingsRaw :: Provider -> Text -> EmbeddingRequest -> IO (Either ClientError BL.ByteString)
-sendEmbeddingsRaw provider apiKey reqBody = do
-  sendEmbeddingsRawWithHooks emptyClientHooks provider apiKey reqBody
+sendEmbeddingsRaw :: Provider -> Text -> EmbeddingRequest -> Bool -> IO (Either ClientError BL.ByteString)
+sendEmbeddingsRaw provider apiKey reqBody useBeta = do
+  sendEmbeddingsRawWithHooks emptyClientHooks provider apiKey reqBody useBeta
 
-sendEmbeddingsRawWithHooks :: ClientHooks -> Provider -> Text -> EmbeddingRequest -> IO (Either ClientError BL.ByteString)
-sendEmbeddingsRawWithHooks hooks provider apiKey reqBody = do
+sendEmbeddingsRawWithHooks :: ClientHooks -> Provider -> Text -> EmbeddingRequest -> Bool -> IO (Either ClientError BL.ByteString)
+sendEmbeddingsRawWithHooks hooks provider apiKey reqBody useBeta = do
   manager <- newTlsManager
-  sendEmbeddingsRawWithManager manager hooks provider apiKey reqBody
+  sendEmbeddingsRawWithManager manager hooks provider apiKey reqBody useBeta
 
-sendEmbeddingsRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> EmbeddingRequest -> IO (Either ClientError BL.ByteString)
-sendEmbeddingsRawWithManager manager hooks provider apiKey reqBody = do
-  let url = buildEmbeddingsUrl (base_url provider)
+sendEmbeddingsRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> EmbeddingRequest -> Bool -> IO (Either ClientError BL.ByteString)
+sendEmbeddingsRawWithManager manager hooks provider apiKey reqBody useBeta = do
+  let url = buildEmbeddingsUrl (selectBaseUrl provider useBeta)
   req <- buildJsonRequest url "POST" (encode reqBody) apiKey
   executeRequestWithHooks hooks req manager
 
-sendResponses :: Provider -> Text -> ResponsesRequest -> IO (Either ClientError ResponsesResponse)
-sendResponses provider apiKey reqBody = do
-  resp <- sendResponsesRaw provider apiKey reqBody
+sendResponses :: Provider -> Text -> ResponsesRequest -> Bool -> IO (Either ClientError ResponsesResponse)
+sendResponses provider apiKey reqBody useBeta = do
+  resp <- sendResponsesRaw provider apiKey reqBody useBeta
   case resp of
     Left err -> pure (Left err)
     Right body -> pure (decodeOrError body)
 
-sendResponsesRaw :: Provider -> Text -> ResponsesRequest -> IO (Either ClientError BL.ByteString)
-sendResponsesRaw provider apiKey reqBody = do
-  sendResponsesRawWithHooks emptyClientHooks provider apiKey reqBody
+sendResponsesRaw :: Provider -> Text -> ResponsesRequest -> Bool -> IO (Either ClientError BL.ByteString)
+sendResponsesRaw provider apiKey reqBody useBeta = do
+  sendResponsesRawWithHooks emptyClientHooks provider apiKey reqBody useBeta
 
-sendResponsesRawWithHooks :: ClientHooks -> Provider -> Text -> ResponsesRequest -> IO (Either ClientError BL.ByteString)
-sendResponsesRawWithHooks hooks provider apiKey reqBody = do
+sendResponsesRawWithHooks :: ClientHooks -> Provider -> Text -> ResponsesRequest -> Bool -> IO (Either ClientError BL.ByteString)
+sendResponsesRawWithHooks hooks provider apiKey reqBody useBeta = do
   manager <- newTlsManager
-  sendResponsesRawWithManager manager hooks provider apiKey reqBody
+  sendResponsesRawWithManager manager hooks provider apiKey reqBody useBeta
 
-sendResponsesRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> ResponsesRequest -> IO (Either ClientError BL.ByteString)
-sendResponsesRawWithManager manager hooks provider apiKey reqBody = do
-  let url = buildResponsesUrl (base_url provider)
+sendResponsesRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> ResponsesRequest -> Bool -> IO (Either ClientError BL.ByteString)
+sendResponsesRawWithManager manager hooks provider apiKey reqBody useBeta = do
+  let url = buildResponsesUrl (selectBaseUrl provider useBeta)
   req <- buildJsonRequest url "POST" (encode reqBody) apiKey
   executeRequestWithHooks hooks req manager
 

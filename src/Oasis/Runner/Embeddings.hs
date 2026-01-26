@@ -48,8 +48,8 @@ emptyEmbeddingParams = EmbeddingParams Nothing Nothing Nothing
 parseEmbeddingParams :: Maybe Text -> Either Text EmbeddingParams
 parseEmbeddingParams = parseExtraArgs "Embeddings" emptyEmbeddingParams
 
-runEmbeddings :: Provider -> Text -> Maybe Text -> EmbeddingParams -> Text -> IO (Either Text EmbeddingResult)
-runEmbeddings provider apiKey modelOverride params inputText = do
+runEmbeddings :: Provider -> Text -> Maybe Text -> EmbeddingParams -> Text -> Bool -> IO (Either Text EmbeddingResult)
+runEmbeddings provider apiKey modelOverride params inputText useBeta = do
   let modelId = resolveEmbeddingModelId provider modelOverride
       reqBody = EmbeddingRequest
         { model = modelId
@@ -59,5 +59,5 @@ runEmbeddings provider apiKey modelOverride params inputText = do
         , user = paramUser params
         }
       reqJsonText = encodeRequestJson reqBody
-  resp <- sendEmbeddingsRaw provider apiKey reqBody
+  resp <- sendEmbeddingsRaw provider apiKey reqBody useBeta
   pure (buildRequestResponse reqJsonText resp)
