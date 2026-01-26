@@ -48,7 +48,7 @@ import Oasis.Tui.Render.Output
   )
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
 import Oasis.Types (Config(..), Provider(..), RequestResponse(..))
-import Oasis.Output.Common (selectBaseUrl)
+import Oasis.Output.Common (selectBaseUrl, extractResponsesAssistantContent)
 
 runResponsesAction :: Text -> EventM Name AppState ()
 runResponsesAction inputText =
@@ -74,7 +74,7 @@ runResponsesAction inputText =
                       Left err ->
                         ("Responses runner failed.", renderErrorOutput reqCtx err)
                       Right (raw, response) ->
-                        let assistantContent = output_text response
+                        let assistantContent = extractResponsesAssistantContent response
                             output = mdConcat
                               ( requestSections reqCtx
                                 <> catMaybes

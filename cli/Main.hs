@@ -39,7 +39,7 @@ import Oasis.CLI.Render.Text
   , jsonSection
   , warningSection
   )
-import Oasis.Output.Common (selectBaseUrl, extractAssistantContent)
+import Oasis.Output.Common (selectBaseUrl, extractAssistantContent, extractResponsesAssistantContent)
 import qualified Oasis.Output.Types as Output
 import Oasis.Output.Types (OutputSectionKind(..))
 import Oasis.Client.OpenAI
@@ -482,7 +482,7 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                 Right result -> do
                   let baseUrl = selectBaseUrl provider useBeta
                       ctx = Output.RequestContext (buildResponsesUrl baseUrl) (requestJson result)
-                      assistantSection = case response result >>= output_text of
+                      assistantSection = case response result >>= extractResponsesAssistantContent of
                         Nothing -> []
                         Just content -> [textSection SectionAssistant "Assistant" content]
                       sections = requestSections ctx <> responseSections result <> assistantSection

@@ -5,16 +5,20 @@ module Oasis.Output.Common
   , buildRequestContext
   , selectBaseUrl
   , extractAssistantContent
+  , extractResponsesAssistantContent
   ) where
 
 import Relude
-import Data.Aeson (FromJSON, ToJSON, encode, eitherDecode, eitherDecodeStrict)
+import Data.Aeson (FromJSON, ToJSON, Value(..), encode, eitherDecode, eitherDecodeStrict)
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Oasis.Output.Types (RequestContext(..))
 import Oasis.Types (Provider(..), Message(..), messageContentText)
-import Oasis.Client.OpenAI (ChatCompletionResponse(..), ChatChoice(..), ClientError, renderClientError)
+import Oasis.Client.OpenAI (ChatCompletionResponse(..), ChatChoice(..), ResponsesResponse(..), ClientError, renderClientError)
 
 encodeJsonText :: ToJSON a => a -> Text
 encodeJsonText = TE.decodeUtf8Lenient . BL.toStrict . encode
@@ -56,3 +60,33 @@ extractAssistantContent ChatCompletionResponse{choices} =
   case choices of
     (ChatChoice{message = Just Message{content}}:_) -> Just (messageContentText content)
     _ -> Nothing
+
+extractResponsesAssistantContent :: ResponsesResponse -> Maybe Text
+extractResponsesAssistantContent ResponsesResponse{output_text, output} =
+  output_text <|> (output >>= extractFromOutput)
+  where
+    extractFromOutput :: Value -> Maybe Text
+    extractFromOutput = \case
+      Array arr -> asum (map extractFromOutput (toList arr))
+      Object obj ->
+        let mType = lookupText "type" obj
+            mRole = lookupText "role" obj
+            contentVal = KM.lookup (Key.fromText "content") obj
+            textVal = lookupText "text" obj
+        in case mType of
+            Just "message" ->
+              if mRole == Just "assistant"
+                then contentVal >>= extractFromOutput
+                else contentVal >>= extractFromOutput
+            Just "output_text" -> textVal
+            _ ->
+              case contentVal of
+                Just v -> extractFromOutput v <|> textVal
+                Nothing -> textVal
+      _ -> Nothing
+
+    lookupText :: Text -> Aeson.Object -> Maybe Text
+    lookupText key obj =
+      case KM.lookup (Key.fromText key) obj of
+        Just (String t) -> Just t
+        _ -> Nothing
