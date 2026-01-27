@@ -33,13 +33,14 @@ import Oasis.Output.Common
   , decodeJsonText
   , parseRawResponseStrict
   , buildRequestContext
-  , selectBaseUrl
   , extractAssistantContent
   )
+import Oasis.Model (selectBaseUrl)
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..), DebugRequestInfo(..), DebugRequestHandler)
 import Oasis.Types (Provider(..), Message(..))
 import Oasis.Chat.Message (assistantMessage)
-import Oasis.Client.OpenAI (ChatCompletionResponse(..), ClientHooks(..), emptyClientHooks)
+import Oasis.Client.OpenAI.Types (ChatCompletionResponse(..))
+import Oasis.Client.OpenAI.Hooks (ClientHooks(..), emptyClientHooks)
 import Data.Aeson (eitherDecode)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE

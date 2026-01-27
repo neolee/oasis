@@ -14,12 +14,14 @@ The library (`./src`) is layered to keep protocol logic pure and keep UI/printin
 
 - `Oasis.Types`: protocol-level types (messages, tools, usage, errors).
 - `Oasis.Config`: TOML configuration parsing and defaults.
-- `Oasis.Model`: model/provider resolution and high-level model abstractions.
+- `Oasis.Model`: provider/model resolution and related utilities.
 
 **OpenAI-Compatible Client**
 
-- `Oasis.Client.OpenAI`: main entry point for OpenAI-compatible requests.
+- `Oasis.Client.OpenAI.Types`: OpenAI-compatible protocol types and helpers.
+- `Oasis.Client.OpenAI`: main entry point, OpenAI-compatible API request and response handling.
 - `Oasis.Client.OpenAI.Param`: request parameter helpers.
+- `Oasis.Client.OpenAI.Hooks`: request hooks (`RequestHook`) and transport hooks (`ClientHooks`).
 
 **Chat Session Support**
 
@@ -75,8 +77,10 @@ let presetModels = [chat_model_id provider, coder_model_id provider, reasoner_mo
 
 ```hs
 import Oasis.Runner.GetModels (runGetModels)
+import Oasis.Types (RequestResponse)
+import Data.Aeson (Value)
 
-result <- runGetModels provider apiKey
+result <- runGetModels provider apiKey False
 -- result :: Either Text (RequestResponse Value)
 ```
 
@@ -205,7 +209,14 @@ Reference implementation: [src/Oasis/Runner/Hooks.hs](src/Oasis/Runner/Hooks.hs)
 
 ### Internal Modules
 
-Modules under `Oasis.Client.OpenAI.*` (`Types`, `Http`, `Request`, `Stream`, `Param`, `Context` and internal `Types`) and `Oasis.Runner.*` internal helpers (`Result` and `Stream`) are implementation details and may change without notice.
+Internal implementation modules that may change without notice:
+
+- `Oasis.Client.OpenAI.Http`
+- `Oasis.Client.OpenAI.Request`
+- `Oasis.Client.OpenAI.Stream`
+- `Oasis.Client.OpenAI.Context`
+- `Oasis.Runner.Result`
+- `Oasis.Runner.Stream`
 
 ---
 

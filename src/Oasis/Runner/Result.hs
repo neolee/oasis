@@ -11,7 +11,8 @@ import Relude
 import Data.Aeson (ToJSON(..), FromJSON(..), encode, decode, eitherDecode)
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
-import Oasis.Client.OpenAI (ClientError, renderClientError)
+import Oasis.Client.OpenAI.Types (ClientError)
+import Oasis.Client.OpenAI (renderClientError)
 import Oasis.Types (RequestResponse(..))
 
 encodeRequestJson :: ToJSON a => a -> Text

@@ -10,6 +10,13 @@ module Oasis.Runner.PrefixCompletion
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
+  ( sendChatCompletionRawWithHooks
+  )
+import Oasis.Client.OpenAI.Hooks (ClientHooks(..), emptyClientHooks)
+import Oasis.Client.OpenAI.Types
+  ( ChatCompletionRequest(..)
+  , ChatCompletionResponse(..)
+  )
 import Oasis.Model (resolveModelId)
 import Oasis.Client.OpenAI.Param (ChatParams, applyChatParams)
 import Oasis.Runner.Result (encodeRequestJson, buildRequestResponse)

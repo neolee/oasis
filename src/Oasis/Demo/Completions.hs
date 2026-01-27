@@ -5,7 +5,7 @@ module Oasis.Demo.Completions
   ) where
 
 import Relude
-import Oasis.Client.OpenAI (CompletionRequest(..))
+import Oasis.Client.OpenAI.Types (CompletionRequest(..))
 import Oasis.Types (Message(..), MessageContent(..))
 
 partialModeMessages :: [Message]

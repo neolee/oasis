@@ -14,6 +14,7 @@ module Oasis.Types
   , MessageContent(..)
   , Message(..)
   , messageContentText
+  , dropTrailingUnderscore
   ) where
 
 import Relude

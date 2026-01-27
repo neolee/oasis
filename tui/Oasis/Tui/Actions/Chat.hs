@@ -17,11 +17,13 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.IORef as IORef
 import Data.Aeson (Value, eitherDecodeStrict)
 import Oasis.Client.OpenAI
+  ( buildChatUrl
+  , renderClientError
+  )
+import Oasis.Client.OpenAI.Hooks (emptyClientHooks)
+import Oasis.Client.OpenAI.Types
   ( ChatCompletionRequest(..)
   , setChatStream
-  , buildChatUrl
-  , renderClientError
-  , emptyClientHooks
   )
 import Oasis.Chat.Message (assistantMessage, userMessage)
 import Oasis.Demo.StructuredOutput

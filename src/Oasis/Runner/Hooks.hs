@@ -11,6 +11,15 @@ module Oasis.Runner.Hooks
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
+  ( sendChatCompletionRawWithHooks
+  , renderClientError
+  )
+import Oasis.Client.OpenAI.Hooks (ClientHooks(..))
+import Oasis.Client.OpenAI.Types
+  ( ChatCompletionRequest(..)
+  , ClientError(..)
+  , defaultChatRequest
+  )
 import Oasis.Model (resolveModelId)
 import Oasis.Client.OpenAI.Context (buildUserMessages)
 import Oasis.Client.OpenAI.Param (ChatParams, applyChatParams)

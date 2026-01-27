@@ -64,9 +64,10 @@ library:
   - Oasis.Types
   - Oasis.Config
   - Oasis.Model
+  - Oasis.Client.OpenAI.Types
   - Oasis.Client.OpenAI
-  - Oasis.Client.OpenAI.Hooks
   - Oasis.Client.OpenAI.Param
+  - Oasis.Client.OpenAI.Hooks
   - Oasis.Chat.Message
   - Oasis.Chat.History
   - Oasis.Demo.Completions
@@ -92,7 +93,6 @@ library:
   - Oasis.Client.OpenAI.Context
   - Oasis.Client.OpenAI.Request
   - Oasis.Client.OpenAI.Stream
-  - Oasis.Client.OpenAI.Types
   - Oasis.Runner.Result
   - Oasis.Runner.Stream
 

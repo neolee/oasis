@@ -7,13 +7,15 @@ module Oasis.Tui.Actions.Completions
 import Relude
 import Brick.Types (EventM)
 import Oasis.Client.OpenAI
+  ( buildChatUrl
+  , buildCompletionsUrl
+  )
+import Oasis.Client.OpenAI.Hooks (emptyClientHooks)
+import Oasis.Client.OpenAI.Types
   ( ChatCompletionRequest(..)
   , CompletionRequest(..)
   , CompletionResponse(..)
   , CompletionChoice(..)
-  , buildChatUrl
-  , buildCompletionsUrl
-  , emptyClientHooks
   )
 import Oasis.Model (resolveModelId)
 import Oasis.Demo.Completions

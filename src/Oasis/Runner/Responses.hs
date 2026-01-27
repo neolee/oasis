@@ -11,6 +11,12 @@ module Oasis.Runner.Responses
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
+  ( sendResponsesRaw
+  )
+import Oasis.Client.OpenAI.Types
+  ( ResponsesRequest(..)
+  , ResponsesResponse(..)
+  )
 import Oasis.Model (resolveModelId)
 import Oasis.Client.OpenAI.Param (parseExtraArgs)
 import Oasis.Runner.Result (encodeRequestJson, buildRequestResponse)

@@ -2,6 +2,7 @@ module Oasis.Model
   ( selectModelId
   , resolveModelId
   , resolveEmbeddingModelId
+  , selectBaseUrl
   ) where
 
 import Relude
@@ -29,6 +30,15 @@ resolveEmbeddingModelId provider@Provider{embedding_model_id} modelOverride =
   case embedding_model_id >>= nonEmpty of
     Just emb -> emb
     Nothing -> resolveModelId provider modelOverride
+  where
+    nonEmpty t =
+      let trimmed = T.strip t
+      in if T.null trimmed then Nothing else Just trimmed
+
+selectBaseUrl :: Provider -> Bool -> Text
+selectBaseUrl Provider{base_url, beta_base_url} useBeta =
+  let beta = beta_base_url >>= nonEmpty
+  in if useBeta then fromMaybe base_url beta else base_url
   where
     nonEmpty t =
       let trimmed = T.strip t

@@ -6,7 +6,7 @@ module Oasis.Runner.Stream
   ) where
 
 import Relude
-import Oasis.Client.OpenAI (ChatCompletionStreamChunk(..), StreamChoice(..), StreamDelta(..))
+import Oasis.Client.OpenAI.Types (ChatCompletionStreamChunk(..), StreamChoice(..), StreamDelta(..))
 
 forEachDelta :: ChatCompletionStreamChunk -> (StreamDelta -> IO ()) -> IO ()
 forEachDelta ChatCompletionStreamChunk{choices} f =

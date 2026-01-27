@@ -13,12 +13,13 @@ import Relude
 import Oasis.Types (Provider, Message, Tool, messageContentText)
 import qualified Oasis.Types as OT
 import Oasis.Client.OpenAI
+  ( requestChat
+  , sendChatCompletionRawWithHooks
+  )
+import Oasis.Client.OpenAI.Hooks (ClientHooks(..), emptyClientHooks)
+import Oasis.Client.OpenAI.Types
   ( ChatCompletionRequest(..)
   , defaultChatRequest
-  , requestChat
-  , sendChatCompletionRawWithHooks
-  , emptyClientHooks
-  , ClientHooks(..)
   )
 import Oasis.Client.OpenAI.Hooks (RequestHook(..), emptyRequestHook)
 import qualified Oasis.Chat.Message as Msg

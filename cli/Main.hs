@@ -29,7 +29,7 @@ import Oasis.Runner.ToolCalling
 import Oasis.Runner.PartialMode
 import Oasis.Runner.PrefixCompletion
 import Oasis.Runner.FIMCompletion
-import Oasis.Model (resolveModelId, resolveEmbeddingModelId)
+import Oasis.Model (resolveModelId, resolveEmbeddingModelId, selectBaseUrl)
 import Oasis.Client.OpenAI.Param (parseChatParams)
 import Oasis.CLI.Render.Text
   ( renderSectionsText
@@ -39,7 +39,7 @@ import Oasis.CLI.Render.Text
   , jsonSection
   , warningSection
   )
-import Oasis.Output.Common (selectBaseUrl, extractAssistantContent, extractResponsesAssistantContent)
+import Oasis.Output.Common (extractAssistantContent, extractResponsesAssistantContent)
 import qualified Oasis.Output.Types as Output
 import Oasis.Output.Types (OutputSectionKind(..))
 import Oasis.Client.OpenAI
@@ -48,7 +48,9 @@ import Oasis.Client.OpenAI
   , buildEmbeddingsUrl
   , buildResponsesUrl
   , buildCompletionsUrl
-  , CompletionResponse(..)
+  )
+import Oasis.Client.OpenAI.Types
+  ( CompletionResponse(..)
   , CompletionChoice(..)
   , EmbeddingResponse(..)
   , EmbeddingData(..)

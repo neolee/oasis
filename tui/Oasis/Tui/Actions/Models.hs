@@ -12,14 +12,16 @@ import qualified Data.List as List
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import Oasis.Client.OpenAI
+  ( buildResponsesUrl
+  , buildModelsUrl
+  , buildEmbeddingsUrl
+  )
+import Oasis.Client.OpenAI.Types
   ( ResponsesRequest(..)
   , ResponsesResponse(..)
   , EmbeddingRequest(..)
   , EmbeddingResponse(..)
   , EmbeddingData(..)
-  , buildResponsesUrl
-  , buildModelsUrl
-  , buildEmbeddingsUrl
   )
 import Oasis.Model (resolveModelId, resolveEmbeddingModelId)
 import Oasis.Runner.GetModels (runGetModels)
@@ -45,7 +47,8 @@ import Oasis.Tui.Render.Output
   )
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
 import Oasis.Types (Config(..), Provider(..), RequestResponse(..))
-import Oasis.Output.Common (selectBaseUrl, extractResponsesAssistantContent)
+import Oasis.Output.Common (extractResponsesAssistantContent)
+import Oasis.Model (selectBaseUrl)
 
 runResponsesAction :: Text -> EventM Name AppState ()
 runResponsesAction inputText =

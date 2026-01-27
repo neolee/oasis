@@ -1,40 +1,20 @@
 {-# LANGUAGE StrictData #-}
 
 module Oasis.Client.OpenAI
-  ( ChatCompletionRequest(..)
-  , ChatCompletionResponse(..)
-  , ChatChoice(..)
-  , Usage(..)
-  , ChatCompletionStreamChunk(..)
-  , StreamChoice(..)
-  , StreamDelta(..)
-  , defaultChatRequest
-  , setChatStream
-  , EmbeddingRequest(..)
-  , EmbeddingResponse(..)
-  , EmbeddingData(..)
-  , EmbeddingUsage(..)
-  , ResponsesRequest(..)
-  , ResponsesResponse(..)
-  , CompletionRequest(..)
-  , CompletionResponse(..)
-  , CompletionChoice(..)
-  , ErrorDetail(..)
-  , ErrorResponse(..)
-  , ClientError(..)
-  , sendChatCompletion
+  ( sendChatCompletion
   , sendChatCompletionRaw
+  , sendChatCompletionRawWithHooks
+  , sendChatCompletionRawWithManager
   , streamChatCompletion
   , streamChatCompletionWithRequest
+  , streamChatCompletionWithRequestWithHooks
+  , streamChatCompletionWithRequestWithManager
+  , requestChat
+  , requestChatWithHooks
   , sendCompletions
   , sendCompletionsRaw
   , sendCompletionsRawWithHooks
   , sendCompletionsRawWithManager
-  , buildChatUrl
-  , buildModelsUrl
-  , buildEmbeddingsUrl
-  , buildResponsesUrl
-  , buildCompletionsUrl
   , sendEmbeddings
   , sendEmbeddingsRaw
   , sendEmbeddingsRawWithHooks
@@ -46,15 +26,12 @@ module Oasis.Client.OpenAI
   , sendModelsRaw
   , sendModelsRawWithHooks
   , sendModelsRawWithManager
-  , sendChatCompletionRawWithHooks
-  , sendChatCompletionRawWithManager
-  , requestChat
-  , requestChatWithHooks
+  , buildChatUrl
+  , buildModelsUrl
+  , buildEmbeddingsUrl
+  , buildResponsesUrl
+  , buildCompletionsUrl
   , renderClientError
-  , ClientHooks(..)
-  , emptyClientHooks
-  , streamChatCompletionWithRequestWithHooks
-  , streamChatCompletionWithRequestWithManager
   ) where
 
 import Relude
@@ -64,21 +41,27 @@ import Oasis.Client.OpenAI.Http
 import Oasis.Client.OpenAI.Request
 import Oasis.Client.OpenAI.Stream
 import Oasis.Client.OpenAI.Param (ChatParams, applyChatParams)
+import Oasis.Model (selectBaseUrl)
+import Oasis.Client.OpenAI.Hooks (ClientHooks(..), emptyClientHooks)
 import Data.Aeson
 import qualified Data.Text.Encoding as TE
-import qualified Data.Text as T
 import qualified Data.ByteString.Lazy as BL
 import Network.HTTP.Client
 import Network.HTTP.Types.Status (statusCode)
 
-selectBaseUrl :: Provider -> Bool -> Text
-selectBaseUrl provider useBeta =
-  let beta = beta_base_url provider >>= nonEmpty
-  in if useBeta then fromMaybe (base_url provider) beta else base_url provider
-  where
-    nonEmpty t =
-      let trimmed = T.strip t
-      in if T.null trimmed then Nothing else Just trimmed
+
+renderClientError :: ClientError -> Text
+renderClientError ClientError{status, statusText, requestId, errorResponse, rawBody} =
+  let header = "HTTP " <> show status <> " " <> statusText
+      reqLine = maybe "" ("\nRequest-Id: " <>) requestId
+      errLine = case errorResponse of
+        Nothing -> ""
+        Just ErrorResponse{error = ErrorDetail{message, type_, code}} ->
+          let typeLine = maybe "" ("\nType: " <>) type_
+              codeLine = maybe "" ("\nCode: " <>) code
+          in "\nError: " <> message <> typeLine <> codeLine
+      rawLine = if rawBody == "" then "" else "\nRaw: " <> rawBody
+  in header <> reqLine <> errLine <> rawLine
 
 sendChatCompletion :: Provider -> Text -> Text -> [Message] -> IO (Either ClientError ChatCompletionResponse)
 sendChatCompletion provider apiKey modelId msgs = do

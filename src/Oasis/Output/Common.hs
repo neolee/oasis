@@ -3,7 +3,6 @@ module Oasis.Output.Common
   , decodeJsonText
   , parseRawResponseStrict
   , buildRequestContext
-  , selectBaseUrl
   , extractAssistantContent
   , extractResponsesAssistantContent
   ) where
@@ -17,8 +16,9 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Oasis.Output.Types (RequestContext(..))
-import Oasis.Types (Provider(..), Message(..), messageContentText)
-import Oasis.Client.OpenAI (ChatCompletionResponse(..), ChatChoice(..), ResponsesResponse(..), ClientError, renderClientError)
+import Oasis.Types (Message(..), messageContentText)
+import Oasis.Client.OpenAI.Types (ChatCompletionResponse(..), ChatChoice(..), ResponsesResponse(..), ClientError)
+import Oasis.Client.OpenAI (renderClientError)
 
 encodeJsonText :: ToJSON a => a -> Text
 encodeJsonText = TE.decodeUtf8Lenient . BL.toStrict . encode
@@ -45,15 +45,6 @@ buildRequestContext url reqBody =
     { requestUrl = url
     , requestJson = encodeJsonText reqBody
     }
-
-selectBaseUrl :: Provider -> Bool -> Text
-selectBaseUrl Provider{base_url, beta_base_url} useBeta =
-  let beta = beta_base_url >>= nonEmpty
-  in if useBeta then fromMaybe base_url beta else base_url
-  where
-    nonEmpty t =
-      let trimmed = T.strip t
-      in if T.null trimmed then Nothing else Just trimmed
 
 extractAssistantContent :: ChatCompletionResponse -> Maybe Text
 extractAssistantContent ChatCompletionResponse{choices} =

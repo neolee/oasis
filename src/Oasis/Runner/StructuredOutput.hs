@@ -10,7 +10,17 @@ module Oasis.Runner.StructuredOutput
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
-import Oasis.Client.OpenAI.Types (setChatStream, setChatResponseFormat)
+  ( streamChatCompletionWithRequestWithHooks
+  , renderClientError
+  )
+import Oasis.Client.OpenAI.Hooks (ClientHooks(..), emptyClientHooks)
+import Oasis.Client.OpenAI.Types
+  ( ChatCompletionRequest(..)
+  , ChatCompletionStreamChunk(..)
+  , defaultChatRequest
+  , setChatStream
+  , setChatResponseFormat
+  )
 import Oasis.Model (resolveModelId)
 import Oasis.Client.OpenAI.Param (ChatParams, applyChatParams)
 import Oasis.Runner.Stream (forEachDeltaContent)

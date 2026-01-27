@@ -13,14 +13,15 @@ import qualified Data.Aeson.KeyMap as KM
 import Data.Aeson (Value, decode)
 import Data.Time (getZonedTime, formatTime, defaultTimeLocale)
 import Oasis.Client.OpenAI
+  ( buildChatUrl
+  , renderClientError
+  )
+import Oasis.Client.OpenAI.Types
   ( ChatCompletionRequest(..)
   , ChatCompletionResponse(..)
   , ChatChoice(..)
-  , buildChatUrl
-  , emptyClientHooks
-  , renderClientError
   )
-import Oasis.Client.OpenAI.Hooks (RequestHook(..), emptyRequestHook)
+import Oasis.Client.OpenAI.Hooks (RequestHook(..), emptyRequestHook, emptyClientHooks)
 import Oasis.Demo.ToolCalling
   ( toolCallingMessages
   , toolCallingTools

@@ -7,7 +7,8 @@ module Oasis.Client.OpenAI.Request
   ) where
 
 import Relude
-import Oasis.Client.OpenAI.Http (buildRequest, jsonHeaders, sseHeaders, modelsHeaders)
+import Oasis.Client.OpenAI.Http (buildRequest)
+import Oasis.Client.OpenAI.Types (jsonHeaders, sseHeaders, modelsHeaders)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import Network.HTTP.Client (Request, RequestBody(..))

@@ -11,6 +11,12 @@ module Oasis.Runner.Embeddings
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
+  ( sendEmbeddingsRaw
+  )
+import Oasis.Client.OpenAI.Types
+  ( EmbeddingRequest(..)
+  , EmbeddingResponse(..)
+  )
 import Oasis.Model (resolveEmbeddingModelId)
 import Oasis.Client.OpenAI.Param (parseExtraArgs)
 import Oasis.Runner.Result (encodeRequestJson, buildRequestResponse)

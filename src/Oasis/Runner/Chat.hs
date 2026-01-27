@@ -12,7 +12,18 @@ import Relude
 import Oasis.Types
 import Oasis.Types (messageContentText)
 import Oasis.Client.OpenAI
-import Oasis.Client.OpenAI.Types (setChatStream)
+  ( sendChatCompletionRawWithHooks
+  , streamChatCompletionWithRequestWithHooks
+  , renderClientError
+  )
+import Oasis.Client.OpenAI.Hooks (emptyClientHooks)
+import Oasis.Client.OpenAI.Types
+  ( ChatCompletionRequest(..)
+  , ChatCompletionStreamChunk(..)
+  , StreamDelta(..)
+  , defaultChatRequest
+  , setChatStream
+  )
 import Oasis.Model (resolveModelId)
 import Oasis.Client.OpenAI.Param (ChatParams, applyChatParams)
 import Oasis.Client.OpenAI.Context (extractAssistantContent)

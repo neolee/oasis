@@ -9,6 +9,12 @@ module Oasis.Runner.FIMCompletion
 import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
+  ( sendCompletionsRaw
+  )
+import Oasis.Client.OpenAI.Types
+  ( CompletionRequest(..)
+  , CompletionResponse(..)
+  )
 import Oasis.Model (resolveModelId)
 import Oasis.Runner.Result (encodeRequestJson, buildRequestResponse)
 

@@ -9,9 +9,6 @@ module Oasis.Client.OpenAI.Types
   , ChatCompletionStreamChunk(..)
   , StreamChoice(..)
   , StreamDelta(..)
-  , defaultChatRequest
-  , setChatStream
-  , setChatResponseFormat
   , EmbeddingRequest(..)
   , EmbeddingResponse(..)
   , EmbeddingData(..)
@@ -24,12 +21,22 @@ module Oasis.Client.OpenAI.Types
   , ErrorDetail(..)
   , ErrorResponse(..)
   , ClientError(..)
-  , renderClientError
+  , defaultChatRequest
+  , setChatStream
+  , setChatResponseFormat
+  , authHeader
+  , jsonHeaders
+  , sseHeaders
+  , modelsHeaders
   ) where
 
 import Relude
 import Oasis.Types
 import Data.Aeson
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
+import qualified Data.ByteString.Char8 as BS8
+import Network.HTTP.Types.Header (HeaderName, hAccept, hAuthorization, hContentType)
 
 data ChatCompletionRequest = ChatCompletionRequest
   { model       :: Text
@@ -336,21 +343,24 @@ data ClientError = ClientError
   , rawBody      :: Text
   } deriving (Show, Eq, Generic)
 
-renderClientError :: ClientError -> Text
-renderClientError ClientError{status, statusText, requestId, errorResponse, rawBody} =
-  let header = "HTTP " <> show status <> " " <> statusText
-      reqLine = maybe "" ("\nRequest-Id: " <>) requestId
-      errLine = case errorResponse of
-        Nothing -> ""
-        Just ErrorResponse{error = ErrorDetail{message, type_, code}} ->
-          let typeLine = maybe "" ("\nType: " <>) type_
-              codeLine = maybe "" ("\nCode: " <>) code
-          in "\nError: " <> message <> typeLine <> codeLine
-      rawLine = if rawBody == "" then "" else "\nRaw: " <> rawBody
-  in header <> reqLine <> errLine <> rawLine
+authHeader :: Text -> [(HeaderName, BS8.ByteString)]
+authHeader apiKey
+  | T.null apiKey = []
+  | otherwise    = [(hAuthorization, "Bearer " <> TE.encodeUtf8 apiKey)]
 
-dropTrailingUnderscore :: String -> String
-dropTrailingUnderscore field =
-  case reverse field of
-    '_':rest -> reverse rest
-    _ -> field
+jsonHeaders :: Text -> [(HeaderName, BS8.ByteString)]
+jsonHeaders apiKey =
+  [ (hContentType, "application/json")
+  , (hAccept, "application/json")
+  ] <> authHeader apiKey
+
+sseHeaders :: Text -> [(HeaderName, BS8.ByteString)]
+sseHeaders apiKey =
+  [ (hContentType, "application/json")
+  , (hAccept, "text/event-stream")
+  ] <> authHeader apiKey
+
+modelsHeaders :: Text -> [(HeaderName, BS8.ByteString)]
+modelsHeaders apiKey =
+  [ (hAccept, "application/json")
+  ] <> authHeader apiKey

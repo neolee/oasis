@@ -31,7 +31,7 @@ import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Graphics.Vty as Vty
 import Oasis.Chat.Message (assistantMessage)
-import Oasis.Client.OpenAI (ChatCompletionRequest(..))
+import Oasis.Client.OpenAI.Types (ChatCompletionRequest(..))
 import Oasis.Client.OpenAI.Param (ChatParams(..))
 import Oasis.Tui.Actions.Common (decodeJsonText, runInBackground)
 import Oasis.Tui.Actions.Models (customModelItem)
