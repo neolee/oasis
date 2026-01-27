@@ -65,6 +65,7 @@ library:
   - Oasis.Config
   - Oasis.Model
   - Oasis.Client.OpenAI
+  - Oasis.Client.OpenAI.Hooks
   - Oasis.Client.OpenAI.Param
   - Oasis.Chat.Message
   - Oasis.Chat.History

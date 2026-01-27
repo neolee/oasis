@@ -46,6 +46,8 @@ appEvent (AppEvent evt) =
   case evt of
     DebugRequestOpen{eventDebugInfo, eventDebugOriginal, eventDebugHandler, eventDebugReturnFocus} ->
       openDebugDialog eventDebugReturnFocus eventDebugInfo eventDebugOriginal eventDebugHandler
+    DebugNoOp ->
+      pure ()
     ChatStreaming{eventDelta} ->
       do
         modify (applyChatDelta eventDelta)
@@ -54,6 +56,8 @@ appEvent (AppEvent evt) =
       modify (\s -> s { statusText = eventStatus })
     MessageListSynced{eventMessages} ->
       modify (\s -> applyMessages eventMessages (L.listSelected (verboseMessageList s)) s)
+    ToolCallingOutput{eventOutput} ->
+      modify (\s -> s { outputText = eventOutput })
     StructuredStreaming{eventOutput} ->
       modify (\s -> s { outputText = eventOutput })
     _ ->

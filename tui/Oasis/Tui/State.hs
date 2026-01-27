@@ -28,6 +28,7 @@ data TuiEvent
       , eventDebugHandler :: DebugRequestHandler
       , eventDebugReturnFocus :: Name
       }
+  | DebugNoOp
   | ChatStreaming
     { eventDelta :: Text
     }
@@ -64,6 +65,9 @@ data TuiEvent
     { eventStatus :: Text
     , eventOutput :: Text
     }
+    | ToolCallingOutput
+      { eventOutput :: Text
+      }
   | PartialModeCompleted
     { eventStatus :: Text
     , eventOutput :: Text

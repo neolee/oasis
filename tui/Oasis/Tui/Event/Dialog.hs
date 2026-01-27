@@ -126,14 +126,35 @@ submitDebugRequest = do
 
 cancelDebugRequest :: EventM Name AppState ()
 cancelDebugRequest =
-  modify (\s -> s
-    { debugDialogOpen = False
-    , debugRequestError = Nothing
-    , debugRequestInfo = Nothing
-    , debugPendingAction = Nothing
-    , activeList = RunnerList
-    , statusText = "Debug request cancelled."
-    })
+  do
+    st <- get
+    case debugPendingAction st of
+      Nothing ->
+        modify (\s -> s
+          { debugDialogOpen = False
+          , debugRequestError = Nothing
+          , debugRequestInfo = Nothing
+          , debugPendingAction = Nothing
+          , activeList = RunnerList
+          , statusText = "Debug request cancelled."
+          })
+      Just handler ->
+        case handler "" of
+          Left err ->
+            modify (\s -> s
+              { debugRequestError = Just err
+              , statusText = "Debug request cancelled."
+              })
+          Right action -> do
+            modify (\s -> s
+              { debugDialogOpen = False
+              , debugRequestError = Nothing
+              , debugRequestInfo = Nothing
+              , debugPendingAction = Nothing
+              , activeList = RunnerList
+              , statusText = "Debug request cancelled."
+              })
+            runInBackground st action
 
 restoreDebugRequest :: EventM Name AppState ()
 restoreDebugRequest = do
