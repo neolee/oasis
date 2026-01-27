@@ -11,6 +11,7 @@ import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
   ( sendChatCompletionRawWithHooks
+  , encodeRequestJsonWithFlatExtra
   )
 import Oasis.Client.OpenAI.Hooks (ClientHooks(..), emptyClientHooks)
 import Oasis.Client.OpenAI.Types
@@ -20,7 +21,7 @@ import Oasis.Client.OpenAI.Types
   )
 import Oasis.Model (resolveModelId)
 import Oasis.Client.OpenAI.Param (ChatParams, applyChatParams)
-import Oasis.Runner.Result (encodeRequestJson, buildRequestResponse)
+import Oasis.Runner.Result (buildRequestResponse)
 
 type PartialModeResult = RequestResponse ChatCompletionResponse
 
@@ -42,6 +43,6 @@ runPartialModeRequest = runPartialModeRequestWithHooks emptyClientHooks
 
 runPartialModeRequestWithHooks :: ClientHooks -> Provider -> Text -> ChatCompletionRequest -> Bool -> IO (Either Text PartialModeResult)
 runPartialModeRequestWithHooks hooks provider apiKey reqBody useBeta = do
-  let reqJsonText = encodeRequestJson reqBody
+  let reqJsonText = encodeRequestJsonWithFlatExtra reqBody
   result <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody useBeta
   pure (buildRequestResponse reqJsonText result)

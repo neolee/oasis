@@ -11,8 +11,8 @@ import Relude
 import Data.Aeson (ToJSON(..), FromJSON(..), encode, decode, eitherDecode)
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
-import Oasis.Client.OpenAI.Types (ClientError)
-import Oasis.Client.OpenAI (renderClientError)
+import Oasis.Client.OpenAI.Types (ChatCompletionRequest, ClientError)
+import qualified Oasis.Client.OpenAI as OpenAI
 import Oasis.Types (RequestResponse(..))
 
 encodeRequestJson :: ToJSON a => a -> Text
@@ -34,12 +34,12 @@ decodeResponseJsonStrict body =
 
 parseRawResponse :: FromJSON a => Either ClientError BL.ByteString -> Either Text (Text, Maybe a)
 parseRawResponse = \case
-  Left err -> Left (renderClientError err)
+  Left err -> Left (OpenAI.renderClientError err)
   Right body -> Right (decodeResponseJson body)
 
 parseRawResponseStrict :: FromJSON a => Either ClientError BL.ByteString -> Either Text (Text, a)
 parseRawResponseStrict = \case
-  Left err -> Left (renderClientError err)
+  Left err -> Left (OpenAI.renderClientError err)
   Right body -> decodeResponseJsonStrict body
 
 buildRequestResponse :: FromJSON a => Text -> Either ClientError BL.ByteString -> Either Text (RequestResponse a)

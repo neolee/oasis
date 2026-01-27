@@ -18,6 +18,7 @@ import qualified Data.IORef as IORef
 import Data.Aeson (Value, eitherDecodeStrict)
 import Oasis.Client.OpenAI
   ( buildChatUrl
+  , encodeRequestJsonWithFlatExtra
   , renderClientError
   )
 import Oasis.Client.OpenAI.Hooks (emptyClientHooks)
@@ -39,6 +40,7 @@ import Oasis.Tui.Actions.Common
   , runWithDebug
   , runInBackground
   , buildRequestContext
+  , buildChatRequestContext
   , encodeJsonText
   , buildDebugInfo
   , jsonRequestHeaders
@@ -98,7 +100,8 @@ runBasicAction prompt =
         modelId = resolveModelId provider modelOverride
         baseUrl = selectBaseUrl provider useBeta
         reqBody = buildBasicRequest modelId params prompt
-        reqJson = encodeJsonText reqBody
+        reqJsonPreview = encodeChatRequestText reqBody
+        reqJsonDebug = encodeJsonText reqBody
         info = buildDebugInfo providerName modelId (buildChatUrl baseUrl) (jsonRequestHeaders apiKey)
         handler bodyText = do
           reqBody' <- (decodeJsonText bodyText :: Either Text ChatCompletionRequest)
@@ -110,7 +113,7 @@ runBasicAction prompt =
               let reqMessages = case reqBody' of
                     ChatCompletionRequest{messages} -> messages
                   hooks' = withMessageListHooks chan reqMessages emptyClientHooks
-                  reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody'
+                  reqCtx = buildChatRequestContext (buildChatUrl baseUrl) reqBody'
               result <- runBasicRequestWithHooks hooks' provider apiKey reqBody' useBeta
               let (statusMsg, outputMsg) =
                     case result of
@@ -127,7 +130,7 @@ runBasicAction prompt =
                               )
                         in ("Basic runner completed.", output)
               pure (BasicCompleted statusMsg outputMsg)
-    pure (info, reqJson, handler)
+    pure (info, reqJsonDebug, handler)
 
 runHooksAction :: Text -> EventM Name AppState ()
 runHooksAction prompt =
@@ -140,7 +143,8 @@ runHooksAction prompt =
         modelId = resolveModelId provider modelOverride
         baseUrl = selectBaseUrl provider useBeta
         reqBody = buildHooksRequest modelId params prompt
-        reqJson = encodeJsonText reqBody
+        reqJsonPreview = encodeChatRequestText reqBody
+        reqJsonDebug = encodeJsonText reqBody
         info = buildDebugInfo providerName modelId (buildChatUrl baseUrl) (jsonRequestHeaders apiKey)
         handler bodyText = do
           reqBody' <- (decodeJsonText bodyText :: Either Text ChatCompletionRequest)
@@ -151,7 +155,7 @@ runHooksAction prompt =
             else Right $ do
               let reqMessages = case reqBody' of
                     ChatCompletionRequest{messages} -> messages
-                  reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody'
+                  reqCtx = buildChatRequestContext (buildChatUrl baseUrl) reqBody'
                   hooks' = withMessageListHooks chan reqMessages emptyClientHooks
                   logger = HooksLogger
                     { onRequestLog = logRequestWith (writeBChan chan . StructuredStreaming)
@@ -172,7 +176,7 @@ runHooksAction prompt =
                               )
                         in ("Hooks runner completed.", output)
               pure (HooksCompleted statusMsg outputMsg)
-    pure (info, reqJson, handler)
+    pure (info, reqJsonDebug, handler)
 
 runStructuredJsonAction :: EventM Name AppState ()
 runStructuredJsonAction = runStructuredAction jsonObjectFormat "structured-json"
@@ -191,7 +195,8 @@ runStructuredAction responseFormat runnerLabel =
         modelId = resolveModelId provider modelOverride
         reqMessages = structuredMessages
         reqBody = buildStructuredRequest modelId params reqMessages responseFormat
-        reqJson = encodeJsonText reqBody
+        reqJsonPreview = encodeChatRequestText reqBody
+        reqJsonDebug = encodeJsonText reqBody
         info = buildDebugInfo providerName modelId (buildChatUrl (selectBaseUrl provider useBeta)) (sseRequestHeaders apiKey)
         handler bodyText = do
           reqBody' <- (decodeJsonText bodyText :: Either Text ChatCompletionRequest)
@@ -229,7 +234,7 @@ runStructuredAction responseFormat runnerLabel =
                               ]
                         in (runnerLabel <> " runner completed.", output)
               pure (StructuredCompleted statusMsg outputMsg)
-    pure (info, reqJson, handler)
+    pure (info, reqJsonDebug, handler)
 
 runChatInitAction :: EventM Name AppState ()
 runChatInitAction =
@@ -253,7 +258,8 @@ runChatAction messages =
           providerName = fromMaybe "-" (selectedProvider st)
           modelId = resolveModelId provider modelOverride
           reqBody = setChatStream True (buildChatRequest modelId params messages)
-          reqJson = encodeJsonText reqBody
+          reqJsonPreview = encodeChatRequestText reqBody
+          reqJsonDebug = encodeJsonText reqBody
           info = buildDebugInfo providerName modelId (buildChatUrl (selectBaseUrl provider useBeta)) (sseRequestHeaders apiKey)
           runStream body = do
             renderRef <- IORef.newIORef (ChatRenderState False False)
@@ -269,8 +275,11 @@ runChatAction messages =
               then Left "chat runner requires stream=true"
               else Right (runStream reqBody')
       if debugEnabled st
-        then runWithDebug info reqJson handler
+        then runWithDebug info reqJsonDebug handler
         else runInBackground st (runStream reqBody)
+
+encodeChatRequestText :: ChatCompletionRequest -> Text
+encodeChatRequestText = encodeRequestJsonWithFlatExtra
 
 data ChatRenderState = ChatRenderState
   { printedThinking :: Bool

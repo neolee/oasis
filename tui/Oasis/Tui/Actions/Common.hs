@@ -4,6 +4,7 @@ module Oasis.Tui.Actions.Common
   , runInBackground
   , runProviderAction
   , buildRequestContext
+  , buildChatRequestContext
   , encodeJsonText
   , openDebugDialog
   , runWithDebug
@@ -35,11 +36,13 @@ import Oasis.Output.Common
   , buildRequestContext
   , extractAssistantContent
   )
+import Oasis.Output.Types (RequestContext(..))
 import Oasis.Model (selectBaseUrl)
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..), DebugRequestInfo(..), DebugRequestHandler)
 import Oasis.Types (Provider(..), Message(..))
 import Oasis.Chat.Message (assistantMessage)
-import Oasis.Client.OpenAI.Types (ChatCompletionResponse(..))
+import Oasis.Client.OpenAI.Types (ChatCompletionRequest, ChatCompletionResponse(..))
+import Oasis.Client.OpenAI (encodeRequestJsonWithFlatExtra)
 import Oasis.Client.OpenAI.Hooks (ClientHooks(..), emptyClientHooks)
 import Data.Aeson (eitherDecode)
 import qualified Data.Text as T
@@ -153,6 +156,13 @@ runWithDebug info original handler = do
         modify (\s -> s { statusText = "Request build failed: " <> err })
       Right action ->
         runInBackground st action
+
+buildChatRequestContext :: Text -> ChatCompletionRequest -> RequestContext
+buildChatRequestContext url reqBody =
+  RequestContext
+    { requestUrl = url
+    , requestJson = encodeRequestJsonWithFlatExtra reqBody
+    }
 
 messageListHooks :: BChan TuiEvent -> [Message] -> ClientHooks
 messageListHooks chan msgs =

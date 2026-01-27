@@ -31,6 +31,7 @@ module Oasis.Client.OpenAI
   , buildEmbeddingsUrl
   , buildResponsesUrl
   , buildCompletionsUrl
+  , encodeRequestJsonWithFlatExtra
   , renderClientError
   ) where
 
@@ -44,11 +45,29 @@ import Oasis.Client.OpenAI.Param (ChatParams, applyChatParams)
 import Oasis.Model (selectBaseUrl)
 import Oasis.Client.OpenAI.Hooks (ClientHooks(..), emptyClientHooks)
 import Data.Aeson
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
 import Network.HTTP.Client
 import Network.HTTP.Types.Status (statusCode)
 
+encodeRequestJsonWithFlatExtra :: ChatCompletionRequest -> Text
+encodeRequestJsonWithFlatExtra = TE.decodeUtf8Lenient . BL.toStrict . encodeChatCompletionRequestWithFlatExtra
+
+encodeChatCompletionRequestWithFlatExtra :: ChatCompletionRequest -> BL.ByteString
+encodeChatCompletionRequestWithFlatExtra req =
+  let baseVal = genericToJSON defaultOptions { omitNothingFields = True } req
+      baseObj = case baseVal of
+        Object obj -> obj
+        _ -> KeyMap.empty
+  in case extra_body req of
+      Just (Object objExtra) ->
+        let baseNoExtra = KeyMap.delete (Key.fromText "extra_body") baseObj
+            merged = KeyMap.union baseNoExtra objExtra
+        in Aeson.encode (Object merged)
+      _ -> Aeson.encode baseVal
 
 renderClientError :: ClientError -> Text
 renderClientError ClientError{status, statusText, requestId, errorResponse, rawBody} =
@@ -83,7 +102,7 @@ sendChatCompletionRawWithHooks hooks provider apiKey reqBody useBeta = do
 sendChatCompletionRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> ChatCompletionRequest -> Bool -> IO (Either ClientError BL.ByteString)
 sendChatCompletionRawWithManager manager hooks provider apiKey reqBody useBeta = do
   let url = buildChatUrl (selectBaseUrl provider useBeta)
-  req <- buildJsonRequest url "POST" (encode reqBody) apiKey
+  req <- buildJsonRequest url "POST" (encodeChatCompletionRequestWithFlatExtra reqBody) apiKey
   executeRequestWithHooks hooks req manager
 
 requestChat :: Provider -> Text -> ChatParams -> ChatCompletionRequest -> Bool -> IO (Either ClientError BL.ByteString)
@@ -113,7 +132,7 @@ streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody onChunk u
 streamChatCompletionWithRequestWithManager :: Manager -> ClientHooks -> Provider -> Text -> ChatCompletionRequest -> (ChatCompletionStreamChunk -> IO ()) -> Bool -> IO (Either ClientError ())
 streamChatCompletionWithRequestWithManager manager hooks provider apiKey reqBody onChunk useBeta = do
   let url = buildChatUrl (selectBaseUrl provider useBeta)
-  req <- buildSseRequest url (encode reqBody) apiKey
+  req <- buildSseRequest url (encodeChatCompletionRequestWithFlatExtra reqBody) apiKey
   forM_ (onRequest hooks) ($ req)
   withResponse req manager $ \resp -> do
     let status = responseStatus resp

@@ -14,6 +14,7 @@ import Data.Aeson (Value, decode, eitherDecode)
 import Data.Time (getZonedTime, formatTime, defaultTimeLocale)
 import Oasis.Client.OpenAI
   ( buildChatUrl
+  , encodeRequestJsonWithFlatExtra
   , renderClientError
   )
 import Oasis.Client.OpenAI.Types
@@ -73,7 +74,8 @@ runToolCallingAction =
           tools = toolCallingTools
           messages0 = toolCallingMessages
           reqBody0 = buildToolCallingRequest modelId params messages0 tools (Just True)
-          reqJson0 = encodeJsonText reqBody0
+          reqJsonPreview0 = encodeRequestJsonWithFlatExtra reqBody0
+          reqJsonDebug0 = encodeJsonText reqBody0
           endpoint = buildChatUrl (selectBaseUrl provider useBeta)
           info0 = buildDebugInfo providerName modelId endpoint (jsonRequestHeaders apiKey)
       progressRef <- newIORef emptyToolCallingProgress
@@ -89,10 +91,9 @@ runToolCallingAction =
                 result <- runToolCallingWithRequestWithHook reqHook hooks0 provider apiKey reqBody0' (executeToolCallWithProgress progressRef chan) useBeta
                 pure (renderToolCallingResult result)
       runInBackground st $ do
-        case handler0 reqJson0 of
+        case handler0 reqJsonDebug0 of
           Left err -> pure (ToolCallingCompleted "Tool-calling runner failed." (mdTextSection "Error" err))
           Right action -> action
-
 
 executeToolCall :: ToolCall -> IO (Either Text Text)
 executeToolCall ToolCall{function = ToolCallFunction{name, arguments}} =

@@ -12,6 +12,7 @@ import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
   ( sendChatCompletionRawWithHooks
+  , encodeRequestJsonWithFlatExtra
   , renderClientError
   )
 import Oasis.Client.OpenAI.Hooks (ClientHooks(..))
@@ -23,7 +24,6 @@ import Oasis.Client.OpenAI.Types
 import Oasis.Model (resolveModelId)
 import Oasis.Client.OpenAI.Context (buildUserMessages)
 import Oasis.Client.OpenAI.Param (ChatParams, applyChatParams)
-import Oasis.Runner.Result (encodeRequestJson)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString as BS
@@ -99,7 +99,7 @@ runHooksRequestWithLogger HooksLogger{..} provider apiKey reqBody useBeta = do
       onErr err = do
         appendLog (renderClientError err)
         onErrorLog err
-  let reqJsonText = encodeRequestJson reqBody
+  let reqJsonText = encodeRequestJsonWithFlatExtra reqBody
       hooks = ClientHooks
         { onRequest = Just onReq
         , onResponse = Just onResp
