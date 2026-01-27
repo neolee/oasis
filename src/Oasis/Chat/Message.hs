@@ -14,6 +14,7 @@ plainMessage :: Text -> Text -> Message
 plainMessage roleText txt = Message
   { role = roleText
   , content = ContentText txt
+  , reasoning_content = Nothing
   , tool_call_id = Nothing
   , tool_calls = Nothing
   , prefix = Nothing

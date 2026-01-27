@@ -375,7 +375,7 @@ confirmRoleDialog = do
       case verbosePendingInsertIndex st of
         Nothing -> pure ()
         Just idx -> do
-          let newMsg = Message roleText (ContentText "") Nothing Nothing Nothing Nothing
+          let newMsg = Message roleText (ContentText "") Nothing Nothing Nothing Nothing Nothing
               msgs = chatMessages st
               newMsgs = insertMessageAt idx newMsg msgs
           modify (\s ->
