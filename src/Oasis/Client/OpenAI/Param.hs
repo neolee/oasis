@@ -3,6 +3,11 @@ module Oasis.Client.OpenAI.Param
   , emptyChatParams
   , parseChatParams
   , parseExtraArgs
+  , parseExtraBodyText
+  , decodeExtraBodyValue
+  , extraBodyFromEnableThinking
+  , mergeExtraBodyList
+  , lookupEnableThinking
   , applyChatParams
   ) where
 
@@ -16,6 +21,7 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KeyMap
 
 data ChatParams = ChatParams
   { paramTemperature :: Maybe Double
@@ -30,6 +36,8 @@ data ChatParams = ChatParams
   , paramServiceTier :: Maybe Text
   , paramReasoningEffort :: Maybe Text
   , paramStreamOptions :: Maybe Aeson.Value
+  , paramExtraBody :: Maybe Aeson.Value
+  , paramEnableThinking :: Bool
   } deriving (Show, Eq, Generic)
 
 instance FromJSON ChatParams where
@@ -48,6 +56,8 @@ instance FromJSON ChatParams where
     paramServiceTier <- get "service_tier" "serviceTier"
     paramReasoningEffort <- get "reasoning_effort" "reasoningEffort"
     paramStreamOptions <- get "stream_options" "streamOptions"
+    let paramExtraBody = Nothing
+        paramEnableThinking = False
     pure ChatParams{..}
 
 instance ToJSON ChatParams where
@@ -67,7 +77,21 @@ instance ToJSON ChatParams where
     ]
 
 emptyChatParams :: ChatParams
-emptyChatParams = ChatParams Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+emptyChatParams = ChatParams
+  Nothing
+  Nothing
+  Nothing
+  Nothing
+  Nothing
+  Nothing
+  Nothing
+  Nothing
+  Nothing
+  Nothing
+  Nothing
+  Nothing
+  Nothing
+  False
 
 parseChatParams :: Maybe Text -> Either Text ChatParams
 parseChatParams = parseExtraArgs "Chat" emptyChatParams
@@ -84,6 +108,9 @@ parseExtraArgs label emptyValue = \case
 
 applyChatParams :: ChatParams -> ChatCompletionRequest -> ChatCompletionRequest
 applyChatParams ChatParams{..} req =
+  let enableThinkingBody = extraBodyFromEnableThinking paramEnableThinking
+      mergedExtraBody = mergeExtraBodyList (catMaybes [extra_body req, enableThinkingBody, paramExtraBody])
+  in
   req
     { temperature = paramTemperature <|> temperature req
     , top_p = paramTopP <|> top_p req
@@ -97,4 +124,46 @@ applyChatParams ChatParams{..} req =
     , service_tier = paramServiceTier <|> service_tier req
     , reasoning_effort = paramReasoningEffort <|> reasoning_effort req
     , stream_options = paramStreamOptions <|> stream_options req
+    , extra_body = mergedExtraBody
     }
+
+parseExtraBodyText :: Text -> Either Text (Maybe Aeson.Value)
+parseExtraBodyText raw
+  | T.null (T.strip raw) = Right Nothing
+  | otherwise = Just <$> decodeExtraBodyValue raw
+
+decodeExtraBodyValue :: Text -> Either Text Aeson.Value
+decodeExtraBodyValue raw =
+  case Aeson.eitherDecode (BL.fromStrict (TE.encodeUtf8 raw)) of
+    Left err -> Left ("extra_body: invalid JSON: " <> toText err)
+    Right val ->
+      case val of
+        Aeson.Object _ -> Right val
+        _ -> Left "extra_body: expected a JSON object"
+
+extraBodyFromEnableThinking :: Bool -> Maybe Aeson.Value
+extraBodyFromEnableThinking enabled
+  | enabled =
+      let obj = KeyMap.singleton (Key.fromText "enable_thinking") (Aeson.Bool True)
+      in Just (Aeson.Object obj)
+  | otherwise = Nothing
+
+mergeExtraBodyList :: [Aeson.Value] -> Maybe Aeson.Value
+mergeExtraBodyList = \case
+  [] -> Nothing
+  (v:vs) -> Just (foldl' mergeExtraBodyValues v vs)
+
+mergeExtraBodyValues :: Aeson.Value -> Aeson.Value -> Aeson.Value
+mergeExtraBodyValues left right =
+  case (left, right) of
+    (Aeson.Object l, Aeson.Object r) -> Aeson.Object (mergeObjects l r)
+    _ -> right
+  where
+    mergeObjects = KeyMap.unionWith mergeExtraBodyValues
+
+lookupEnableThinking :: Aeson.Value -> Maybe Bool
+lookupEnableThinking (Aeson.Object obj) =
+  case KeyMap.lookup (Key.fromText "enable_thinking") obj of
+    Just (Aeson.Bool b) -> Just b
+    _ -> Nothing
+lookupEnableThinking _ = Nothing

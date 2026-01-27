@@ -96,18 +96,22 @@ data Name
   | VerboseContentEditor
   | DebugRequestEditor
   | ParamBetaUrlEditor
+  | ParamEnableThinkingEditor
   | ParamTemperatureEditor
   | ParamTopPEditor
   | ParamMaxCompletionTokensEditor
   | ParamStopEditor
+  | ParamExtraBodyEditor
   deriving (Eq, Ord, Show)
 
 data ParamField
   = ParamBetaUrl
+  | ParamEnableThinking
   | ParamTemperature
   | ParamTopP
   | ParamMaxCompletionTokens
   | ParamStop
+  | ParamExtraBody
   deriving (Eq, Ord, Show, Enum, Bounded)
 
 data AppState = AppState
@@ -157,10 +161,12 @@ data AppState = AppState
   , paramDialogError :: Maybe Text
   , paramDialogReturnFocus :: Name
   , paramDialogBetaValue :: Bool
+  , paramDialogEnableThinkingValue :: Bool
   , paramTemperatureEditor :: Editor Text Name
   , paramTopPEditor :: Editor Text Name
   , paramMaxCompletionTokensEditor :: Editor Text Name
   , paramStopEditor :: Editor Text Name
+  , paramExtraBodyEditor :: Editor Text Name
   , outputText :: Text
   , statusText :: Text
   }
@@ -223,10 +229,12 @@ mkState chan cfg providers models runners outputText statusText =
     , paramDialogError = Nothing
     , paramDialogReturnFocus = ProviderList
     , paramDialogBetaValue = False
+    , paramDialogEnableThinkingValue = False
     , paramTemperatureEditor = editor ParamTemperatureEditor (Just 1) ""
     , paramTopPEditor = editor ParamTopPEditor (Just 1) ""
     , paramMaxCompletionTokensEditor = editor ParamMaxCompletionTokensEditor (Just 1) ""
     , paramStopEditor = editor ParamStopEditor (Just 1) ""
+    , paramExtraBodyEditor = editor ParamExtraBodyEditor (Just 4) ""
     , outputText
     , statusText
     }

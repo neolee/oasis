@@ -54,6 +54,7 @@ buildPrefixCompletionRequest modelId params messages =
         , tools = Nothing
         , tool_choice = Nothing
         , parallel_tool_calls = Nothing
+        , extra_body = Nothing
         }
   in applyChatParams params reqBase
 

@@ -183,17 +183,19 @@ drawUI st =
     paramDialog st' =
       centerLayer $
         hLimit 90 $
-          vLimit 18 $
+          vLimit 22 $
             withAttr (attrName "promptDialog") $
               overrideAttr borderAttr (attrName "promptDialogBorder") $
                 borderWithLabel (txt "chat params") $
                   padAll 1 $
                     vBox
                       ( [ renderParamCheckbox "beta_url" ParamBetaUrl (paramDialogBetaValue st')
+                        , renderParamCheckbox "enable_thinking" ParamEnableThinking (paramDialogEnableThinkingValue st')
                         , renderParamLine "temperature" ParamTemperature (paramTemperatureEditor st')
                         , renderParamLine "top_p" ParamTopP (paramTopPEditor st')
                         , renderParamLine "max_completion_tokens" ParamMaxCompletionTokens (paramMaxCompletionTokensEditor st')
                         , renderParamLine "stop *" ParamStop (paramStopEditor st')
+                        , renderParamLine "extra_body (json)" ParamExtraBody (paramExtraBodyEditor st')
                         , padTop (Pad 1) $
                           txt "* stop input format: \"a\", \"b\""
                         ]

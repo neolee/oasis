@@ -28,11 +28,14 @@ import qualified Brick.Widgets.List as L
 import Control.Monad.State.Class (get, modify)
 import qualified Data.List as List
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import qualified Data.Vector as V
 import qualified Graphics.Vty as Vty
+import qualified Data.Aeson as Aeson
+import qualified Data.ByteString.Lazy as BL
 import Oasis.Chat.Message (assistantMessage)
 import Oasis.Client.OpenAI.Types (ChatCompletionRequest(..))
-import Oasis.Client.OpenAI.Param (ChatParams(..))
+import Oasis.Client.OpenAI.Param (ChatParams(..), parseExtraBodyText, lookupEnableThinking)
 import Oasis.Tui.Actions.Common (decodeJsonText, runInBackground)
 import Oasis.Tui.Actions.Models (customModelItem)
 import Oasis.Tui.Event.Editor (editorText, editorTextRaw, isPromptInputStart, handleSimpleEditorEvent)
@@ -203,6 +206,7 @@ handleParamEditorEvent ev = do
   st <- get
   case paramDialogFocus st of
     ParamBetaUrl -> pure ()
+    ParamEnableThinking -> pure ()
     ParamTemperature -> do
       (editor', _) <- nestEventM (paramTemperatureEditor st) (handleEditorEvent (VtyEvent ev))
       modify (\s -> s { paramTemperatureEditor = editor' })
@@ -215,6 +219,9 @@ handleParamEditorEvent ev = do
     ParamStop -> do
       (editor', _) <- nestEventM (paramStopEditor st) (handleEditorEvent (VtyEvent ev))
       modify (\s -> s { paramStopEditor = editor' })
+    ParamExtraBody -> do
+      (editor', _) <- nestEventM (paramExtraBodyEditor st) (handleEditorEvent (VtyEvent ev))
+      modify (\s -> s { paramExtraBodyEditor = editor' })
 
 handleParamDialogEvent :: Vty.Event -> EventM Name AppState ()
 handleParamDialogEvent ev =
@@ -225,7 +232,7 @@ handleParamDialogEvent ev =
     Vty.EvKey Vty.KEsc [] -> cancelParamDialog
     Vty.EvKey Vty.KUp [] -> moveParamFocus (-1)
     Vty.EvKey Vty.KDown [] -> moveParamFocus 1
-    Vty.EvKey (Vty.KChar ' ') [] -> toggleBetaWhenFocused
+    Vty.EvKey (Vty.KChar ' ') [] -> toggleCheckboxWhenFocused
     _ -> handleParamEditorEvent ev
 
 copyParamField :: EventM Name AppState ()
@@ -235,21 +242,29 @@ copyParamField = do
     ParamBetaUrl ->
       let val = if paramDialogBetaValue st then "true" else "false"
       in copyAllFromEditor (editor ParamBetaUrlEditor (Just 1) val)
+    ParamEnableThinking ->
+      let val = if paramDialogEnableThinkingValue st then "true" else "false"
+      in copyAllFromEditor (editor ParamEnableThinkingEditor (Just 1) val)
     ParamTemperature -> copyAllFromEditor (paramTemperatureEditor st)
     ParamTopP -> copyAllFromEditor (paramTopPEditor st)
     ParamMaxCompletionTokens -> copyAllFromEditor (paramMaxCompletionTokensEditor st)
     ParamStop -> copyAllFromEditor (paramStopEditor st)
+    ParamExtraBody -> copyAllFromEditor (paramExtraBodyEditor st)
 
-toggleBetaWhenFocused :: EventM Name AppState ()
-toggleBetaWhenFocused = do
+toggleCheckboxWhenFocused :: EventM Name AppState ()
+toggleCheckboxWhenFocused = do
   st <- get
-  when (paramDialogFocus st == ParamBetaUrl) $
-    modify (\s -> s { paramDialogBetaValue = not (paramDialogBetaValue s) })
+  case paramDialogFocus st of
+    ParamBetaUrl ->
+      modify (\s -> s { paramDialogBetaValue = not (paramDialogBetaValue s) })
+    ParamEnableThinking ->
+      modify (\s -> s { paramDialogEnableThinkingValue = not (paramDialogEnableThinkingValue s) })
+    _ -> pure ()
 
 moveParamFocus :: Int -> EventM Name AppState ()
 moveParamFocus delta =
   modify (\s ->
-    let order = [ParamBetaUrl, ParamTemperature, ParamTopP, ParamMaxCompletionTokens, ParamStop]
+    let order = [ParamBetaUrl, ParamEnableThinking, ParamTemperature, ParamTopP, ParamMaxCompletionTokens, ParamStop, ParamExtraBody]
         current = paramDialogFocus s
         idx = fromMaybe 0 (List.elemIndex current order)
         nextIdx = (idx + delta) `mod` length order
@@ -261,10 +276,12 @@ moveParamFocus delta =
 paramFieldName :: ParamField -> Name
 paramFieldName = \case
   ParamBetaUrl -> ParamBetaUrlEditor
+  ParamEnableThinking -> ParamEnableThinkingEditor
   ParamTemperature -> ParamTemperatureEditor
   ParamTopP -> ParamTopPEditor
   ParamMaxCompletionTokens -> ParamMaxCompletionTokensEditor
   ParamStop -> ParamStopEditor
+  ParamExtraBody -> ParamExtraBodyEditor
 
 openParamDialog :: EventM Name AppState ()
 openParamDialog = do
@@ -274,6 +291,7 @@ openParamDialog = do
       topPText = maybe "" show paramTopP
       maxTokensText = maybe "" show paramMaxCompletionTokens
       stopText = maybe "" renderStopParam paramStop
+      extraBodyText = renderExtraBodyText paramExtraBody
   modify (\s -> s
     { paramDialogOpen = True
     , paramDialogError = Nothing
@@ -282,10 +300,12 @@ openParamDialog = do
     , activeList = ParamBetaUrlEditor
     , promptDialogOpen = False
     , paramDialogBetaValue = betaUrlSetting s
+    , paramDialogEnableThinkingValue = paramEnableThinking
     , paramTemperatureEditor = editor ParamTemperatureEditor (Just 1) tempText
     , paramTopPEditor = editor ParamTopPEditor (Just 1) topPText
     , paramMaxCompletionTokensEditor = editor ParamMaxCompletionTokensEditor (Just 1) maxTokensText
     , paramStopEditor = editor ParamStopEditor (Just 1) stopText
+    , paramExtraBodyEditor = editor ParamExtraBodyEditor (Just 4) extraBodyText
     })
 
 openModelInputDialog :: EventM Name AppState ()
@@ -307,12 +327,15 @@ restoreParamDialog = do
       topPText = maybe "" show paramTopP
       maxTokensText = maybe "" show paramMaxCompletionTokens
       stopText = maybe "" renderStopParam paramStop
+      extraBodyText = renderExtraBodyText paramExtraBody
   modify (\s -> s
     { paramDialogBetaValue = betaUrlSetting s
+    , paramDialogEnableThinkingValue = paramEnableThinking
     , paramTemperatureEditor = editor ParamTemperatureEditor (Just 1) tempText
     , paramTopPEditor = editor ParamTopPEditor (Just 1) topPText
     , paramMaxCompletionTokensEditor = editor ParamMaxCompletionTokensEditor (Just 1) maxTokensText
     , paramStopEditor = editor ParamStopEditor (Just 1) stopText
+    , paramExtraBodyEditor = editor ParamExtraBodyEditor (Just 4) extraBodyText
     , paramDialogError = Nothing
     })
 
@@ -390,25 +413,37 @@ submitParamDialog = do
       topPRaw = editorText (paramTopPEditor st)
       maxTokensRaw = editorText (paramMaxCompletionTokensEditor st)
       stopRaw = editorText (paramStopEditor st)
+      extraBodyRaw = editorTextRaw (paramExtraBodyEditor st)
+      enableThinkingValue = paramDialogEnableThinkingValue st
   case parseParamInputs tempRaw topPRaw maxTokensRaw stopRaw of
     Left err ->
       modify (\s -> s { paramDialogError = Just err })
     Right (tempVal, topPVal, maxTokensVal, stopVal) -> do
-      let params0 = chatParams st
-          params1 = params0
-            { paramTemperature = tempVal
-            , paramTopP = topPVal
-            , paramMaxCompletionTokens = maxTokensVal
-            , paramStop = stopVal
-            }
-      modify (\s -> s
-        { chatParams = params1
-        , betaUrlSetting = paramDialogBetaValue s
-        , paramDialogOpen = False
-        , paramDialogError = Nothing
-        , activeList = paramDialogReturnFocus s
-        , statusText = "Chat parameters updated."
-        })
+      case parseExtraBodyText extraBodyRaw of
+        Left err ->
+          modify (\s -> s { paramDialogError = Just err })
+        Right extraBodyVal ->
+          case lookupEnableThinking =<< extraBodyVal of
+            Just v | v /= enableThinkingValue ->
+              modify (\s -> s { paramDialogError = Just "enable-thinking 参数冲突：extra_body.enable_thinking 与复选框不一致" })
+            _ -> do
+              let params0 = chatParams st
+                  params1 = params0
+                    { paramTemperature = tempVal
+                    , paramTopP = topPVal
+                    , paramMaxCompletionTokens = maxTokensVal
+                    , paramStop = stopVal
+                    , paramExtraBody = extraBodyVal
+                    , paramEnableThinking = enableThinkingValue
+                    }
+              modify (\s -> s
+                { chatParams = params1
+                , betaUrlSetting = paramDialogBetaValue s
+                , paramDialogOpen = False
+                , paramDialogError = Nothing
+                , activeList = paramDialogReturnFocus s
+                , statusText = "Chat parameters updated."
+                })
 
 cancelParamDialog :: EventM Name AppState ()
 cancelParamDialog =
@@ -467,3 +502,8 @@ parseQuoted t
   | T.length t >= 2 && T.head t == '"' && T.last t == '"' =
       Right (T.dropEnd 1 (T.drop 1 t))
   | otherwise = Left "stop: expected quoted strings like \"foo\", \"bar\""
+
+renderExtraBodyText :: Maybe Aeson.Value -> Text
+renderExtraBodyText = \case
+  Nothing -> ""
+  Just val -> TE.decodeUtf8 (BL.toStrict (Aeson.encode val))

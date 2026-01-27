@@ -62,7 +62,9 @@ paneKind = \case
   VerboseContentEditor -> InputPane
   DebugRequestEditor -> InputPane
   ParamBetaUrlEditor -> InputPane
+  ParamEnableThinkingEditor -> InputPane
   ParamTemperatureEditor -> InputPane
   ParamTopPEditor -> InputPane
   ParamMaxCompletionTokensEditor -> InputPane
   ParamStopEditor -> InputPane
+  ParamExtraBodyEditor -> InputPane

@@ -30,7 +30,13 @@ import Oasis.Runner.PartialMode
 import Oasis.Runner.PrefixCompletion
 import Oasis.Runner.FIMCompletion
 import Oasis.Model (resolveModelId, resolveEmbeddingModelId, selectBaseUrl)
-import Oasis.Client.OpenAI.Param (parseChatParams)
+import Oasis.Client.OpenAI.Param
+  ( ChatParams(..)
+  , parseChatParams
+  , decodeExtraBodyValue
+  , extraBodyFromEnableThinking
+  , mergeExtraBodyList
+  )
 import Oasis.CLI.Render.Text
   ( renderSectionsText
   , requestSections
@@ -61,6 +67,7 @@ import qualified Data.List as L
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
 import Data.Aeson (eitherDecode)
+import qualified Data.Aeson as Aeson
 import GHC.IO.Encoding (setLocaleEncoding, utf8)
 
 main :: IO ()
@@ -93,7 +100,7 @@ main = do
                 Just (p, key) -> dispatchRunner alias p key modelOverride runnerName runnerArgs
     _ -> do
       putTextLn "Usage: oasis-cli <provider> <model|default|-> <runner> [runner args...]"
-      putTextLn "Common options: [--beta] [--extra-args <json>]"
+      putTextLn "Common options: [--beta] [--extra-args <json>] [--extra-body <json>] [--enable-thinking]"
       putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling, embeddings, hooks, responses, partial-mode, prefix-completion, fim-completion"
       putTextLn ""
       putTextLn "Runner specific args:"
@@ -166,6 +173,34 @@ extractBetaFlag = go False []
         | x == "--beta" -> go True acc xs
         | otherwise -> go found (x:acc) xs
 
+extractExtraBodyArgs :: [String] -> Either Text (Maybe Aeson.Value, [String])
+extractExtraBodyArgs = go [] []
+  where
+    enableThinkingValue = maybe [] pure (extraBodyFromEnableThinking True)
+    go extras acc = \case
+      [] -> Right (mergeExtraBodyList extras, reverse acc)
+      (x:xs)
+        | x == "--enable-thinking" -> go (extras <> enableThinkingValue) acc xs
+        | x == "--extra-body" ->
+            case xs of
+              [] -> Left "Missing value for --extra-body"
+              (v:rest) ->
+                case decodeExtraBodyValue (toText v) of
+                  Left err -> Left err
+                  Right val -> go (extras <> [val]) acc rest
+        | "--extra-body=" `L.isPrefixOf` x ->
+            let prefix = "--extra-body=" :: String
+                v = drop (length prefix) x
+            in case decodeExtraBodyValue (toText v) of
+              Left err -> Left err
+              Right val -> go (extras <> [val]) acc xs
+        | otherwise -> go extras (x:acc) xs
+
+applyExtraBodyToParams :: Maybe Aeson.Value -> ChatParams -> ChatParams
+applyExtraBodyToParams extra params =
+  let merged = mergeExtraBodyList (catMaybes [paramExtraBody params, extra])
+  in params { paramExtraBody = merged }
+
 dispatchRunner :: Text -> Provider -> Text -> Maybe Text -> Text -> [String] -> IO ()
 dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
   let (useBeta, runnerArgs') = extractBetaFlag runnerArgs
@@ -183,49 +218,34 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
           putTextLn err
           exitFailure
         Right (extraArgsText, restArgs) -> do
-          params <- case parseChatParams extraArgsText of
+          params0 <- case parseChatParams extraArgsText of
             Left err -> do
               putTextLn err
               exitFailure
             Right p -> pure p
-          case extractRawArgs restArgs of
+          case extractExtraBodyArgs restArgs of
             Left err -> do
               putTextLn err
               exitFailure
-            Right (rawText, restArgs2) -> do
-              case rawText of
-                Just rawJson -> do
-                  unless (null restArgs2) $ do
-                    putTextLn "Basic runner with --raw does not accept positional prompt."
-                    exitFailure
-                  messages <- case eitherDecode (BL.fromStrict (TE.encodeUtf8 rawJson)) of
-                    Left err -> do
-                      putTextLn $ "Invalid --raw JSON: " <> toText err
-                      exitFailure
-                    Right msgs -> pure msgs
-                  putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-                  result <- runBasicRaw provider apiKey modelOverride params messages useBeta
-                  case result of
-                    Left err -> do
-                      putTextLn $ "Request failed: " <> err
-                      exitFailure
-                    Right result -> do
-                      let baseUrl = selectBaseUrl provider useBeta
-                          ctx = Output.RequestContext (buildChatUrl baseUrl) (requestJson result)
-                          assistantSection = case response result >>= extractAssistantContent of
-                            Nothing -> []
-                            Just content -> [textSection SectionAssistant "Assistant" content]
-                          sections = requestSections ctx <> responseSections result <> assistantSection
-                      putTextLn (renderSectionsText sections)
-                Nothing -> do
-                  let prompt = T.unwords (map toText restArgs2)
-                  if T.null (T.strip prompt)
-                    then do
-                      putTextLn "Basic runner requires a prompt."
-                      exitFailure
-                    else do
+            Right (extraBody, restArgs1) -> do
+              let params = applyExtraBodyToParams extraBody params0
+              case extractRawArgs restArgs1 of
+                Left err -> do
+                  putTextLn err
+                  exitFailure
+                Right (rawText, restArgs2) -> do
+                  case rawText of
+                    Just rawJson -> do
+                      unless (null restArgs2) $ do
+                        putTextLn "Basic runner with --raw does not accept positional prompt."
+                        exitFailure
+                      messages <- case eitherDecode (BL.fromStrict (TE.encodeUtf8 rawJson)) of
+                        Left err -> do
+                          putTextLn $ "Invalid --raw JSON: " <> toText err
+                          exitFailure
+                        Right msgs -> pure msgs
                       putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-                      result <- runBasic provider apiKey modelOverride params prompt useBeta
+                      result <- runBasicRaw provider apiKey modelOverride params messages useBeta
                       case result of
                         Left err -> do
                           putTextLn $ "Request failed: " <> err
@@ -238,28 +258,55 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                                 Just content -> [textSection SectionAssistant "Assistant" content]
                               sections = requestSections ctx <> responseSections result <> assistantSection
                           putTextLn (renderSectionsText sections)
+                    Nothing -> do
+                      let prompt = T.unwords (map toText restArgs2)
+                      if T.null (T.strip prompt)
+                        then do
+                          putTextLn "Basic runner requires a prompt."
+                          exitFailure
+                        else do
+                          putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+                          result <- runBasic provider apiKey modelOverride params prompt useBeta
+                          case result of
+                            Left err -> do
+                              putTextLn $ "Request failed: " <> err
+                              exitFailure
+                            Right result -> do
+                              let baseUrl = selectBaseUrl provider useBeta
+                                  ctx = Output.RequestContext (buildChatUrl baseUrl) (requestJson result)
+                                  assistantSection = case response result >>= extractAssistantContent of
+                                    Nothing -> []
+                                    Just content -> [textSection SectionAssistant "Assistant" content]
+                                  sections = requestSections ctx <> responseSections result <> assistantSection
+                              putTextLn (renderSectionsText sections)
     "chat" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
         Right (extraArgsText, restArgs) -> do
-          params <- case parseChatParams extraArgsText of
+          params0 <- case parseChatParams extraArgsText of
             Left err -> do
               putTextLn err
               exitFailure
             Right p -> pure p
-          let (flags, rest) = L.partition (L.isPrefixOf "--") restArgs
-              useStream = "--no-stream" `notElem` flags
-              showThinking = "--hide-thinking" `notElem` flags
-              initialPrompt = if null rest then Nothing else Just (T.unwords (map toText rest))
-          putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          result <- runChatInteractive provider apiKey modelOverride params useStream showThinking useBeta initialPrompt
-          case result of
+          case extractExtraBodyArgs restArgs of
             Left err -> do
-              putTextLn $ "Request failed: " <> err
+              putTextLn err
               exitFailure
-            Right _ -> pure ()
+            Right (extraBody, restArgs1) -> do
+              let params = applyExtraBodyToParams extraBody params0
+                  (flags, rest) = L.partition (L.isPrefixOf "--") restArgs1
+                  useStream = "--no-stream" `notElem` flags
+                  showThinking = "--hide-thinking" `notElem` flags
+                  initialPrompt = if null rest then Nothing else Just (T.unwords (map toText rest))
+              putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+              result <- runChatInteractive provider apiKey modelOverride params useStream showThinking useBeta initialPrompt
+              case result of
+                Left err -> do
+                  putTextLn $ "Request failed: " <> err
+                  exitFailure
+                Right _ -> pure ()
     "models" -> do
       putTextLn $ "Loading config for alias: " <> alias
       putTextLn "--- Resolved Provider ---"
@@ -283,108 +330,126 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
           putTextLn err
           exitFailure
         Right (extraArgsText, restArgs) -> do
-          unless (null restArgs) $ do
-            putTextLn "Structured runner does not accept positional args."
-            exitFailure
-          params <- case parseChatParams extraArgsText of
+          params0 <- case parseChatParams extraArgsText of
             Left err -> do
               putTextLn err
               exitFailure
             Right p -> pure p
-          putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          let messages = structuredMessages
-              responseFormat = jsonObjectFormat
-          result <- runStructuredOutputDetailed provider apiKey modelOverride params messages responseFormat useBeta
-          case result of
+          case extractExtraBodyArgs restArgs of
             Left err -> do
-              putTextLn $ "Request failed: " <> err
+              putTextLn err
               exitFailure
-            Right structured -> do
-              let rawSection = textSection SectionResponse "Raw Stream" (rawText structured)
-                  parsedSection = case parsedJson structured of
-                    Left perr -> textSection SectionError "Parsed JSON" ("Invalid JSON: " <> perr)
-                    Right pretty -> jsonSection SectionResponse "Parsed JSON" pretty
-              putTextLn (renderSectionsText [rawSection, parsedSection])
+            Right (extraBody, restArgs1) -> do
+              unless (null restArgs1) $ do
+                putTextLn "Structured runner does not accept positional args."
+                exitFailure
+              let params = applyExtraBodyToParams extraBody params0
+              putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+              let messages = structuredMessages
+                  responseFormat = jsonObjectFormat
+              result <- runStructuredOutputDetailed provider apiKey modelOverride params messages responseFormat useBeta
+              case result of
+                Left err -> do
+                  putTextLn $ "Request failed: " <> err
+                  exitFailure
+                Right structured -> do
+                  let rawSection = textSection SectionResponse "Raw Stream" (rawText structured)
+                      parsedSection = case parsedJson structured of
+                        Left perr -> textSection SectionError "Parsed JSON" ("Invalid JSON: " <> perr)
+                        Right pretty -> jsonSection SectionResponse "Parsed JSON" pretty
+                  putTextLn (renderSectionsText [rawSection, parsedSection])
     "structured-schema" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
         Right (extraArgsText, restArgs) -> do
-          unless (null restArgs) $ do
-            putTextLn "Structured runner does not accept positional args."
-            exitFailure
-          params <- case parseChatParams extraArgsText of
+          params0 <- case parseChatParams extraArgsText of
             Left err -> do
               putTextLn err
               exitFailure
             Right p -> pure p
-          putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          let messages = structuredMessages
-              responseFormat = jsonSchemaFormat
-          result <- runStructuredOutputDetailed provider apiKey modelOverride params messages responseFormat useBeta
-          case result of
+          case extractExtraBodyArgs restArgs of
             Left err -> do
-              putTextLn $ "Request failed: " <> err
+              putTextLn err
               exitFailure
-            Right structured -> do
-              let rawSection = textSection SectionResponse "Raw Stream" (rawText structured)
-                  parsedSection = case parsedJson structured of
-                    Left perr -> textSection SectionError "Parsed JSON" ("Invalid JSON: " <> perr)
-                    Right pretty -> jsonSection SectionResponse "Parsed JSON" pretty
-              putTextLn (renderSectionsText [rawSection, parsedSection])
+            Right (extraBody, restArgs1) -> do
+              unless (null restArgs1) $ do
+                putTextLn "Structured runner does not accept positional args."
+                exitFailure
+              let params = applyExtraBodyToParams extraBody params0
+              putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+              let messages = structuredMessages
+                  responseFormat = jsonSchemaFormat
+              result <- runStructuredOutputDetailed provider apiKey modelOverride params messages responseFormat useBeta
+              case result of
+                Left err -> do
+                  putTextLn $ "Request failed: " <> err
+                  exitFailure
+                Right structured -> do
+                  let rawSection = textSection SectionResponse "Raw Stream" (rawText structured)
+                      parsedSection = case parsedJson structured of
+                        Left perr -> textSection SectionError "Parsed JSON" ("Invalid JSON: " <> perr)
+                        Right pretty -> jsonSection SectionResponse "Parsed JSON" pretty
+                  putTextLn (renderSectionsText [rawSection, parsedSection])
     "tool-calling" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
         Right (extraArgsText, restArgs) -> do
-          unless (null restArgs) $ do
-            putTextLn "Tool calling runner does not accept positional args."
-            exitFailure
-          params <- case parseChatParams extraArgsText of
+          params0 <- case parseChatParams extraArgsText of
             Left err -> do
               putTextLn err
               exitFailure
             Right p -> pure p
-          putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          let input = ToolCallingInput
-                { toolMessages = toolCallingMessages
-                , toolDefs = toolCallingTools
-                , toolParallelCalls = Just True
-                }
-          result <- runToolCallingDetailed provider apiKey modelOverride params input executeDemoToolCall useBeta
-          case result of
+          case extractExtraBodyArgs restArgs of
             Left err -> do
-              let sections =
-                    [ textSection SectionResponse "First Response" ("Error: " <> err)
-                    , textSection SectionToolResult "Tool Result" "Skipped due to request error."
-                    , textSection SectionAssistant "Final Assistant" "Skipped due to request error."
-                    ]
-              putTextLn (renderSectionsText sections)
-            Right outcome -> do
-              let sections = case outcome of
-                    ToolCallingNoToolCall content ->
-                      [ textSection SectionResponse "First Response" content
-                      , textSection SectionToolResult "Tool Result" "No tool call returned."
-                      , textSection SectionAssistant "Final Assistant" "Skipped because no tool call was returned."
-                      ]
-                    ToolCallingToolError toolCallJson terr ->
-                      [ jsonSection SectionResponse "First Response (Tool Call)" toolCallJson
-                      , textSection SectionToolResult "Tool Result" ("Error: " <> terr)
-                      , textSection SectionAssistant "Final Assistant" "Skipped due to tool error."
-                      ]
-                    ToolCallingSecondError toolCallJson toolResult err ->
-                      [ jsonSection SectionResponse "First Response (Tool Call)" toolCallJson
-                      , textSection SectionToolResult "Tool Result" toolResult
-                      , textSection SectionAssistant "Final Assistant" ("Error: " <> err)
-                      ]
-                    ToolCallingSuccess toolCallJson toolResult finalText ->
-                      [ jsonSection SectionResponse "First Response (Tool Call)" toolCallJson
-                      , textSection SectionToolResult "Tool Result" toolResult
-                      , textSection SectionAssistant "Final Assistant" finalText
-                      ]
-              putTextLn (renderSectionsText sections)
+              putTextLn err
+              exitFailure
+            Right (extraBody, restArgs1) -> do
+              unless (null restArgs1) $ do
+                putTextLn "Tool calling runner does not accept positional args."
+                exitFailure
+              let params = applyExtraBodyToParams extraBody params0
+              putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+              let input = ToolCallingInput
+                    { toolMessages = toolCallingMessages
+                    , toolDefs = toolCallingTools
+                    , toolParallelCalls = Just True
+                    }
+              result <- runToolCallingDetailed provider apiKey modelOverride params input executeDemoToolCall useBeta
+              case result of
+                Left err -> do
+                  let sections =
+                        [ textSection SectionResponse "First Response" ("Error: " <> err)
+                        , textSection SectionToolResult "Tool Result" "Skipped due to request error."
+                        , textSection SectionAssistant "Final Assistant" "Skipped due to request error."
+                        ]
+                  putTextLn (renderSectionsText sections)
+                Right outcome -> do
+                  let sections = case outcome of
+                        ToolCallingNoToolCall content ->
+                          [ textSection SectionResponse "First Response" content
+                          , textSection SectionToolResult "Tool Result" "No tool call returned."
+                          , textSection SectionAssistant "Final Assistant" "Skipped because no tool call was returned."
+                          ]
+                        ToolCallingToolError toolCallJson terr ->
+                          [ jsonSection SectionResponse "First Response (Tool Call)" toolCallJson
+                          , textSection SectionToolResult "Tool Result" ("Error: " <> terr)
+                          , textSection SectionAssistant "Final Assistant" "Skipped due to tool error."
+                          ]
+                        ToolCallingSecondError toolCallJson toolResult err ->
+                          [ jsonSection SectionResponse "First Response (Tool Call)" toolCallJson
+                          , textSection SectionToolResult "Tool Result" toolResult
+                          , textSection SectionAssistant "Final Assistant" ("Error: " <> err)
+                          ]
+                        ToolCallingSuccess toolCallJson toolResult finalText ->
+                          [ jsonSection SectionResponse "First Response (Tool Call)" toolCallJson
+                          , textSection SectionToolResult "Tool Result" toolResult
+                          , textSection SectionAssistant "Final Assistant" finalText
+                          ]
+                  putTextLn (renderSectionsText sections)
     "embeddings" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
@@ -432,32 +497,38 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
           putTextLn err
           exitFailure
         Right (extraArgsText, restArgs) -> do
-          params <- case parseChatParams extraArgsText of
+          params0 <- case parseChatParams extraArgsText of
             Left err -> do
               putTextLn err
               exitFailure
             Right p -> pure p
-          let prompt = T.unwords (map toText restArgs)
-          if T.null (T.strip prompt)
-            then do
-              putTextLn "Hooks runner requires a prompt."
+          case extractExtraBodyArgs restArgs of
+            Left err -> do
+              putTextLn err
               exitFailure
-            else do
-              putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-              result <- runHooksDetailed provider apiKey modelOverride params prompt useBeta
-              case result of
-                Left err -> do
-                  putTextLn $ "Request failed: " <> err
+            Right (extraBody, restArgs1) -> do
+              let params = applyExtraBodyToParams extraBody params0
+                  prompt = T.unwords (map toText restArgs1)
+              if T.null (T.strip prompt)
+                then do
+                  putTextLn "Hooks runner requires a prompt."
                   exitFailure
-                Right HooksResult{hookLogText, responseJsonText, requestJsonText} -> do
-                  let baseUrl = selectBaseUrl provider useBeta
-                      ctx = Output.RequestContext (buildChatUrl baseUrl) requestJsonText
-                      sections =
-                        requestSections ctx
-                        <> [ textSection SectionLog "Hook Log" hookLogText
-                           , textSection SectionResponse "Response JSON (truncated)" responseJsonText
-                           ]
-                  putTextLn (renderSectionsText sections)
+                else do
+                  putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+                  result <- runHooksDetailed provider apiKey modelOverride params prompt useBeta
+                  case result of
+                    Left err -> do
+                      putTextLn $ "Request failed: " <> err
+                      exitFailure
+                    Right HooksResult{hookLogText, responseJsonText, requestJsonText} -> do
+                      let baseUrl = selectBaseUrl provider useBeta
+                          ctx = Output.RequestContext (buildChatUrl baseUrl) requestJsonText
+                          sections =
+                            requestSections ctx
+                            <> [ textSection SectionLog "Hook Log" hookLogText
+                               , textSection SectionResponse "Response JSON (truncated)" responseJsonText
+                               ]
+                      putTextLn (renderSectionsText sections)
     "responses" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
@@ -494,53 +565,71 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
         Left err -> do
           putTextLn err
           exitFailure
-        Right (extraArgsText, _) -> do
-          params <- case parseChatParams extraArgsText of
+        Right (extraArgsText, restArgs) -> do
+          params0 <- case parseChatParams extraArgsText of
             Left err -> do
               putTextLn err
               exitFailure
             Right p -> pure p
-          putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          let messages = partialModeMessages
-          result <- runPartialModeDetailed provider apiKey modelOverride params messages useBeta
-          case result of
+          case extractExtraBodyArgs restArgs of
             Left err -> do
-              putTextLn $ "Request failed: " <> err
+              putTextLn err
               exitFailure
-            Right result -> do
-              let baseUrl = selectBaseUrl provider useBeta
-                  ctx = Output.RequestContext (buildChatUrl baseUrl) (requestJson result)
-                  assistantSection = case response result >>= extractAssistantContent of
-                    Nothing -> []
-                    Just content -> [textSection SectionAssistant "Assistant" content]
-                  sections = requestSections ctx <> responseSections result <> assistantSection
-              putTextLn (renderSectionsText sections)
+            Right (extraBody, restArgs1) -> do
+              unless (null restArgs1) $ do
+                putTextLn "Partial mode runner does not accept positional args."
+                exitFailure
+              let params = applyExtraBodyToParams extraBody params0
+              putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+              let messages = partialModeMessages
+              result <- runPartialModeDetailed provider apiKey modelOverride params messages useBeta
+              case result of
+                Left err -> do
+                  putTextLn $ "Request failed: " <> err
+                  exitFailure
+                Right result -> do
+                  let baseUrl = selectBaseUrl provider useBeta
+                      ctx = Output.RequestContext (buildChatUrl baseUrl) (requestJson result)
+                      assistantSection = case response result >>= extractAssistantContent of
+                        Nothing -> []
+                        Just content -> [textSection SectionAssistant "Assistant" content]
+                      sections = requestSections ctx <> responseSections result <> assistantSection
+                  putTextLn (renderSectionsText sections)
     "prefix-completion" -> do
       case extractExtraArgs runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
-        Right (extraArgsText, _) -> do
-          params <- case parseChatParams extraArgsText of
+        Right (extraArgsText, restArgs) -> do
+          params0 <- case parseChatParams extraArgsText of
             Left err -> do
               putTextLn err
               exitFailure
             Right p -> pure p
-          putTextLn $ "Using model: " <> resolveModelId provider modelOverride
-          let messages = prefixCompletionMessages
-          result <- runPrefixCompletionDetailed provider apiKey modelOverride params messages useBeta
-          case result of
+          case extractExtraBodyArgs restArgs of
             Left err -> do
-              putTextLn $ "Request failed: " <> err
+              putTextLn err
               exitFailure
-            Right result -> do
-              let baseUrl = selectBaseUrl provider useBeta
-                  ctx = Output.RequestContext (buildChatUrl baseUrl) (requestJson result)
-                  assistantSection = case response result >>= extractAssistantContent of
-                    Nothing -> []
-                    Just content -> [textSection SectionAssistant "Assistant" content]
-                  sections = requestSections ctx <> responseSections result <> assistantSection
-              putTextLn (renderSectionsText sections)
+            Right (extraBody, restArgs1) -> do
+              unless (null restArgs1) $ do
+                putTextLn "Prefix completion runner does not accept positional args."
+                exitFailure
+              let params = applyExtraBodyToParams extraBody params0
+              putTextLn $ "Using model: " <> resolveModelId provider modelOverride
+              let messages = prefixCompletionMessages
+              result <- runPrefixCompletionDetailed provider apiKey modelOverride params messages useBeta
+              case result of
+                Left err -> do
+                  putTextLn $ "Request failed: " <> err
+                  exitFailure
+                Right result -> do
+                  let baseUrl = selectBaseUrl provider useBeta
+                      ctx = Output.RequestContext (buildChatUrl baseUrl) (requestJson result)
+                      assistantSection = case response result >>= extractAssistantContent of
+                        Nothing -> []
+                        Just content -> [textSection SectionAssistant "Assistant" content]
+                      sections = requestSections ctx <> responseSections result <> assistantSection
+                  putTextLn (renderSectionsText sections)
     "fim-completion" -> do
       putTextLn $ "Using model: " <> resolveModelId provider modelOverride
       result <- runFIMCompletionDetailed provider apiKey modelOverride fimCompletionRequest useBeta

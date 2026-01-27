@@ -33,6 +33,9 @@ module Oasis.Client.OpenAI.Types
 import Relude
 import Oasis.Types
 import Data.Aeson
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Char8 as BS8
@@ -58,10 +61,18 @@ data ChatCompletionRequest = ChatCompletionRequest
   , tools       :: Maybe [Tool]
   , tool_choice :: Maybe Value
   , parallel_tool_calls :: Maybe Bool
+  , extra_body  :: Maybe Aeson.Value
   } deriving (Show, Eq, Generic)
 
 instance ToJSON ChatCompletionRequest where
-  toJSON = genericToJSON defaultOptions { omitNothingFields = True }
+  toJSON req =
+    let baseObj = case genericToJSON defaultOptions { omitNothingFields = True } req of
+          Object obj -> KeyMap.delete (Key.fromText "extra_body") obj
+          _ -> KeyMap.empty
+        mergedObj = case extra_body req of
+          Just (Object objExtra) -> KeyMap.union baseObj objExtra
+          _ -> baseObj
+    in Object mergedObj
 
 instance FromJSON ChatCompletionRequest where
   parseJSON = genericParseJSON defaultOptions
@@ -88,6 +99,7 @@ defaultChatRequest modelId msgs =
     , tools = Nothing
     , tool_choice = Nothing
     , parallel_tool_calls = Nothing
+    , extra_body = Nothing
     }
 
 setChatStream :: Bool -> ChatCompletionRequest -> ChatCompletionRequest
