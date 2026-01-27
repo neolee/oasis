@@ -1,7 +1,10 @@
 module Oasis.Runner.PrefixCompletion
   ( PrefixCompletionResult
+  , buildPrefixCompletionRequest
   , runPrefixCompletion
   , runPrefixCompletionDetailed
+  , runPrefixCompletionRequest
+  , runPrefixCompletionRequestWithHooks
   ) where
 
 import Relude
@@ -19,7 +22,12 @@ runPrefixCompletion = runPrefixCompletionDetailed
 runPrefixCompletionDetailed :: Provider -> Text -> Maybe Text -> ChatParams -> [Message] -> Bool -> IO (Either Text PrefixCompletionResult)
 runPrefixCompletionDetailed provider apiKey modelOverride params messages useBeta = do
   let modelId = resolveModelId provider modelOverride
-      reqBase = ChatCompletionRequest
+      reqBody = buildPrefixCompletionRequest modelId params messages
+  runPrefixCompletionRequestWithHooks emptyClientHooks provider apiKey reqBody useBeta
+
+buildPrefixCompletionRequest :: Text -> ChatParams -> [Message] -> ChatCompletionRequest
+buildPrefixCompletionRequest modelId params messages =
+  let reqBase = ChatCompletionRequest
         { model = modelId
         , messages = messages
         , temperature = Nothing
@@ -40,7 +48,13 @@ runPrefixCompletionDetailed provider apiKey modelOverride params messages useBet
         , tool_choice = Nothing
         , parallel_tool_calls = Nothing
         }
-      reqBody = applyChatParams params reqBase
-      reqJsonText = encodeRequestJson reqBody
-  result <- sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody useBeta
+  in applyChatParams params reqBase
+
+runPrefixCompletionRequest :: Provider -> Text -> ChatCompletionRequest -> Bool -> IO (Either Text PrefixCompletionResult)
+runPrefixCompletionRequest = runPrefixCompletionRequestWithHooks emptyClientHooks
+
+runPrefixCompletionRequestWithHooks :: ClientHooks -> Provider -> Text -> ChatCompletionRequest -> Bool -> IO (Either Text PrefixCompletionResult)
+runPrefixCompletionRequestWithHooks hooks provider apiKey reqBody useBeta = do
+  let reqJsonText = encodeRequestJson reqBody
+  result <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody useBeta
   pure (buildRequestResponse reqJsonText result)

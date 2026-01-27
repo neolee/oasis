@@ -3,7 +3,9 @@ module Oasis.Runner.Responses
   , ResponsesParams(..)
   , emptyResponsesParams
   , parseResponsesParams
+  , buildResponsesRequest
   , runResponses
+  , runResponsesRequest
   ) where
 
 import Relude
@@ -57,16 +59,24 @@ parseResponsesParams = parseExtraArgs "Responses" emptyResponsesParams
 runResponses :: Provider -> Text -> Maybe Text -> ResponsesParams -> Text -> Bool -> IO (Either Text ResponsesResult)
 runResponses provider apiKey modelOverride params inputText useBeta = do
   let modelId = resolveModelId provider modelOverride
-      reqBody = ResponsesRequest
-        { model = modelId
-        , input = Aeson.String inputText
-        , stream = Nothing
-        , max_output_tokens = paramMaxOutputTokens params
-        , temperature = paramTemperature params
-        , top_p = paramTopP params
-        , user = paramUser params
-        , response_format = paramResponseFormat params
-        }
-      reqJsonText = encodeRequestJson reqBody
+      reqBody = buildResponsesRequest modelId params inputText
+  runResponsesRequest provider apiKey reqBody useBeta
+
+buildResponsesRequest :: Text -> ResponsesParams -> Text -> ResponsesRequest
+buildResponsesRequest modelId params inputText =
+  ResponsesRequest
+    { model = modelId
+    , input = Aeson.String inputText
+    , stream = Nothing
+    , max_output_tokens = paramMaxOutputTokens params
+    , temperature = paramTemperature params
+    , top_p = paramTopP params
+    , user = paramUser params
+    , response_format = paramResponseFormat params
+    }
+
+runResponsesRequest :: Provider -> Text -> ResponsesRequest -> Bool -> IO (Either Text ResponsesResult)
+runResponsesRequest provider apiKey reqBody useBeta = do
+  let reqJsonText = encodeRequestJson reqBody
   resp <- sendResponsesRaw provider apiKey reqBody useBeta
   pure (buildRequestResponse reqJsonText resp)

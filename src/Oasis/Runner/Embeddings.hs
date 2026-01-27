@@ -3,7 +3,9 @@ module Oasis.Runner.Embeddings
   , EmbeddingParams(..)
   , emptyEmbeddingParams
   , parseEmbeddingParams
+  , buildEmbeddingsRequest
   , runEmbeddings
+  , runEmbeddingsRequest
   ) where
 
 import Relude
@@ -51,13 +53,21 @@ parseEmbeddingParams = parseExtraArgs "Embeddings" emptyEmbeddingParams
 runEmbeddings :: Provider -> Text -> Maybe Text -> EmbeddingParams -> Text -> Bool -> IO (Either Text EmbeddingResult)
 runEmbeddings provider apiKey modelOverride params inputText useBeta = do
   let modelId = resolveEmbeddingModelId provider modelOverride
-      reqBody = EmbeddingRequest
-        { model = modelId
-        , input = Aeson.String inputText
-        , encoding_format = paramEncodingFormat params
-        , dimensions = paramDimensions params
-        , user = paramUser params
-        }
-      reqJsonText = encodeRequestJson reqBody
+      reqBody = buildEmbeddingsRequest modelId params inputText
+  runEmbeddingsRequest provider apiKey reqBody useBeta
+
+buildEmbeddingsRequest :: Text -> EmbeddingParams -> Text -> EmbeddingRequest
+buildEmbeddingsRequest modelId params inputText =
+  EmbeddingRequest
+    { model = modelId
+    , input = Aeson.String inputText
+    , encoding_format = paramEncodingFormat params
+    , dimensions = paramDimensions params
+    , user = paramUser params
+    }
+
+runEmbeddingsRequest :: Provider -> Text -> EmbeddingRequest -> Bool -> IO (Either Text EmbeddingResult)
+runEmbeddingsRequest provider apiKey reqBody useBeta = do
+  let reqJsonText = encodeRequestJson reqBody
   resp <- sendEmbeddingsRaw provider apiKey reqBody useBeta
   pure (buildRequestResponse reqJsonText resp)

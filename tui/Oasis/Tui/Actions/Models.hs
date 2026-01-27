@@ -11,7 +11,6 @@ import Brick.Types (EventM)
 import qualified Data.List as List
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
-import qualified Data.Aeson as Aeson
 import Oasis.Client.OpenAI
   ( ResponsesRequest(..)
   , ResponsesResponse(..)
@@ -21,8 +20,6 @@ import Oasis.Client.OpenAI
   , buildResponsesUrl
   , buildModelsUrl
   , buildEmbeddingsUrl
-  , sendResponsesRaw
-  , sendEmbeddingsRaw
   )
 import Oasis.Model (resolveModelId, resolveEmbeddingModelId)
 import Oasis.Runner.GetModels (runGetModels)
@@ -58,7 +55,7 @@ runResponsesAction inputText =
         providerName = fromMaybe "-" (selectedProvider st)
         useBeta = betaUrlSetting st
         modelId = resolveModelId provider modelOverride
-        reqBody = buildResponsesRequest modelId params inputText
+        reqBody = Responses.buildResponsesRequest modelId params inputText
         reqJson = encodeJsonText reqBody
         baseUrl = selectBaseUrl provider useBeta
         info = buildDebugInfo providerName modelId (buildResponsesUrl baseUrl) (jsonRequestHeaders apiKey)
@@ -68,17 +65,17 @@ runResponsesAction inputText =
             then Left "responses runner requires stream=false"
             else Right $ do
               let reqCtx = buildRequestContext (buildResponsesUrl baseUrl) reqBody'
-              result <- sendResponsesRaw provider apiKey reqBody' useBeta
+              result <- Responses.runResponsesRequest provider apiKey reqBody' useBeta
               let (statusMsg, outputMsg) =
-                    case parseRawResponseStrict result of
+                    case result of
                       Left err ->
                         ("Responses runner failed.", renderErrorOutput reqCtx err)
-                      Right (raw, response) ->
-                        let assistantContent = extractResponsesAssistantContent response
+                      Right RequestResponse{responseJson, response} ->
+                        let assistantContent = response >>= extractResponsesAssistantContent
                             output = mdConcat
                               ( requestSections reqCtx
                                 <> catMaybes
-                                    [ Just (mdJsonSection "Response" raw)
+                                    [ Just (mdJsonSection "Response" responseJson)
                                     , fmap (mdTextSection "Assistant") assistantContent
                                     ]
                               )
@@ -117,7 +114,7 @@ runEmbeddingsAction inputText =
         providerName = fromMaybe "-" (selectedProvider st)
         useBeta = betaUrlSetting st
         modelId = resolveEmbeddingModelId provider modelOverride
-        reqBody = buildEmbeddingsRequest modelId params inputText
+        reqBody = Embeddings.buildEmbeddingsRequest modelId params inputText
         reqJson = encodeJsonText reqBody
         baseUrl = selectBaseUrl provider useBeta
         info = buildDebugInfo providerName modelId (buildEmbeddingsUrl baseUrl) (jsonRequestHeaders apiKey)
@@ -125,9 +122,9 @@ runEmbeddingsAction inputText =
           reqBody' <- (decodeJsonText bodyText :: Either Text EmbeddingRequest)
           Right $ do
             let reqCtx = buildRequestContext (buildEmbeddingsUrl baseUrl) reqBody'
-            result <- sendEmbeddingsRaw provider apiKey reqBody' useBeta
+            result <- Embeddings.runEmbeddingsRequest provider apiKey reqBody' useBeta
             let (statusMsg, outputMsg) =
-                  case parseRawResponseStrict result of
+                  case result of
                     Left err ->
                       let output = mdConcat
                             ( requestSections reqCtx
@@ -136,41 +133,18 @@ runEmbeddingsAction inputText =
                                  ]
                             )
                       in ("Embeddings runner failed.", output)
-                    Right (raw, response) ->
-                      let summaryText = embeddingSummary response
+                    Right RequestResponse{responseJson, response} ->
+                      let summaryText = maybe "No embeddings returned." embeddingSummary response
                           output = mdConcat
                             ( requestSections reqCtx
                               <> [ mdTextSection "Actual Model" modelId ]
-                              <> [ mdJsonSection "Response" raw
+                              <> [ mdJsonSection "Response" responseJson
                                  , mdTextSection "Summary" summaryText
                                  ]
                             )
                       in ("Embeddings runner completed.", output)
             pure (EmbeddingsCompleted statusMsg outputMsg)
     pure (info, reqJson, handler)
-
-buildResponsesRequest :: Text -> Responses.ResponsesParams -> Text -> ResponsesRequest
-buildResponsesRequest modelId params inputText =
-  ResponsesRequest
-    { model = modelId
-    , input = Aeson.String inputText
-    , stream = Nothing
-    , max_output_tokens = Responses.paramMaxOutputTokens params
-    , temperature = Responses.paramTemperature params
-    , top_p = Responses.paramTopP params
-    , user = Responses.paramUser params
-    , response_format = Responses.paramResponseFormat params
-    }
-
-buildEmbeddingsRequest :: Text -> Embeddings.EmbeddingParams -> Text -> EmbeddingRequest
-buildEmbeddingsRequest modelId params inputText =
-  EmbeddingRequest
-    { model = modelId
-    , input = Aeson.String inputText
-    , encoding_format = Embeddings.paramEncodingFormat params
-    , dimensions = Embeddings.paramDimensions params
-    , user = Embeddings.paramUser params
-    }
 
 embeddingSummary :: EmbeddingResponse -> Text
 embeddingSummary EmbeddingResponse{data_} =

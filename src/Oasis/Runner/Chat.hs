@@ -1,12 +1,16 @@
 module Oasis.Runner.Chat
   ( ChatStreamEvent(..)
   , ChatResult(..)
+  , buildChatRequest
   , runChatOnce
   , streamChatOnce
+  , streamChatWithRequest
+  , normalizeChatMessages
   ) where
 
 import Relude
 import Oasis.Types
+import Oasis.Types (messageContentText)
 import Oasis.Client.OpenAI
 import Oasis.Client.OpenAI.Types (setChatStream)
 import Oasis.Model (resolveModelId)
@@ -30,8 +34,7 @@ data ChatResult = ChatResult
 runChatOnce :: Provider -> Text -> Maybe Text -> ChatParams -> [Message] -> Bool -> IO (Either Text ChatResult)
 runChatOnce provider apiKey modelOverride params messages useBeta = do
   let modelId = resolveModelId provider modelOverride
-      reqBase = defaultChatRequest modelId messages
-      reqBody = applyChatParams params reqBase
+      reqBody = buildChatRequest modelId params messages
   raw <- sendChatCompletionRawWithHooks emptyClientHooks provider apiKey reqBody useBeta
   case parseRawResponseStrict raw of
     Left err -> pure (Left err)
@@ -54,17 +57,8 @@ streamChatOnce
   -> IO (Either Text ChatResult)
 streamChatOnce provider apiKey modelOverride params messages onEvent useBeta = do
   let modelId = resolveModelId provider modelOverride
-      reqBase = defaultChatRequest modelId messages
-      reqBaseStream = setChatStream True reqBase
-      reqBody = applyChatParams params reqBaseStream
-      initState = StreamState InAnswer "" ""
-  stateRef <- newIORef initState
-  result <- streamChatCompletionWithRequestWithHooks emptyClientHooks provider apiKey reqBody (handleChunk stateRef onEvent) useBeta
-  case result of
-    Left err -> pure (Left (renderClientError err))
-    Right _ -> do
-      StreamState{streamThinking, streamAnswer} <- readIORef stateRef
-      pure (Right (ChatResult streamThinking streamAnswer))
+      reqBase = setChatStream True (buildChatRequest modelId params messages)
+  streamChatWithRequest provider apiKey reqBase onEvent useBeta
 
 handleChunk :: IORef StreamState -> (ChatStreamEvent -> IO ()) -> ChatCompletionStreamChunk -> IO ()
 handleChunk stateRef onEvent chunk =
@@ -136,3 +130,38 @@ emitParts onEvent = foldM step
           | otherwise -> do
               onEvent (ChatAnswer t)
               pure (thinkingAcc, answerAcc <> t)
+
+normalizeChatMessages :: [Message] -> [Message]
+normalizeChatMessages msgs =
+  case reverse msgs of
+    (Message{role = msgRole, content = msgContent, tool_calls = msgToolCalls, reasoning_content = msgReasoning}:rest)
+      | msgRole == "assistant"
+      , isPlaceholder msgContent msgToolCalls msgReasoning -> reverse rest
+    _ -> msgs
+  where
+    isPlaceholder msgContent msgToolCalls msgReasoning =
+      T.null (T.strip (messageContentText msgContent))
+        && isNothing msgToolCalls
+        && isNothing msgReasoning
+
+buildChatRequest :: Text -> ChatParams -> [Message] -> ChatCompletionRequest
+buildChatRequest modelId params messages =
+  applyChatParams params (defaultChatRequest modelId (normalizeChatMessages messages))
+
+streamChatWithRequest
+  :: Provider
+  -> Text
+  -> ChatCompletionRequest
+  -> (ChatStreamEvent -> IO ())
+  -> Bool
+  -> IO (Either Text ChatResult)
+streamChatWithRequest provider apiKey reqBody onEvent useBeta = do
+  let reqBody' = reqBody { messages = normalizeChatMessages (messages reqBody) }
+      initState = StreamState InAnswer "" ""
+  stateRef <- newIORef initState
+  result <- streamChatCompletionWithRequestWithHooks emptyClientHooks provider apiKey reqBody' (handleChunk stateRef onEvent) useBeta
+  case result of
+    Left err -> pure (Left (renderClientError err))
+    Right _ -> do
+      StreamState{streamThinking, streamAnswer} <- readIORef stateRef
+      pure (Right (ChatResult streamThinking streamAnswer))

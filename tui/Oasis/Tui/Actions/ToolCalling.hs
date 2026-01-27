@@ -3,27 +3,19 @@ module Oasis.Tui.Actions.ToolCalling
   ) where
 
 import Relude
-import Brick.BChan (BChan)
 import Brick.Types (EventM)
-import qualified Data.Aeson as Aeson
-import Data.Aeson (Value, eitherDecode, decode)
-import qualified Data.Aeson.KeyMap as KM
-import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text.Encoding as TE
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.KeyMap as KM
+import Data.Aeson (Value, decode)
 import Data.Time (getZonedTime, formatTime, defaultTimeLocale)
-import Oasis.Chat.Message (toolMessage)
 import Oasis.Client.OpenAI
-  ( ChatCompletionResponse(..)
-  , ChatChoice(..)
-  , ChatCompletionRequest(..)
-  , defaultChatRequest
+  ( ChatCompletionRequest(..)
   , buildChatUrl
-  , sendChatCompletionRawWithHooks
-  , renderClientError
   , emptyClientHooks
   )
-import Oasis.Client.OpenAI.Param (applyChatParams)
 import Oasis.Demo.ToolCalling
   ( toolCallingMessages
   , toolCallingTools
@@ -42,15 +34,16 @@ import Oasis.Tui.Actions.Common
   )
 import Oasis.Tui.Render.Output (mdJsonSection, mdTextSection, mdConcat)
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
-import qualified Oasis.Types as Types
 import Oasis.Types
-  ( Message(..)
-  , Provider
-  , messageContentText
-  , Tool(..)
-  , ToolFunctionSpec(..)
+  ( Provider
   , ToolCall(..)
   , ToolCallFunction(..)
+  )
+import Oasis.Runner.ToolCalling
+  ( ToolCallingInput(..)
+  , ToolCallingResult(..)
+  , buildToolCallingRequest
+  , runToolCallingWithRequestWithHooks
   )
 
 runToolCallingAction :: EventM Name AppState ()
@@ -64,11 +57,7 @@ runToolCallingAction =
         modelId = resolveModelId provider modelOverride
         tools = toolCallingTools
         messages0 = toolCallingMessages
-        reqBase0 = (defaultChatRequest modelId messages0)
-          { tools = Just tools
-          , parallel_tool_calls = Just True
-          }
-        reqBody0 = applyChatParams params reqBase0
+        reqBody0 = buildToolCallingRequest modelId params messages0 tools (Just True)
         reqJson0 = encodeJsonText reqBody0
         endpoint = buildChatUrl (selectBaseUrl provider useBeta)
         info0 = buildDebugInfo providerName modelId endpoint (jsonRequestHeaders apiKey)
@@ -79,78 +68,9 @@ runToolCallingAction =
             else Right $ do
               let reqMessages0 = messages reqBody0'
                   hooks0 = withMessageListHooks chan reqMessages0 emptyClientHooks
-              firstResp <- sendChatCompletionRawWithHooks hooks0 provider apiKey reqBody0' useBeta
-              case firstResp of
-                Left err ->
-                  let output = mdConcat
-                        [ mdTextSection "First Response" ("Error: " <> renderClientError err)
-                        , mdTextSection "Tool Result" "Skipped due to request error."
-                        , mdTextSection "Final Assistant" "Skipped due to request error."
-                        ]
-                  in pure (ToolCallingCompleted "Tool-calling runner failed." output)
-                Right body ->
-                  case decodeChatResponse body of
-                    Left err ->
-                      let output = mdConcat
-                            [ mdTextSection "First Response" ("Error: " <> err)
-                            , mdTextSection "Tool Result" "Skipped due to decode error."
-                            , mdTextSection "Final Assistant" "Skipped due to decode error."
-                            ]
-                      in pure (ToolCallingCompleted "Tool-calling runner failed." output)
-                    Right response0 ->
-                      case extractToolCallLocal response0 of
-                        Nothing ->
-                          let assistantText = fromMaybe "No assistant message returned." (extractAssistantContent response0)
-                              output = mdConcat
-                                [ mdTextSection "First Response" assistantText
-                                , mdTextSection "Tool Result" "No tool call returned."
-                                , mdTextSection "Final Assistant" "Skipped because no tool call was returned."
-                                ]
-                          in pure (ToolCallingCompleted "Tool-calling runner completed." output)
-                        Just (assistantMsg, toolCall) -> do
-                          toolResult <- executeToolCall toolCall
-                          let firstSection = mdJsonSection "First Response (Tool Call)" (encodeJsonText toolCall)
-                              toolSection = case toolResult of
-                                Left terr -> mdTextSection "Tool Result" ("Error: " <> terr)
-                                Right tmsg -> mdTextSection "Tool Result" tmsg
-                          case toolResult of
-                            Left _ ->
-                              let output = mdConcat
-                                    [ firstSection
-                                    , toolSection
-                                    , mdTextSection "Final Assistant" "Skipped due to tool error."
-                                    ]
-                              in pure (ToolCallingCompleted "Tool-calling runner failed." output)
-                            Right toolMsgText ->
-                              runSecondToolStep
-                                st
-                                provider
-                                apiKey
-                                useBeta
-                                endpoint
-                                providerName
-                                modelId
-                                tools
-                                messages0
-                                assistantMsg
-                                toolCall
-                                toolMsgText
-                                firstSection
-                                toolSection
-                                chan
+              result <- runToolCallingWithRequestWithHooks hooks0 provider apiKey reqBody0' executeToolCall useBeta
+              pure (renderToolCallingResult result)
     pure (info0, reqJson0, handler0)
-
-decodeChatResponse :: BL.ByteString -> Either Text ChatCompletionResponse
-decodeChatResponse body =
-  case eitherDecode body of
-    Left err -> Left (toText err)
-    Right resp -> Right resp
-
-extractToolCallLocal :: ChatCompletionResponse -> Maybe (Message, ToolCall)
-extractToolCallLocal ChatCompletionResponse{choices} =
-  case choices of
-    (ChatChoice{message = Just msg@Message{tool_calls = Just (tc:_)}}:_) -> Just (msg, tc)
-    _ -> Nothing
 
 
 executeToolCall :: ToolCall -> IO (Either Text Text)
@@ -178,84 +98,29 @@ getLocation (Aeson.Object obj) =
     _ -> Nothing
 getLocation _ = Nothing
 
-runSecondToolStep
-  :: AppState
-  -> Provider
-  -> Text
-  -> Bool
-  -> Text
-  -> Text
-  -> Text
-  -> [Tool]
-  -> [Message]
-  -> Message
-  -> ToolCall
-  -> Text
-  -> Text
-  -> Text
-  -> BChan TuiEvent
-  -> IO TuiEvent
-runSecondToolStep st provider apiKey useBeta endpoint providerName modelId tools messages0 assistantMsg toolCall toolMsgText firstSection toolSection chan = do
-  let params = chatParams st
-      toolMsg = toolMessage (Types.id toolCall) toolMsgText
-      messages1 = messages0 <> [assistantMsg, toolMsg]
-      reqBase1 = (defaultChatRequest modelId messages1)
-        { tools = Just tools
-        }
-      reqBody1 = applyChatParams params reqBase1
-      reqJson1 = encodeJsonText reqBody1
-      info1 = buildDebugInfo providerName modelId endpoint (jsonRequestHeaders apiKey)
-      handler1 bodyText1 = do
-        reqBody1' <- (decodeJsonText bodyText1 :: Either Text ChatCompletionRequest)
-        if stream reqBody1'
-          then Left "tool-calling runner requires stream=false"
-          else Right $ do
-            let reqMessages1 = messages reqBody1'
-                hooks1 = withMessageListHooks chan reqMessages1 emptyClientHooks
-                toolSection' =
-                  case lastToolContent reqMessages1 of
-                    Nothing -> toolSection
-                    Just tmsg -> mdTextSection "Tool Result" tmsg
-            secondResp <- sendChatCompletionRawWithHooks hooks1 provider apiKey reqBody1' useBeta
-            case secondResp of
-              Left err ->
-                let output = mdConcat
-                      [ firstSection
-                      , toolSection'
-                      , mdTextSection "Final Assistant" ("Error: " <> renderClientError err)
-                      ]
-                in pure (ToolCallingCompleted "Tool-calling runner failed." output)
-              Right body2 ->
-                case decodeChatResponse body2 of
-                  Left err ->
-                    let output = mdConcat
-                          [ firstSection
-                          , toolSection'
-                          , mdTextSection "Final Assistant" ("Error: " <> err)
-                          ]
-                    in pure (ToolCallingCompleted "Tool-calling runner failed." output)
-                  Right response2 ->
-                    let finalText = fromMaybe "No assistant message returned." (extractAssistantContent response2)
-                        output = mdConcat
-                          [ firstSection
-                          , toolSection'
-                          , mdTextSection "Final Assistant" finalText
-                          ]
-                    in pure (ToolCallingCompleted "Tool-calling runner completed." output)
-  if debugEnabled st
-    then pure (DebugRequestOpen info1 reqJson1 handler1 (activeList st))
-    else case handler1 reqJson1 of
-      Left err ->
-        let output = mdConcat
-              [ firstSection
-              , toolSection
-              , mdTextSection "Final Assistant" ("Error: " <> err)
-              ]
-        in pure (ToolCallingCompleted "Tool-calling runner failed." output)
-      Right action -> action
-
-lastToolContent :: [Message] -> Maybe Text
-lastToolContent msgs =
-  case reverse [messageContentText (content m) | m <- msgs, role m == "tool"] of
-    (t:_) | not (T.null (T.strip t)) -> Just t
-    _ -> Nothing
+renderToolCallingResult :: Either Text ToolCallingResult -> TuiEvent
+renderToolCallingResult = \case
+  Left err -> ToolCallingCompleted "Tool-calling runner failed." (mdTextSection "Error" err)
+  Right result ->
+    let output = case result of
+          ToolCallingNoToolCall content -> mdConcat
+            [ mdTextSection "First Response" content
+            , mdTextSection "Tool Result" "No tool call returned."
+            , mdTextSection "Final Assistant" "Skipped because no tool call was returned."
+            ]
+          ToolCallingToolError toolCallJson terr -> mdConcat
+            [ mdJsonSection "First Response (Tool Call)" toolCallJson
+            , mdTextSection "Tool Result" ("Error: " <> terr)
+            , mdTextSection "Final Assistant" "Skipped due to tool error."
+            ]
+          ToolCallingSecondError toolCallJson toolMsgText err -> mdConcat
+            [ mdJsonSection "First Response (Tool Call)" toolCallJson
+            , mdTextSection "Tool Result" toolMsgText
+            , mdTextSection "Final Assistant" ("Error: " <> err)
+            ]
+          ToolCallingSuccess toolCallJson toolMsgText content -> mdConcat
+            [ mdJsonSection "First Response (Tool Call)" toolCallJson
+            , mdTextSection "Tool Result" toolMsgText
+            , mdTextSection "Final Assistant" content
+            ]
+    in ToolCallingCompleted "Tool-calling runner completed." output

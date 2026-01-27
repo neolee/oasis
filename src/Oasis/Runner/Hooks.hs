@@ -1,7 +1,11 @@
 module Oasis.Runner.Hooks
   ( HooksResult(..)
+  , HooksLogger(..)
+  , buildHooksRequest
   , runHooks
   , runHooksDetailed
+  , runHooksRequest
+  , runHooksRequestWithLogger
   ) where
 
 import Relude
@@ -34,14 +38,63 @@ runHooksDetailed provider apiKey modelOverride params prompt useBeta = do
   logRef <- newIORef ([] :: [Text])
   let appendLog t = modifyIORef' logRef (<> [t])
       modelId = resolveModelId provider modelOverride
-      messages = buildUserMessages prompt
+      reqBody = buildHooksRequest modelId params prompt
+      logger = HooksLogger
+        { onRequestLog = logRequestWith appendLog
+        , onResponseLog = logResponseWith appendLog
+        , onErrorLog = appendLog . renderClientError
+        }
+  result <- runHooksRequestWithLogger logger provider apiKey reqBody useBeta
+  logs <- readIORef logRef
+  let logText = T.intercalate "\n" logs
+  case result of
+    Left err -> pure (Left err)
+    Right HooksResult{responseJsonText, requestJsonText} ->
+      pure (Right HooksResult
+        { hookLogText = logText
+        , responseJsonText = responseJsonText
+        , requestJsonText = requestJsonText
+        })
+
+data HooksLogger = HooksLogger
+  { onRequestLog :: Request -> IO ()
+  , onResponseLog :: Status -> [(HeaderName, BS.ByteString)] -> BL.ByteString -> IO ()
+  , onErrorLog :: ClientError -> IO ()
+  }
+
+buildHooksRequest :: Text -> ChatParams -> Text -> ChatCompletionRequest
+buildHooksRequest modelId params prompt =
+  let messages = buildUserMessages prompt
       reqBase = defaultChatRequest modelId messages
-      reqBody = applyChatParams params reqBase
-      reqJsonText = encodeRequestJson reqBody
+  in applyChatParams params reqBase
+
+runHooksRequest :: Provider -> Text -> ChatCompletionRequest -> Bool -> IO (Either Text HooksResult)
+runHooksRequest = runHooksRequestWithLogger defaultLogger
+
+runHooksRequestWithLogger
+  :: HooksLogger
+  -> Provider
+  -> Text
+  -> ChatCompletionRequest
+  -> Bool
+  -> IO (Either Text HooksResult)
+runHooksRequestWithLogger HooksLogger{..} provider apiKey reqBody useBeta = do
+  logRef <- newIORef ([] :: [Text])
+  let appendLog t = modifyIORef' logRef (<> [t])
+      onReq req = do
+        logRequestWith appendLog req
+        onRequestLog req
+      onResp status headers body = do
+        logResponseWith appendLog status headers body
+        onResponseLog status headers body
+      onErr err = do
+        appendLog (renderClientError err)
+        onErrorLog err
+  let reqJsonText = encodeRequestJson reqBody
       hooks = ClientHooks
-        { onRequest = Just (logRequestWith appendLog)
-        , onResponse = Just (logResponseWith appendLog)
-        , onError = Just (appendLog . renderClientError)
+        { onRequest = Just onReq
+        , onResponse = Just onResp
+        , onError = Just onErr
         }
   result <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody useBeta
   logs <- readIORef logRef
@@ -55,6 +108,13 @@ runHooksDetailed provider apiKey modelOverride params prompt useBeta = do
         , responseJsonText = responseText
         , requestJsonText = reqJsonText
         })
+
+defaultLogger :: HooksLogger
+defaultLogger = HooksLogger
+  { onRequestLog = \_ -> pure ()
+  , onResponseLog = \_ _ _ -> pure ()
+  , onErrorLog = \_ -> pure ()
+  }
 
 logRequestWith :: (Text -> IO ()) -> Request -> IO ()
 logRequestWith appendLog req = do

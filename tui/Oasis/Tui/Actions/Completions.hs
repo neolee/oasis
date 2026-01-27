@@ -11,14 +11,10 @@ import Oasis.Client.OpenAI
   , CompletionRequest(..)
   , CompletionResponse(..)
   , CompletionChoice(..)
-  , defaultChatRequest
   , buildChatUrl
   , buildCompletionsUrl
-  , sendChatCompletionRawWithHooks
-  , sendCompletionsRaw
   , emptyClientHooks
   )
-import Oasis.Client.OpenAI.Param (applyChatParams)
 import Oasis.Model (resolveModelId)
 import Oasis.Demo.Completions
   ( partialModeMessages
@@ -46,8 +42,19 @@ import Oasis.Tui.Render.Output
   , renderErrorOutput
   )
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
-import Oasis.Types (Message(..), MessageContent(..), StopParam(..))
-import qualified Oasis.Types as Types
+import Oasis.Types (Message(..), MessageContent(..), StopParam(..), RequestResponse(..))
+import Oasis.Runner.PartialMode
+  ( buildPartialModeRequest
+  , runPartialModeRequestWithHooks
+  )
+import Oasis.Runner.PrefixCompletion
+  ( buildPrefixCompletionRequest
+  , runPrefixCompletionRequestWithHooks
+  )
+import Oasis.Runner.FIMCompletion
+  ( buildFIMRequest
+  , runFIMCompletionRequest
+  )
 
 runPartialModeAction :: EventM Name AppState ()
 runPartialModeAction =
@@ -59,10 +66,8 @@ runPartialModeAction =
         providerName = fromMaybe "-" (selectedProvider st)
         modelId = resolveModelId provider modelOverride
         messages = partialModeMessages
-        reqBase = defaultChatRequest modelId messages
-        reqBody = applyChatParams params reqBase
+        reqBody = buildPartialModeRequest modelId params messages
         reqJson = encodeJsonText reqBody
-        hooks = withMessageListHooks chan messages emptyClientHooks
         info = buildDebugInfo providerName modelId (buildChatUrl (selectBaseUrl provider useBeta)) (jsonRequestHeaders apiKey)
         handler bodyText = do
           reqBody' <- (decodeJsonText bodyText :: Either Text ChatCompletionRequest)
@@ -75,16 +80,16 @@ runPartialModeAction =
                     ChatCompletionRequest{messages} -> messages
                   hooks' = withMessageListHooks chan reqMessages emptyClientHooks
                   reqCtx = buildRequestContext (buildChatUrl (selectBaseUrl provider useBeta)) reqBody'
-              result <- sendChatCompletionRawWithHooks hooks' provider apiKey reqBody' useBeta
+              result <- runPartialModeRequestWithHooks hooks' provider apiKey reqBody' useBeta
               let (statusMsg, outputMsg) =
-                    case parseRawResponseStrict result of
+                    case result of
                       Left err ->
                         ("Partial-mode runner failed.", renderErrorOutput reqCtx err)
-                      Right (raw, response) ->
-                        let assistantText = fromMaybe "No assistant message returned." (extractAssistantContent response)
+                      Right RequestResponse{responseJson, response} ->
+                        let assistantText = fromMaybe "No assistant message returned." (response >>= extractAssistantContent)
                             output = mdConcat
                               ( requestSections reqCtx
-                                <> [ mdJsonSection "Response" raw
+                                <> [ mdJsonSection "Response" responseJson
                                    , mdCodeSection "Assistant" "text" assistantText
                                    ]
                               )
@@ -102,30 +107,8 @@ runPrefixCompletionAction =
         providerName = fromMaybe "-" (selectedProvider st)
         modelId = resolveModelId provider modelOverride
         messages = prefixCompletionMessages
-        reqBase = ChatCompletionRequest
-          { model = modelId
-          , messages = messages
-          , temperature = Nothing
-          , top_p = Nothing
-          , max_completion_tokens = Nothing
-            , stop = Just (Types.StopList ["```"])
-          , presence_penalty = Nothing
-          , frequency_penalty = Nothing
-          , seed = Nothing
-          , logit_bias = Nothing
-          , user = Nothing
-          , service_tier = Nothing
-          , reasoning_effort = Nothing
-          , stream_options = Nothing
-          , stream = False
-          , response_format = Nothing
-          , tools = Nothing
-          , tool_choice = Nothing
-          , parallel_tool_calls = Nothing
-          }
-        reqBody = applyChatParams params reqBase
+        reqBody = buildPrefixCompletionRequest modelId params messages
         reqJson = encodeJsonText reqBody
-        hooks = withMessageListHooks chan messages emptyClientHooks
         info = buildDebugInfo providerName modelId (buildChatUrl (selectBaseUrl provider useBeta)) (jsonRequestHeaders apiKey)
         handler bodyText = do
           reqBody' <- (decodeJsonText bodyText :: Either Text ChatCompletionRequest)
@@ -138,16 +121,16 @@ runPrefixCompletionAction =
                     ChatCompletionRequest{messages} -> messages
                   hooks' = withMessageListHooks chan reqMessages emptyClientHooks
                   reqCtx = buildRequestContext (buildChatUrl (selectBaseUrl provider useBeta)) reqBody'
-              result <- sendChatCompletionRawWithHooks hooks' provider apiKey reqBody' useBeta
+              result <- runPrefixCompletionRequestWithHooks hooks' provider apiKey reqBody' useBeta
               let (statusMsg, outputMsg) =
-                    case parseRawResponseStrict result of
+                    case result of
                       Left err ->
                         ("Prefix-completion runner failed.", renderErrorOutput reqCtx err)
-                      Right (raw, response) ->
-                        let assistantText = fromMaybe "No assistant message returned." (extractAssistantContent response)
+                      Right RequestResponse{responseJson, response} ->
+                        let assistantText = fromMaybe "No assistant message returned." (response >>= extractAssistantContent)
                             output = mdConcat
                               ( requestSections reqCtx
-                                <> [ mdJsonSection "Response" raw
+                                <> [ mdJsonSection "Response" responseJson
                                    , mdCodeSection "Assistant" "text" assistantText
                                    ]
                               )
@@ -163,18 +146,7 @@ runFimCompletionAction =
         providerName = fromMaybe "-" (selectedProvider st)
         modelId = resolveModelId provider modelOverride
         CompletionRequest{prompt, suffix, max_tokens, temperature, top_p, stream, stop, echo, logprobs} = fimCompletionRequest
-        reqBody = CompletionRequest
-          { model = modelId
-          , prompt = prompt
-          , suffix = suffix
-          , max_tokens = max_tokens
-          , temperature = temperature
-          , top_p = top_p
-          , stream = stream
-          , stop = stop
-          , echo = echo
-          , logprobs = logprobs
-          }
+        reqBody = buildFIMRequest modelId fimCompletionRequest
         reqJson = encodeJsonText reqBody
         info = buildDebugInfo providerName modelId (buildCompletionsUrl (selectBaseUrl provider useBeta)) (jsonRequestHeaders apiKey)
         handler bodyText = do
@@ -185,19 +157,19 @@ runFimCompletionAction =
             then Left "fim-completion runner requires stream=false"
             else Right $ do
               let reqCtx = buildRequestContext (buildCompletionsUrl (selectBaseUrl provider useBeta)) reqBody'
-              result <- sendCompletionsRaw provider apiKey reqBody' useBeta
+              result <- runFIMCompletionRequest provider apiKey reqBody' useBeta
               let (statusMsg, outputMsg) =
-                    case parseRawResponseStrict result of
+                    case result of
                       Left err ->
                         ("FIM-completion runner failed.", renderErrorOutput reqCtx err)
-                      Right (raw, response) ->
+                      Right RequestResponse{responseJson, response} ->
                         let completionText =
                               case response of
-                                CompletionResponse{choices = (CompletionChoice{text}:_)} -> text
+                                Just CompletionResponse{choices = (CompletionChoice{text}:_)} -> text
                                 _ -> "No completion choices returned."
                             output = mdConcat
                               ( requestSections reqCtx
-                                <> [ mdJsonSection "Response" raw
+                                <> [ mdJsonSection "Response" responseJson
                                    , mdCodeSection "Completion" "text" completionText
                                    ]
                               )

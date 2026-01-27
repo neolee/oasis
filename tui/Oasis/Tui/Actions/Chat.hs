@@ -18,20 +18,11 @@ import qualified Data.IORef as IORef
 import Data.Aeson (Value, eitherDecodeStrict)
 import Oasis.Client.OpenAI
   ( ChatCompletionRequest(..)
-  , ChatCompletionStreamChunk(..)
-  , StreamChoice(..)
-  , StreamDelta(..)
-  , defaultChatRequest
   , setChatStream
   , buildChatUrl
-  , sendChatCompletionRawWithHooks
   , renderClientError
-  , ClientHooks(..)
-  , streamChatCompletionWithRequestWithHooks
   , emptyClientHooks
   )
-import qualified Oasis.Client.OpenAI as OpenAI
-import Oasis.Client.OpenAI.Param (applyChatParams)
 import Oasis.Chat.Message (assistantMessage, userMessage)
 import Oasis.Demo.StructuredOutput
   ( structuredMessages
@@ -41,6 +32,10 @@ import Oasis.Demo.StructuredOutput
 import Oasis.Model (resolveModelId)
 import Oasis.Tui.Actions.Common
   ( runProviderAction
+  , resolveSelectedProvider
+  , startRunner
+  , runWithDebug
+  , runInBackground
   , buildRequestContext
   , encodeJsonText
   , buildDebugInfo
@@ -53,10 +48,8 @@ import Oasis.Tui.Actions.Common
   , withMessageListHooks
   , mergeClientHooks
   )
-import Oasis.Tui.Util.Text (truncateTextDots)
 import Oasis.Tui.Render.Output
   ( RequestContext(..)
-  , prettyJson
   , mdCodeSection
   , mdJsonSection
   , mdTextSection
@@ -65,7 +58,28 @@ import Oasis.Tui.Render.Output
   , renderErrorOutput
   )
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
-import Oasis.Types (Message, Provider(..))
+import Oasis.Types (Message, Provider(..), RequestResponse(..))
+import Oasis.Runner.Chat
+  ( ChatStreamEvent(..)
+  , buildChatRequest
+  , streamChatWithRequest
+  )
+import Oasis.Runner.Basic
+  ( BasicResult
+  , buildBasicRequest
+  , runBasicRequestWithHooks
+  )
+import Oasis.Runner.StructuredOutput
+  ( StructuredOutputResult(..)
+  , buildStructuredRequest
+  , streamStructuredOutputWithRequestWithHooks
+  )
+import Oasis.Runner.Hooks
+  ( HooksResult(..)
+  , buildHooksRequest
+  , HooksLogger(..)
+  , runHooksRequestWithLogger
+  )
 import Network.HTTP.Client (Request(..))
 import Network.HTTP.Types.Header (HeaderName, hAuthorization)
 import Network.HTTP.Types.Status (Status, statusCode)
@@ -81,9 +95,8 @@ runBasicAction prompt =
         providerName = fromMaybe "-" (selectedProvider st)
         modelId = resolveModelId provider modelOverride
         baseUrl = selectBaseUrl provider useBeta
-        reqBody = applyChatParams params (defaultChatRequest modelId [userMessage prompt])
+        reqBody = buildBasicRequest modelId params prompt
         reqJson = encodeJsonText reqBody
-        hooks = withMessageListHooks chan [userMessage prompt] emptyClientHooks
         info = buildDebugInfo providerName modelId (buildChatUrl baseUrl) (jsonRequestHeaders apiKey)
         handler bodyText = do
           reqBody' <- (decodeJsonText bodyText :: Either Text ChatCompletionRequest)
@@ -96,17 +109,17 @@ runBasicAction prompt =
                     ChatCompletionRequest{messages} -> messages
                   hooks' = withMessageListHooks chan reqMessages emptyClientHooks
                   reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody'
-              result <- sendChatCompletionRawWithHooks hooks' provider apiKey reqBody' useBeta
+              result <- runBasicRequestWithHooks hooks' provider apiKey reqBody' useBeta
               let (statusMsg, outputMsg) =
-                    case parseRawResponseStrict result of
+                    case result of
                       Left err ->
                         ("Basic runner failed.", renderErrorOutput reqCtx err)
-                      Right (raw, response) ->
-                        let assistantContent = extractAssistantContent response
+                      Right RequestResponse{responseJson, response} ->
+                        let assistantContent = response >>= extractAssistantContent
                             output = mdConcat
                               ( requestSections reqCtx
                                 <> catMaybes
-                                    [ Just (mdJsonSection "Response" raw)
+                                    [ Just (mdJsonSection "Response" responseJson)
                                     , fmap (mdTextSection "Assistant") assistantContent
                                     ]
                               )
@@ -124,9 +137,8 @@ runHooksAction prompt =
         providerName = fromMaybe "-" (selectedProvider st)
         modelId = resolveModelId provider modelOverride
         baseUrl = selectBaseUrl provider useBeta
-        reqBody = applyChatParams params (defaultChatRequest modelId [userMessage prompt])
+        reqBody = buildHooksRequest modelId params prompt
         reqJson = encodeJsonText reqBody
-        hooks = withMessageListHooks chan [userMessage prompt] emptyClientHooks
         info = buildDebugInfo providerName modelId (buildChatUrl baseUrl) (jsonRequestHeaders apiKey)
         handler bodyText = do
           reqBody' <- (decodeJsonText bodyText :: Either Text ChatCompletionRequest)
@@ -137,9 +149,26 @@ runHooksAction prompt =
             else Right $ do
               let reqMessages = case reqBody' of
                     ChatCompletionRequest{messages} -> messages
-                  hooks' = withMessageListHooks chan reqMessages emptyClientHooks
                   reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody'
-              (statusMsg, outputMsg) <- runHooksWithLog hooks' provider apiKey useBeta reqCtx reqBody'
+                  hooks' = withMessageListHooks chan reqMessages emptyClientHooks
+                  logger = HooksLogger
+                    { onRequestLog = logRequestWith (\t -> writeBChan chan (StructuredStreaming t))
+                    , onResponseLog = logResponseWith (\t -> writeBChan chan (StructuredStreaming t))
+                    , onErrorLog = \err -> writeBChan chan (StructuredStreaming (renderClientError err))
+                    }
+              result <- runHooksRequestWithLogger logger provider apiKey reqBody' useBeta
+              let (statusMsg, outputMsg) =
+                    case result of
+                      Left err ->
+                        ("Hooks runner failed.", renderErrorOutput reqCtx err)
+                      Right HooksResult{hookLogText, responseJsonText, requestJsonText} ->
+                        let output = mdConcat
+                              ( requestSections reqCtx
+                                <> [ mdTextSection "Hook Log" hookLogText
+                                   , mdCodeSection "Response JSON (truncated)" "json" responseJsonText
+                                   ]
+                              )
+                        in ("Hooks runner completed.", output)
               pure (HooksCompleted statusMsg outputMsg)
     pure (info, reqJson, handler)
 
@@ -159,13 +188,7 @@ runStructuredAction responseFormat runnerLabel =
         providerName = fromMaybe "-" (selectedProvider st)
         modelId = resolveModelId provider modelOverride
         reqMessages = structuredMessages
-        reqBase = defaultChatRequest modelId reqMessages
-        ChatCompletionRequest{..} = applyChatParams params reqBase
-        reqBody = ChatCompletionRequest
-          { OpenAI.stream = True
-          , OpenAI.response_format = Just responseFormat
-          , ..
-          }
+        reqBody = buildStructuredRequest modelId params reqMessages responseFormat
         reqJson = encodeJsonText reqBody
         info = buildDebugInfo providerName modelId (buildChatUrl (selectBaseUrl provider useBeta)) (sseRequestHeaders apiKey)
         handler bodyText = do
@@ -178,22 +201,24 @@ runStructuredAction responseFormat runnerLabel =
               let reqMessages = case reqBody' of
                     ChatCompletionRequest{messages} -> messages
                   hooks = withMessageListHooks chan reqMessages emptyClientHooks
-              accumRef <- IORef.newIORef ""
-              result <- streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody' (handleStructuredChunk chan accumRef) useBeta
-              rawText <- IORef.readIORef accumRef
-              unless (T.null (T.strip rawText)) $
-                writeBChan chan (MessageListSynced (reqMessages <> [assistantMessage rawText]))
+              result <- streamStructuredOutputWithRequestWithHooks
+                hooks
+                provider
+                apiKey
+                reqBody'
+                (\rawText -> writeBChan chan (StructuredStreaming (streamingOutput rawText)))
+                useBeta
               let (statusMsg, outputMsg) =
                     case result of
                       Left err ->
                         let output = mdConcat
-                              [ mdCodeSection "Raw Stream" "text" rawText
-                              , mdTextSection "Parsed JSON" ("Error: " <> renderClientError err)
+                              [ mdCodeSection "Raw Stream" "text" ""
+                              , mdTextSection "Parsed JSON" ("Error: " <> err)
                               ]
                         in (runnerLabel <> " runner failed.", output)
-                      Right _ ->
+                      Right StructuredOutputResult{rawText, parsedJson} ->
                         let parsedSection =
-                              case parseJsonText rawText of
+                              case parsedJson of
                                 Left perr -> mdTextSection "Parsed JSON" ("Invalid JSON: " <> perr)
                                 Right pretty -> mdCodeSection "Parsed JSON" "json" pretty
                             output = mdConcat
@@ -203,21 +228,6 @@ runStructuredAction responseFormat runnerLabel =
                         in (runnerLabel <> " runner completed.", output)
               pure (StructuredCompleted statusMsg outputMsg)
     pure (info, reqJson, handler)
-
-handleStructuredChunk :: BChan TuiEvent -> IORef.IORef Text -> ChatCompletionStreamChunk -> IO ()
-handleStructuredChunk chan accumRef chunk =
-  forEachDeltaContent chunk $ \t -> do
-    IORef.modifyIORef' accumRef (<> t)
-    rawText <- IORef.readIORef accumRef
-    writeBChan chan (StructuredStreaming (streamingOutput rawText))
-
-forEachDeltaContent :: ChatCompletionStreamChunk -> (Text -> IO ()) -> IO ()
-forEachDeltaContent ChatCompletionStreamChunk{choices} f =
-  forM_ choices $ \StreamChoice{delta} ->
-    forM_ (maybe [] deltaContent delta) f
-
-deltaContent :: StreamDelta -> [Text]
-deltaContent StreamDelta{content} = maybe [] pure content
 
 runChatInitAction :: EventM Name AppState ()
 runChatInitAction =
@@ -229,52 +239,61 @@ runChatInitAction =
 
 runChatAction :: [Message] -> EventM Name AppState ()
 runChatAction messages =
-  runProviderAction "Running chat..." $ \st provider apiKey -> do
-    let modelOverride = selectedModel st
-        params = chatParams st
-        useBeta = betaUrlSetting st
-        chan = eventChan st
-        providerName = fromMaybe "-" (selectedProvider st)
-        modelId = resolveModelId provider modelOverride
-        reqBase = defaultChatRequest modelId messages
-        reqBody = applyChatParams params (setChatStream True reqBase)
-        reqJson = encodeJsonText reqBody
-        hooks = withMessageListHooks chan messages emptyClientHooks
-        info = buildDebugInfo providerName modelId (buildChatUrl (selectBaseUrl provider useBeta)) (sseRequestHeaders apiKey)
-        handler bodyText = do
-          reqBody' <- (decodeJsonText bodyText :: Either Text ChatCompletionRequest)
-          let isStream = case reqBody' of
-                ChatCompletionRequest{stream} -> stream
-          if not isStream
-            then Left "chat runner requires stream=true"
-            else Right $ do
-              let reqMessages = case reqBody' of
-                    ChatCompletionRequest{messages} -> messages
-                  hooks = withMessageListHooks chan reqMessages emptyClientHooks
-              result <- streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody' (handleChatChunk chan) useBeta
-              case result of
-                Left err -> pure (ChatCompleted ("Chat failed: " <> renderClientError err))
-                Right _ -> pure (ChatCompleted "Chat completed.")
-    pure (info, reqJson, handler)
+  do
+    st <- get
+    mResolved <- resolveSelectedProvider
+    forM_ mResolved $ \(provider, apiKey) -> do
+      startRunner "Running chat..."
+      let modelOverride = selectedModel st
+          params = chatParams st
+          useBeta = betaUrlSetting st
+          chan = eventChan st
+          providerName = fromMaybe "-" (selectedProvider st)
+          modelId = resolveModelId provider modelOverride
+          reqBody = setChatStream True (buildChatRequest modelId params messages)
+          reqJson = encodeJsonText reqBody
+          info = buildDebugInfo providerName modelId (buildChatUrl (selectBaseUrl provider useBeta)) (sseRequestHeaders apiKey)
+          runStream body = do
+            renderRef <- IORef.newIORef (ChatRenderState False False)
+            result <- streamChatWithRequest provider apiKey body (handleChatStreamEvent chan renderRef) useBeta
+            case result of
+              Left err -> pure (ChatCompleted ("Chat failed: " <> err))
+              Right _ -> pure (ChatCompleted "Chat completed.")
+          handler bodyText = do
+            reqBody' <- (decodeJsonText bodyText :: Either Text ChatCompletionRequest)
+            let isStream = case reqBody' of
+                  ChatCompletionRequest{stream} -> stream
+            if not isStream
+              then Left "chat runner requires stream=true"
+              else Right (runStream reqBody')
+      if debugEnabled st
+        then runWithDebug info reqJson handler
+        else runInBackground st (runStream reqBody)
 
-handleChatChunk :: BChan TuiEvent -> ChatCompletionStreamChunk -> IO ()
-handleChatChunk chan chunk =
-  forM_ (chatDeltaText chunk) (writeBChan chan . ChatStreaming)
+data ChatRenderState = ChatRenderState
+  { printedThinking :: Bool
+  , printedAnswer :: Bool
+  }
 
-chatDeltaText :: ChatCompletionStreamChunk -> [Text]
-chatDeltaText ChatCompletionStreamChunk{choices} =
-  concatMap extractChoice choices
-  where
-    extractChoice StreamChoice{delta} =
-      case delta of
-        Nothing -> []
-        Just StreamDelta{content} -> maybe [] pure content
-
-parseJsonText :: Text -> Either Text Text
-parseJsonText raw =
-  case eitherDecodeStrict (encodeUtf8 raw) :: Either String Value of
-    Left err -> Left (T.pack err)
-    Right _ -> Right (prettyJson raw)
+handleChatStreamEvent :: BChan TuiEvent -> IORef.IORef ChatRenderState -> ChatStreamEvent -> IO ()
+handleChatStreamEvent chan stateRef event = do
+  ChatRenderState{printedThinking, printedAnswer} <- IORef.readIORef stateRef
+  case event of
+    ChatThinking t
+      | T.null (T.strip t) -> pure ()
+      | otherwise -> do
+          let prefix = if printedThinking then "" else "## Thinking\n"
+          writeBChan chan (ChatStreaming (prefix <> t))
+          IORef.writeIORef stateRef (ChatRenderState True printedAnswer)
+    ChatAnswer t
+      | T.null (T.strip t) -> pure ()
+      | otherwise -> do
+          let prefix
+                | printedAnswer = ""
+                | printedThinking = "\n\n## Answer\n"
+                | otherwise = ""
+          writeBChan chan (ChatStreaming (prefix <> t))
+          IORef.writeIORef stateRef (ChatRenderState printedThinking True)
 
 streamingOutput :: Text -> Text
 streamingOutput rawText =
@@ -284,54 +303,15 @@ streamingOutput rawText =
     ]
 
 
-runHooksWithLog
-  :: ClientHooks
-  -> Provider
-  -> Text
-  -> Bool
-  -> RequestContext
-  -> ChatCompletionRequest
-  -> IO (Text, Text)
-runHooksWithLog extraHooks provider apiKey useBeta reqCtx reqBody = do
-  logRef <- IORef.newIORef ([] :: [Text])
-  let appendLog t = IORef.modifyIORef' logRef (<> [t])
-      hooks = ClientHooks
-        { onRequest = Just (logRequest appendLog)
-        , onResponse = Just (logResponse appendLog)
-        , onError = Just (appendLog . renderClientError)
-        }
-      mergedHooks = mergeClientHooks hooks extraHooks
-  result <- sendChatCompletionRawWithHooks mergedHooks provider apiKey reqBody useBeta
-  logs <- IORef.readIORef logRef
-  let logText = T.intercalate "\n" logs
-  case result of
-    Left err -> do
-      let output = mdConcat
-            ( requestSections reqCtx
-              <> [ mdTextSection "Hook Log" logText
-                 , mdTextSection "Error" (renderClientError err)
-                 ]
-            )
-      pure ("Hooks runner failed.", output)
-    Right body -> do
-      let responseText = truncateTextDots 800 (TE.decodeUtf8Lenient (BL.toStrict body))
-          output = mdConcat
-            ( requestSections reqCtx
-              <> [ mdTextSection "Hook Log" logText
-                 , mdCodeSection "Response JSON (truncated)" "json" responseText
-                 ]
-            )
-      pure ("Hooks runner completed.", output)
-
-logRequest :: (Text -> IO ()) -> Request -> IO ()
-logRequest appendLog req = do
+logRequestWith :: (Text -> IO ()) -> Request -> IO ()
+logRequestWith appendLog req = do
   appendLog "--- Hook: Request ---"
   appendLog (formatRequestLine req)
   forM_ (requestHeaders req) $ \(name, value) ->
     appendLog (formatHeader name value)
 
-logResponse :: (Text -> IO ()) -> Status -> [(HeaderName, ByteString)] -> BL.ByteString -> IO ()
-logResponse appendLog status headers body = do
+logResponseWith :: (Text -> IO ()) -> Status -> [(HeaderName, ByteString)] -> BL.ByteString -> IO ()
+logResponseWith appendLog status headers body = do
   appendLog "--- Hook: Response ---"
   appendLog ("Status: " <> show (statusCode status))
   forM_ headers $ \(name, value) ->

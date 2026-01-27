@@ -1,9 +1,12 @@
 module Oasis.Runner.Basic
   ( BasicResult
+  , buildBasicRequest
   , runBasic
   , runBasicWithHooks
   , runBasicRaw
   , runBasicRawWithHooks
+  , runBasicRequest
+  , runBasicRequestWithHooks
   ) where
 
 import Relude
@@ -23,12 +26,8 @@ runBasic provider apiKey modelOverride params prompt useBeta = do
 runBasicWithHooks :: ClientHooks -> Provider -> Text -> Maybe Text -> ChatParams -> Text -> Bool -> IO (Either Text BasicResult)
 runBasicWithHooks hooks provider apiKey modelOverride params prompt useBeta = do
   let modelId = resolveModelId provider modelOverride
-      messages = buildUserMessages prompt
-      reqBase = defaultChatRequest modelId messages
-      reqBody = applyChatParams params reqBase
-      reqJsonText = encodeRequestJson reqBody
-  resp <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody useBeta
-  pure (buildRequestResponse reqJsonText resp)
+      reqBody = buildBasicRequest modelId params prompt
+  runBasicRequestWithHooks hooks provider apiKey reqBody useBeta
 
 runBasicRaw :: Provider -> Text -> Maybe Text -> ChatParams -> [Message] -> Bool -> IO (Either Text BasicResult)
 runBasicRaw provider apiKey modelOverride params messages useBeta = do
@@ -39,6 +38,19 @@ runBasicRawWithHooks hooks provider apiKey modelOverride params messages useBeta
   let modelId = resolveModelId provider modelOverride
       reqBase = defaultChatRequest modelId messages
       reqBody = applyChatParams params reqBase
-      reqJsonText = encodeRequestJson reqBody
+  runBasicRequestWithHooks hooks provider apiKey reqBody useBeta
+
+buildBasicRequest :: Text -> ChatParams -> Text -> ChatCompletionRequest
+buildBasicRequest modelId params prompt =
+  let messages = buildUserMessages prompt
+      reqBase = defaultChatRequest modelId messages
+  in applyChatParams params reqBase
+
+runBasicRequest :: Provider -> Text -> ChatCompletionRequest -> Bool -> IO (Either Text BasicResult)
+runBasicRequest = runBasicRequestWithHooks emptyClientHooks
+
+runBasicRequestWithHooks :: ClientHooks -> Provider -> Text -> ChatCompletionRequest -> Bool -> IO (Either Text BasicResult)
+runBasicRequestWithHooks hooks provider apiKey reqBody useBeta = do
+  let reqJsonText = encodeRequestJson reqBody
   resp <- sendChatCompletionRawWithHooks hooks provider apiKey reqBody useBeta
   pure (buildRequestResponse reqJsonText resp)

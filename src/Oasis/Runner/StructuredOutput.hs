@@ -1,7 +1,10 @@
 module Oasis.Runner.StructuredOutput
   ( StructuredOutputResult(..)
+  , buildStructuredRequest
   , runStructuredOutput
   , runStructuredOutputDetailed
+  , streamStructuredOutputWithRequest
+  , streamStructuredOutputWithRequestWithHooks
   ) where
 
 import Relude
@@ -25,12 +28,36 @@ runStructuredOutput = runStructuredOutputDetailed
 runStructuredOutputDetailed :: Provider -> Text -> Maybe Text -> ChatParams -> [Message] -> Value -> Bool -> IO (Either Text StructuredOutputResult)
 runStructuredOutputDetailed provider apiKey modelOverride params messages responseFormat useBeta = do
   let modelId = resolveModelId provider modelOverride
-      reqBase = defaultChatRequest modelId messages
+      reqBody = buildStructuredRequest modelId params messages responseFormat
+  streamStructuredOutputWithRequest provider apiKey reqBody (\_ -> pure ()) useBeta
+
+buildStructuredRequest :: Text -> ChatParams -> [Message] -> Value -> ChatCompletionRequest
+buildStructuredRequest modelId params messages responseFormat =
+  let reqBase = defaultChatRequest modelId messages
       reqBaseStream = setChatStream True reqBase
       reqBaseFormat = setChatResponseFormat (Just responseFormat) reqBaseStream
-      reqBody = applyChatParams params reqBaseFormat
+  in applyChatParams params reqBaseFormat
+
+streamStructuredOutputWithRequest
+  :: Provider
+  -> Text
+  -> ChatCompletionRequest
+  -> (Text -> IO ())
+  -> Bool
+  -> IO (Either Text StructuredOutputResult)
+streamStructuredOutputWithRequest = streamStructuredOutputWithRequestWithHooks emptyClientHooks
+
+streamStructuredOutputWithRequestWithHooks
+  :: ClientHooks
+  -> Provider
+  -> Text
+  -> ChatCompletionRequest
+  -> (Text -> IO ())
+  -> Bool
+  -> IO (Either Text StructuredOutputResult)
+streamStructuredOutputWithRequestWithHooks hooks provider apiKey reqBody onUpdate useBeta = do
   accumRef <- newIORef ""
-  result <- streamChatCompletionWithRequestWithHooks emptyClientHooks provider apiKey reqBody (handleChunk accumRef) useBeta
+  result <- streamChatCompletionWithRequestWithHooks hooks provider apiKey reqBody (handleChunk accumRef onUpdate) useBeta
   case result of
     Left err -> pure (Left (renderClientError err))
     Right _ -> do
@@ -44,7 +71,9 @@ runStructuredOutputDetailed provider apiKey modelOverride params messages respon
         , parsedJson = parsed
         })
 
-handleChunk :: IORef Text -> ChatCompletionStreamChunk -> IO ()
-handleChunk accumRef chunk =
-  forEachDeltaContent chunk $ \t ->
+handleChunk :: IORef Text -> (Text -> IO ()) -> ChatCompletionStreamChunk -> IO ()
+handleChunk accumRef onUpdate chunk =
+  forEachDeltaContent chunk $ \t -> do
     modifyIORef' accumRef (<> t)
+    updated <- readIORef accumRef
+    onUpdate updated
