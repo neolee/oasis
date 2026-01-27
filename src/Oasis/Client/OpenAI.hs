@@ -32,6 +32,7 @@ module Oasis.Client.OpenAI
   , buildResponsesUrl
   , buildCompletionsUrl
   , encodeRequestJsonWithFlatExtra
+  , encodeResponsesRequestJsonWithFlatExtra
   , renderClientError
   ) where
 
@@ -56,18 +57,33 @@ import Network.HTTP.Types.Status (statusCode)
 encodeRequestJsonWithFlatExtra :: ChatCompletionRequest -> Text
 encodeRequestJsonWithFlatExtra = TE.decodeUtf8Lenient . BL.toStrict . encodeChatCompletionRequestWithFlatExtra
 
+encodeResponsesRequestJsonWithFlatExtra :: ResponsesRequest -> Text
+encodeResponsesRequestJsonWithFlatExtra = TE.decodeUtf8Lenient . BL.toStrict . encodeResponsesRequestWithFlatExtra
+
 encodeChatCompletionRequestWithFlatExtra :: ChatCompletionRequest -> BL.ByteString
-encodeChatCompletionRequestWithFlatExtra req =
-  let baseVal = genericToJSON defaultOptions { omitNothingFields = True } req
+encodeChatCompletionRequestWithFlatExtra = encodeRequestWithFlatExtra chatExtra
+
+encodeResponsesRequestWithFlatExtra :: ResponsesRequest -> BL.ByteString
+encodeResponsesRequestWithFlatExtra = encodeRequestWithFlatExtra responsesExtra
+
+encodeRequestWithFlatExtra :: ToJSON a => (a -> Maybe Aeson.Value) -> a -> BL.ByteString
+encodeRequestWithFlatExtra getExtra req =
+  let baseVal = toJSON req
       baseObj = case baseVal of
         Object obj -> obj
         _ -> KeyMap.empty
-  in case extra_body req of
+  in case getExtra req of
       Just (Object objExtra) ->
         let baseNoExtra = KeyMap.delete (Key.fromText "extra_body") baseObj
             merged = KeyMap.union baseNoExtra objExtra
         in Aeson.encode (Object merged)
       _ -> Aeson.encode baseVal
+
+chatExtra :: ChatCompletionRequest -> Maybe Aeson.Value
+chatExtra ChatCompletionRequest{extra_body = extraBody} = extraBody
+
+responsesExtra :: ResponsesRequest -> Maybe Aeson.Value
+responsesExtra ResponsesRequest{extra_body = extraBody} = extraBody
 
 renderClientError :: ClientError -> Text
 renderClientError ClientError{status, statusText, requestId, errorResponse, rawBody} =
@@ -240,7 +256,7 @@ sendResponsesRawWithHooks hooks provider apiKey reqBody useBeta = do
 sendResponsesRawWithManager :: Manager -> ClientHooks -> Provider -> Text -> ResponsesRequest -> Bool -> IO (Either ClientError BL.ByteString)
 sendResponsesRawWithManager manager hooks provider apiKey reqBody useBeta = do
   let url = buildResponsesUrl (selectBaseUrl provider useBeta)
-  req <- buildJsonRequest url "POST" (encode reqBody) apiKey
+  req <- buildJsonRequest url "POST" (encodeResponsesRequestWithFlatExtra reqBody) apiKey
   executeRequestWithHooks hooks req manager
 
 decodeOrError :: FromJSON a => BL.ByteString -> Either ClientError a

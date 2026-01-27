@@ -8,6 +8,7 @@ module Oasis.Client.OpenAI.Param
   , extraBodyFromEnableThinking
   , mergeExtraBodyList
   , lookupEnableThinking
+  , applyExtraBodyToChatParams
   , applyChatParams
   ) where
 
@@ -167,3 +168,8 @@ lookupEnableThinking (Aeson.Object obj) =
     Just (Aeson.Bool b) -> Just b
     _ -> Nothing
 lookupEnableThinking _ = Nothing
+
+applyExtraBodyToChatParams :: Maybe Aeson.Value -> ChatParams -> ChatParams
+applyExtraBodyToChatParams extra params =
+  let merged = mergeExtraBodyList (catMaybes [paramExtraBody params, extra])
+  in params { paramExtraBody = merged }

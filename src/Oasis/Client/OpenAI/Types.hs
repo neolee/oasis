@@ -245,6 +245,7 @@ data ResponsesRequest = ResponsesRequest
   , top_p :: Maybe Double
   , user :: Maybe Text
   , response_format :: Maybe Value
+  , extra_body :: Maybe Aeson.Value
   } deriving (Show, Eq, Generic)
 
 instance ToJSON ResponsesRequest where

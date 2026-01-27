@@ -3,6 +3,7 @@ module Oasis.Runner.Responses
   , ResponsesParams(..)
   , emptyResponsesParams
   , parseResponsesParams
+  , applyExtraBodyToResponsesParams
   , buildResponsesRequest
   , runResponses
   , runResponsesRequest
@@ -12,13 +13,14 @@ import Relude
 import Oasis.Types
 import Oasis.Client.OpenAI
   ( sendResponsesRaw
+  , encodeResponsesRequestJsonWithFlatExtra
   )
 import Oasis.Client.OpenAI.Types
   ( ResponsesRequest(..)
   , ResponsesResponse(..)
   )
 import Oasis.Model (resolveModelId)
-import Oasis.Client.OpenAI.Param (parseExtraArgs)
+import Oasis.Client.OpenAI.Param (parseExtraArgs, mergeExtraBodyList)
 import Oasis.Runner.Result (encodeRequestJson, buildRequestResponse)
 import Data.Aeson (FromJSON(..), ToJSON(..), (.:?), (.=), withObject)
 import Data.Aeson.Types (Parser)
@@ -34,6 +36,7 @@ data ResponsesParams = ResponsesParams
   , paramMaxOutputTokens :: Maybe Int
   , paramUser           :: Maybe Text
   , paramResponseFormat :: Maybe Aeson.Value
+  , paramExtraBody      :: Maybe Aeson.Value
   } deriving (Show, Eq, Generic)
 
 instance FromJSON ResponsesParams where
@@ -45,6 +48,7 @@ instance FromJSON ResponsesParams where
     paramMaxOutputTokens <- get "max_output_tokens" "maxOutputTokens"
     paramUser <- get "user" "user"
     paramResponseFormat <- get "response_format" "responseFormat"
+    paramExtraBody <- get "extra_body" "extraBody"
     pure ResponsesParams{..}
 
 instance ToJSON ResponsesParams where
@@ -54,10 +58,16 @@ instance ToJSON ResponsesParams where
     , ("max_output_tokens" .=) <$> paramMaxOutputTokens
     , ("user" .=) <$> paramUser
     , ("response_format" .=) <$> paramResponseFormat
+    , ("extra_body" .=) <$> paramExtraBody
     ]
 
 emptyResponsesParams :: ResponsesParams
-emptyResponsesParams = ResponsesParams Nothing Nothing Nothing Nothing Nothing
+emptyResponsesParams = ResponsesParams Nothing Nothing Nothing Nothing Nothing Nothing
+
+applyExtraBodyToResponsesParams :: Maybe Aeson.Value -> ResponsesParams -> ResponsesParams
+applyExtraBodyToResponsesParams extra params =
+  let merged = mergeExtraBodyList (catMaybes [paramExtraBody params, extra])
+  in params { paramExtraBody = merged }
 
 parseResponsesParams :: Maybe Text -> Either Text ResponsesParams
 parseResponsesParams = parseExtraArgs "Responses" emptyResponsesParams
@@ -79,10 +89,11 @@ buildResponsesRequest modelId params inputText =
     , top_p = paramTopP params
     , user = paramUser params
     , response_format = paramResponseFormat params
+    , extra_body = paramExtraBody params
     }
 
 runResponsesRequest :: Provider -> Text -> ResponsesRequest -> Bool -> IO (Either Text ResponsesResult)
 runResponsesRequest provider apiKey reqBody useBeta = do
-  let reqJsonText = encodeRequestJson reqBody
+  let reqJsonText = encodeResponsesRequestJsonWithFlatExtra reqBody
   resp <- sendResponsesRaw provider apiKey reqBody useBeta
   pure (buildRequestResponse reqJsonText resp)

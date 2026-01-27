@@ -15,6 +15,7 @@ import Oasis.Client.OpenAI
   ( buildResponsesUrl
   , buildModelsUrl
   , buildEmbeddingsUrl
+  , encodeResponsesRequestJsonWithFlatExtra
   )
 import Oasis.Client.OpenAI.Types
   ( ResponsesRequest(..)
@@ -48,12 +49,17 @@ import Oasis.Tui.Render.Output
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
 import Oasis.Types (Config(..), Provider(..), RequestResponse(..))
 import Oasis.Output.Common (extractResponsesAssistantContent)
+import Oasis.Client.OpenAI.Param (ChatParams(..), extraBodyFromEnableThinking, mergeExtraBodyList)
 
 runResponsesAction :: Text -> EventM Name AppState ()
 runResponsesAction inputText =
   runProviderAction "Running responses runner..." $ \st provider apiKey -> do
     let modelOverride = selectedModel st
-        params = Responses.emptyResponsesParams
+        ChatParams{paramExtraBody, paramEnableThinking} = chatParams st
+        enableExtra = extraBodyFromEnableThinking paramEnableThinking
+        mergedExtra = mergeExtraBodyList (catMaybes [paramExtraBody, enableExtra])
+        params0 = Responses.emptyResponsesParams
+        params = Responses.applyExtraBodyToResponsesParams mergedExtra params0
         providerName = fromMaybe "-" (selectedProvider st)
         useBeta = betaUrlSetting st
         modelId = resolveModelId provider modelOverride
@@ -66,7 +72,7 @@ runResponsesAction inputText =
           if stream reqBody' == Just True
             then Left "responses runner requires stream=false"
             else Right $ do
-              let reqCtx = buildRequestContext (buildResponsesUrl baseUrl) reqBody'
+              let reqCtx = RequestContext (buildResponsesUrl baseUrl) (encodeResponsesRequestJsonWithFlatExtra reqBody')
               result <- Responses.runResponsesRequest provider apiKey reqBody' useBeta
               let (statusMsg, outputMsg) =
                     case result of
