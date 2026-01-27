@@ -10,7 +10,6 @@ module Oasis.Runner.Chat
 
 import Relude
 import Oasis.Types
-import Oasis.Types (messageContentText)
 import Oasis.Client.OpenAI
   ( sendChatCompletionRawWithHooks
   , streamChatCompletionWithRequestWithHooks

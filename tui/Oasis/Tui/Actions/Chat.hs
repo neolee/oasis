@@ -154,9 +154,9 @@ runHooksAction prompt =
                   reqCtx = buildRequestContext (buildChatUrl baseUrl) reqBody'
                   hooks' = withMessageListHooks chan reqMessages emptyClientHooks
                   logger = HooksLogger
-                    { onRequestLog = logRequestWith (\t -> writeBChan chan (StructuredStreaming t))
-                    , onResponseLog = logResponseWith (\t -> writeBChan chan (StructuredStreaming t))
-                    , onErrorLog = \err -> writeBChan chan (StructuredStreaming (renderClientError err))
+                    { onRequestLog = logRequestWith (writeBChan chan . StructuredStreaming)
+                    , onResponseLog = logResponseWith (writeBChan chan . StructuredStreaming)
+                    , onErrorLog = writeBChan chan . StructuredStreaming . renderClientError
                     }
               result <- runHooksRequestWithLogger logger provider apiKey reqBody' useBeta
               let (statusMsg, outputMsg) =
@@ -208,7 +208,7 @@ runStructuredAction responseFormat runnerLabel =
                 provider
                 apiKey
                 reqBody'
-                (\rawText -> writeBChan chan (StructuredStreaming (streamingOutput rawText)))
+                (writeBChan chan . StructuredStreaming . streamingOutput)
                 useBeta
               let (statusMsg, outputMsg) =
                     case result of

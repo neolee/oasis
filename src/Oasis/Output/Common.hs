@@ -66,9 +66,7 @@ extractResponsesAssistantContent ResponsesResponse{output_text, output} =
             textVal = lookupText "text" obj
         in case mType of
             Just "message" ->
-              if mRole == Just "assistant"
-                then contentVal >>= extractFromOutput
-                else contentVal >>= extractFromOutput
+              contentVal >>= extractFromOutput
             Just "output_text" -> textVal
             _ ->
               case contentVal of

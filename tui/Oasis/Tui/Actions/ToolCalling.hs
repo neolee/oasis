@@ -10,7 +10,7 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text.Encoding as TE
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.KeyMap as KM
-import Data.Aeson (Value, decode)
+import Data.Aeson (Value, decode, eitherDecode)
 import Data.Time (getZonedTime, formatTime, defaultTimeLocale)
 import Oasis.Client.OpenAI
   ( buildChatUrl
@@ -56,7 +56,6 @@ import Oasis.Runner.ToolCalling
   , runToolCallingWithRequestWithHooks
   , runToolCallingWithRequestWithHook
   )
-import Data.Aeson (eitherDecode)
 
 runToolCallingAction :: EventM Name AppState ()
 runToolCallingAction =

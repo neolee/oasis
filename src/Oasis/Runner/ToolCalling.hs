@@ -12,16 +12,12 @@ module Oasis.Runner.ToolCalling
 import Relude
 import Oasis.Types (Provider, Message, Tool, messageContentText)
 import qualified Oasis.Types as OT
+import Oasis.Client.OpenAI.Types ( ChatCompletionRequest(..), defaultChatRequest)
 import Oasis.Client.OpenAI
   ( requestChat
   , sendChatCompletionRawWithHooks
   )
-import Oasis.Client.OpenAI.Hooks (ClientHooks(..), emptyClientHooks)
-import Oasis.Client.OpenAI.Types
-  ( ChatCompletionRequest(..)
-  , defaultChatRequest
-  )
-import Oasis.Client.OpenAI.Hooks (RequestHook(..), emptyRequestHook)
+import Oasis.Client.OpenAI.Hooks (RequestHook(..), emptyRequestHook, ClientHooks(..), emptyClientHooks)
 import qualified Oasis.Chat.Message as Msg
 import Oasis.Model (resolveModelId)
 import Oasis.Client.OpenAI.Param (ChatParams, applyChatParams)

@@ -23,7 +23,7 @@ import Oasis.Client.OpenAI.Types
   , EmbeddingResponse(..)
   , EmbeddingData(..)
   )
-import Oasis.Model (resolveModelId, resolveEmbeddingModelId)
+import Oasis.Model (resolveModelId, resolveEmbeddingModelId, selectBaseUrl)
 import Oasis.Runner.GetModels (runGetModels)
 import qualified Oasis.Runner.Embeddings as Embeddings
 import qualified Oasis.Runner.Responses as Responses
@@ -48,7 +48,6 @@ import Oasis.Tui.Render.Output
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..))
 import Oasis.Types (Config(..), Provider(..), RequestResponse(..))
 import Oasis.Output.Common (extractResponsesAssistantContent)
-import Oasis.Model (selectBaseUrl)
 
 runResponsesAction :: Text -> EventM Name AppState ()
 runResponsesAction inputText =
