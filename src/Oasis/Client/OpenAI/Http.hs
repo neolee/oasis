@@ -28,6 +28,12 @@ import Network.HTTP.Types.Header (HeaderName, ResponseHeaders)
 import Network.HTTP.Types.Method (Method)
 import Network.HTTP.Types.Status (Status, statusCode, statusMessage)
 
+responseTimeoutSeconds :: Int
+responseTimeoutSeconds = 60
+
+responseTimeoutSetting :: ResponseTimeout
+responseTimeoutSetting = responseTimeoutMicro (responseTimeoutSeconds * 1000000)
+
 buildChatUrl :: Text -> Text
 buildChatUrl baseUrl = buildEndpointUrl baseUrl "/chat/completions"
 
@@ -64,6 +70,7 @@ buildRequest url method reqBody headers = do
     { method = method
     , requestBody = reqBody
     , requestHeaders = headers
+    , responseTimeout = responseTimeoutSetting
     }
 
 executeRequest :: Request -> Manager -> IO (Either ClientError BL.ByteString)
