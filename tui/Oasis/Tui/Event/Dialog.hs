@@ -131,33 +131,14 @@ cancelDebugRequest :: EventM Name AppState ()
 cancelDebugRequest =
   do
     st <- get
-    case debugPendingAction st of
-      Nothing ->
-        modify (\s -> s
-          { debugDialogOpen = False
-          , debugRequestError = Nothing
-          , debugRequestInfo = Nothing
-          , debugPendingAction = Nothing
-          , activeList = RunnerList
-          , statusText = "Debug request cancelled."
-          })
-      Just handler ->
-        case handler "" of
-          Left err ->
-            modify (\s -> s
-              { debugRequestError = Just err
-              , statusText = "Debug request cancelled."
-              })
-          Right action -> do
-            modify (\s -> s
-              { debugDialogOpen = False
-              , debugRequestError = Nothing
-              , debugRequestInfo = Nothing
-              , debugPendingAction = Nothing
-              , activeList = RunnerList
-              , statusText = "Debug request cancelled."
-              })
-            runInBackground st action
+    modify (\s -> s
+      { debugDialogOpen = False
+      , debugRequestError = Nothing
+      , debugRequestInfo = Nothing
+      , debugPendingAction = Nothing
+      , activeList = debugDialogReturnFocus st
+      , statusText = "Debug request cancelled."
+      })
 
 restoreDebugRequest :: EventM Name AppState ()
 restoreDebugRequest = do
@@ -425,7 +406,7 @@ submitParamDialog = do
         Right extraBodyVal ->
           case lookupEnableThinking =<< extraBodyVal of
             Just v | v /= enableThinkingValue ->
-              modify (\s -> s { paramDialogError = Just "enable-thinking 参数冲突：extra_body.enable_thinking 与复选框不一致" })
+              modify (\s -> s { paramDialogError = Just "Conflict：extra_body.enable_thinking not match checkbox state" })
             _ -> do
               let params0 = chatParams st
                   params1 = params0
