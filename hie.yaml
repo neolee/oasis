@@ -1,13 +1,12 @@
 cradle:
-  cabal:
-    - path: "src"
-      component: "lib:oasis"
-
-    - path: "cli"
+  stack:
+    - path: "./src/"
+      component: "oasis:lib"
+    - path: "./cli/"
       component: "oasis:exe:oasis-cli"
-
-    - path: "tui"
+    - path: "./tui/"
       component: "oasis:exe:oasis-tui"
-
-    - path: "tools/VtyWidthTable/Main.hs"
+    - path: "./tools/VtyWidthTable/"
       component: "oasis:exe:vty-width-table"
+    - path: "./"
+      component: "oasis:lib"
