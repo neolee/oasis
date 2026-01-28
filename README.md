@@ -52,28 +52,31 @@ The library (`./src`) is layered to keep protocol logic pure and keep UI/printin
 
 **Typical use**: load config, resolve provider/model, then call a client or runner using those settings.
 
-### Usage Scenarios 
+### Usage Scenarios
 
-#### 1) Resolve a provider by alias and list preset models
+#### 1. Resolve a provider by alias and list preset models
 
 ```hs
 import Oasis.Config (findConfig, loadConfig, resolveProvider)
 import Oasis.Types (Config(..), Provider(..))
 import qualified Data.Map.Strict as M
 
--- Load config and resolve alias
-Just path <- findConfig
-Right cfg <- loadConfig path
-Just (provider, apiKey) <- resolveProvider cfg "deepseek"
+main :: IO ()
+main = do
+  -- Load config and resolve alias
+  Just path <- findConfig
+  Right cfg <- loadConfig path
+  Just (provider, apiKey) <- resolveProvider cfg "deepseek"
 
--- Available provider names (before alias expansion)
-let providerNames = M.keys (providers cfg)
+  -- Available provider names (before alias expansion)
+  let providerNames = M.keys (providers cfg)
 
--- Preset model list (from providers.toml)
-let presetModels = [chat_model_id provider, coder_model_id provider, reasoner_model_id provider]
+  -- Preset model list (from providers.toml)
+  let presetModels = [chat_model_id provider, coder_model_id provider, reasoner_model_id provider]
+  pure ()
 ```
 
-#### 2) Fetch available models (remote API)
+#### 2. Fetch available models (remote API)
 
 ```hs
 import Oasis.Runner.GetModels (runGetModels)
@@ -86,16 +89,17 @@ result <- runGetModels provider apiKey False
 
 Implementation references: [src/Oasis/Runner/GetModels.hs](src/Oasis/Runner/GetModels.hs) and CLI dispatch in [cli/Main.hs](cli/Main.hs).
 
-#### 3) Build a request from prompt and call LLM (non-streaming)
+#### 3. Build a request from prompt and call LLM (non-streaming)
 
 ```hs
 import Oasis.Runner.Basic (runBasic)
 import Oasis.Client.OpenAI.Param (emptyChatParams)
 
+let modelOverride = Nothing
 result <- runBasic provider apiKey modelOverride emptyChatParams "Hi, how are you?" False
 ```
 
-#### 4) Same as above, but streaming (SSE)
+#### 4. Same as above, but streaming (SSE)
 
 ```hs
 import Oasis.Runner.Chat (streamChatOnce, ChatStreamEvent(..))
@@ -107,20 +111,22 @@ let onEvent ev = case ev of
   ChatThinking t -> putStrLn ("[thinking] " <> toString t)
   ChatAnswer t -> putStrLn (toString t)
 
+let modelOverride = Nothing
 _ <- streamChatOnce provider apiKey modelOverride emptyChatParams messages onEvent False
 ```
 
 Full implementation: [src/Oasis/Runner/Chat.hs](src/Oasis/Runner/Chat.hs).
 
-#### 5) Get embeddings from input text
+#### 5. Get embeddings from input text
 
 ```hs
 import Oasis.Runner.Embeddings (runEmbeddings, emptyEmbeddingParams)
 
+let modelOverride = "text-embedding-v3"
 result <- runEmbeddings provider apiKey modelOverride emptyEmbeddingParams "Hello world"
 ```
 
-#### 6) Structured output with a schema
+#### 6. Structured output with a schema
 
 ```hs
 import Oasis.Runner.StructuredOutput (runStructuredOutput)
@@ -148,12 +154,13 @@ let responseFormat = Aeson.object
       ]
   ]
 
+let modelOverride = Nothing
 result <- runStructuredOutput provider apiKey modelOverride emptyChatParams messages responseFormat False
 ```
 
 Reference example: [src/Oasis/Demo/StructuredOutput.hs](src/Oasis/Demo/StructuredOutput.hs).
 
-#### 7) Tool Calling
+#### 7. Tool Calling
 
 ```hs
 import Oasis.Runner.ToolCalling
@@ -169,12 +176,13 @@ let executeToolCall tc = do
   -- Call your real tool here
   pure (Right "tool result")
 
+let modelOverride = Nothing
 result <- runToolCalling provider apiKey modelOverride emptyChatParams input executeToolCall False
 ```
 
 Tool and message examples: [src/Oasis/Demo/ToolCalling.hs](src/Oasis/Demo/ToolCalling.hs).
 
-#### 8) Partial mode / Prefix completion / FIM completion
+#### 8. Partial mode / Prefix completion / FIM completion
 
 ```hs
 import Oasis.Runner.PartialMode (runPartialMode)
@@ -183,6 +191,7 @@ import Oasis.Runner.FIMCompletion (runFIMCompletion)
 import Oasis.Client.OpenAI.Param (emptyChatParams)
 import Oasis.Demo.Completions (partialModeMessages, prefixCompletionMessages, fimCompletionRequest)
 
+let modelOverride = Nothing
 _ <- runPartialMode provider apiKey modelOverride emptyChatParams partialModeMessages False
 _ <- runPrefixCompletion provider apiKey modelOverride emptyChatParams prefixCompletionMessages False
 _ <- runFIMCompletion provider apiKey modelOverride fimCompletionRequest False
@@ -190,7 +199,7 @@ _ <- runFIMCompletion provider apiKey modelOverride fimCompletionRequest False
 
 Reference examples: [src/Oasis/Demo/Completions.hs](src/Oasis/Demo/Completions.hs).
 
-#### 9) Use hooks to intercept LLM requests (log request/response)
+#### 9. Use hooks to intercept LLM requests (log request/response)
 
 ```hs
 import Oasis.Runner.Hooks (runHooks, HooksResult(..))
@@ -241,7 +250,31 @@ oasis-cli <provider> <model|default|-> <runner> [runner args...]
 **Common options**
 
 - `--beta`: enable beta features/APIs.
-- `--extra-args <json>`: pass OpenAI-compatible parameters (snake_case).
+- `--params <json>`: pass OpenAI-compatible parameters (snake_case).
+- `--extra-body <json>`: merge an extra JSON object into the request body.
+- `--enable-thinking`: convenience flag for `extra_body.enable_thinking = true`.
+
+> The `--params` vs `--extra-body` options are different.
+>
+> - `--params` is parsed into structured parameters and mapped onto the request fields (e.g., `temperature`, `top_p`, `max_completion_tokens`, `stop`, etc.).
+> - `--extra-body` is a raw JSON object that is merged into the final request body (useful for provider-specific or undocumented fields).
+> - If both are provided, the final request uses `--params` for known fields, and `--extra-body` for extra fields; overlapping keys are resolved by the merge logic in `extra_body` (later inputs win).
+>
+> The following fields are supported in `--params`:
+>
+> - `temperature`
+> - `top_p`
+> - `max_completion_tokens`
+> - `stop` (string or list of strings)
+> - `presence_penalty`
+> - `frequency_penalty`
+> - `seed`
+> - `logit_bias`
+> - `user`
+> - `service_tier`
+> - `reasoning_effort`
+> - `stream_options`
+>
 
 **Runner-specific notes**
 
@@ -254,10 +287,22 @@ oasis-cli <provider> <model|default|-> <runner> [runner args...]
 
 ### Examples
 
-Basic runner with extra args:
+Basic runner with params:
 
 ```
-oasis-cli deepseek - basic --extra-args '{"temperature":0.2,"top_p":0.9,"max_completion_tokens":64}' 你好
+oasis-cli deepseek - basic --params '{"temperature":0.2,"top_p":0.9,"max_completion_tokens":64}' 你好
+```
+
+Basic runner with extra_body:
+
+```
+oasis-cli qwen - basic --extra-body '{"enable_thinking":true}' 你好
+```
+
+Basic runner with params and extra_body:
+
+```
+oasis-cli -- moonshot - basic 你好 --params '{"max_completion_tokens":64}' --extra-body '{"thinking": {"type": "disabled"}}'
 ```
 
 Basic runner with raw messages:
@@ -275,13 +320,13 @@ oasis-cli qwen text-embedding-v3 embeddings "Hello embeddings"
 Hooks:
 
 ```
-oasis-cli qwen - hooks "Hello hooks"
+oasis-cli qwen - hooks "Hello"
 ```
 
 Responses:
 
 ```
-oasis-cli qwen - responses "Hello responses"
+oasis-cli qwen - responses "Introduce yourself" --enable-thinking
 ```
 
 ---
@@ -317,6 +362,15 @@ Press `d` to toggle Debug Mode. When enabled, each request opens a debug dialog 
 - Restore the original payload or copy the current payload.
 
 Use Debug Mode to verify request shape, test parameters, and reproduce issues.
+
+### Chat Params
+
+Press `a` in the main pane to open the Chat Params dialog. Besides temperature/top_p/stop, it includes:
+
+- **enable_thinking**: toggles `extra_body.enable_thinking = true`.
+- **extra_body (json)**: an object merged into the request body. It must be a JSON object.
+
+If `extra_body` already contains `enable_thinking`, its value must match the checkbox; otherwise the dialog reports a conflict.
 
 ---
 

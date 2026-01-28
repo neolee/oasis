@@ -100,7 +100,7 @@ main = do
                 Just (p, key) -> dispatchRunner alias p key modelOverride runnerName runnerArgs
     _ -> do
       putTextLn "Usage: oasis-cli <provider> <model|default|-> <runner> [runner args...]"
-      putTextLn "Common options: [--beta] [--extra-args <json>] [--extra-body <json>] [--enable-thinking]"
+      putTextLn "Common options: [--beta] [--params <json>] [--extra-body <json>] [--enable-thinking]"
       putTextLn "Runners: basic, chat, models, structured-json, structured-schema, tool-calling, embeddings, hooks, responses, partial-mode, prefix-completion, fim-completion"
       putTextLn ""
       putTextLn "Runner specific args:"
@@ -122,24 +122,24 @@ normalizeModel t
   | T.null (T.strip t) = Nothing
   | otherwise = Just t
 
-extractExtraArgs :: [String] -> Either Text (Maybe Text, [String])
-extractExtraArgs = go Nothing []
+extractParams :: [String] -> Either Text (Maybe Text, [String])
+extractParams = go Nothing []
   where
     go found acc = \case
       [] -> Right (found, reverse acc)
       (x:xs)
-        | x == "--extra-args" ->
+        | x == "--params" ->
             case xs of
-              [] -> Left "Missing value for --extra-args"
+              [] -> Left "Missing value for --params"
               (v:rest) ->
                 if isJust found
-                  then Left "--extra-args specified more than once"
+                  then Left "--params specified more than once"
                   else go (Just (toText v)) acc rest
-        | "--extra-args=" `L.isPrefixOf` x ->
-            let prefix = "--extra-args=" :: String
+        | "--params=" `L.isPrefixOf` x ->
+            let prefix = "--params=" :: String
                 v = drop (length prefix) x
             in if isJust found
-              then Left "--extra-args specified more than once"
+              then Left "--params specified more than once"
               else go (Just (toText v)) acc xs
         | otherwise -> go found (x:acc) xs
 
@@ -208,12 +208,12 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
       if apiKey /= ""
         then putTextLn "API Key: Found (hidden)"
         else putTextLn "API Key: NOT FOUND (Check environment variables)"
-      case extractExtraArgs runnerArgs' of
+      case extractParams runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
-        Right (extraArgsText, restArgs) -> do
-          params0 <- case parseChatParams extraArgsText of
+        Right (paramsText, restArgs) -> do
+          params0 <- case parseChatParams paramsText of
             Left err -> do
               putTextLn err
               exitFailure
@@ -275,12 +275,12 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                                   sections = requestSections ctx <> responseSections result <> assistantSection
                               putTextLn (renderSectionsText sections)
     "chat" -> do
-      case extractExtraArgs runnerArgs' of
+      case extractParams runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
-        Right (extraArgsText, restArgs) -> do
-          params0 <- case parseChatParams extraArgsText of
+        Right (paramsText, restArgs) -> do
+          params0 <- case parseChatParams paramsText of
             Left err -> do
               putTextLn err
               exitFailure
@@ -320,12 +320,12 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
               sections = requestSections ctx <> responseSections result
           putTextLn (renderSectionsText sections)
     "structured-json" -> do
-      case extractExtraArgs runnerArgs' of
+      case extractParams runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
-        Right (extraArgsText, restArgs) -> do
-          params0 <- case parseChatParams extraArgsText of
+        Right (paramsText, restArgs) -> do
+          params0 <- case parseChatParams paramsText of
             Left err -> do
               putTextLn err
               exitFailure
@@ -354,12 +354,12 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                         Right pretty -> jsonSection SectionResponse "Parsed JSON" pretty
                   putTextLn (renderSectionsText [rawSection, parsedSection])
     "structured-schema" -> do
-      case extractExtraArgs runnerArgs' of
+      case extractParams runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
-        Right (extraArgsText, restArgs) -> do
-          params0 <- case parseChatParams extraArgsText of
+        Right (paramsText, restArgs) -> do
+          params0 <- case parseChatParams paramsText of
             Left err -> do
               putTextLn err
               exitFailure
@@ -388,12 +388,12 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                         Right pretty -> jsonSection SectionResponse "Parsed JSON" pretty
                   putTextLn (renderSectionsText [rawSection, parsedSection])
     "tool-calling" -> do
-      case extractExtraArgs runnerArgs' of
+      case extractParams runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
-        Right (extraArgsText, restArgs) -> do
-          params0 <- case parseChatParams extraArgsText of
+        Right (paramsText, restArgs) -> do
+          params0 <- case parseChatParams paramsText of
             Left err -> do
               putTextLn err
               exitFailure
@@ -446,12 +446,12 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                           ]
                   putTextLn (renderSectionsText sections)
     "embeddings" -> do
-      case extractExtraArgs runnerArgs' of
+      case extractParams runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
-        Right (extraArgsText, restArgs) -> do
-          params <- case parseEmbeddingParams extraArgsText of
+        Right (paramsText, restArgs) -> do
+          params <- case parseEmbeddingParams paramsText of
             Left err -> do
               putTextLn err
               exitFailure
@@ -487,12 +487,12 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                       sections = requestSections ctx <> responseSections result <> summarySection
                   putTextLn (renderSectionsText sections)
     "hooks" -> do
-      case extractExtraArgs runnerArgs' of
+      case extractParams runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
-        Right (extraArgsText, restArgs) -> do
-          params0 <- case parseChatParams extraArgsText of
+        Right (paramsText, restArgs) -> do
+          params0 <- case parseChatParams paramsText of
             Left err -> do
               putTextLn err
               exitFailure
@@ -525,12 +525,12 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                                ]
                       putTextLn (renderSectionsText sections)
     "responses" -> do
-      case extractExtraArgs runnerArgs' of
+      case extractParams runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
-        Right (extraArgsText, restArgs) -> do
-          params <- case parseResponsesParams extraArgsText of
+        Right (paramsText, restArgs) -> do
+          params <- case parseResponsesParams paramsText of
             Left err -> do
               putTextLn err
               exitFailure
@@ -562,12 +562,12 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                           sections = requestSections ctx <> responseSections result <> assistantSection
                       putTextLn (renderSectionsText sections)
     "partial-mode" -> do
-      case extractExtraArgs runnerArgs' of
+      case extractParams runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
-        Right (extraArgsText, restArgs) -> do
-          params0 <- case parseChatParams extraArgsText of
+        Right (paramsText, restArgs) -> do
+          params0 <- case parseChatParams paramsText of
             Left err -> do
               putTextLn err
               exitFailure
@@ -597,12 +597,12 @@ dispatchRunner alias provider apiKey modelOverride runnerName runnerArgs =
                       sections = requestSections ctx <> responseSections result <> assistantSection
                   putTextLn (renderSectionsText sections)
     "prefix-completion" -> do
-      case extractExtraArgs runnerArgs' of
+      case extractParams runnerArgs' of
         Left err -> do
           putTextLn err
           exitFailure
-        Right (extraArgsText, restArgs) -> do
-          params0 <- case parseChatParams extraArgsText of
+        Right (paramsText, restArgs) -> do
+          params0 <- case parseChatParams paramsText of
             Left err -> do
               putTextLn err
               exitFailure

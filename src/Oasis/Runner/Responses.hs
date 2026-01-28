@@ -20,7 +20,7 @@ import Oasis.Client.OpenAI.Types
   , ResponsesResponse(..)
   )
 import Oasis.Model (resolveModelId)
-import Oasis.Client.OpenAI.Param (parseExtraArgs, mergeExtraBodyList)
+import Oasis.Client.OpenAI.Param (parseParamsJson, mergeExtraBodyList)
 import Oasis.Runner.Result (encodeRequestJson, buildRequestResponse)
 import Data.Aeson (FromJSON(..), ToJSON(..), (.:?), (.=), withObject)
 import Data.Aeson.Types (Parser)
@@ -70,7 +70,7 @@ applyExtraBodyToResponsesParams extra params =
   in params { paramExtraBody = merged }
 
 parseResponsesParams :: Maybe Text -> Either Text ResponsesParams
-parseResponsesParams = parseExtraArgs "Responses" emptyResponsesParams
+parseResponsesParams = parseParamsJson "Responses" emptyResponsesParams
 
 runResponses :: Provider -> Text -> Maybe Text -> ResponsesParams -> Text -> Bool -> IO (Either Text ResponsesResult)
 runResponses provider apiKey modelOverride params inputText useBeta = do

@@ -18,7 +18,7 @@ import Oasis.Client.OpenAI.Types
   , EmbeddingResponse(..)
   )
 import Oasis.Model (resolveEmbeddingModelId)
-import Oasis.Client.OpenAI.Param (parseExtraArgs)
+import Oasis.Client.OpenAI.Param (parseParamsJson)
 import Oasis.Runner.Result (encodeRequestJson, buildRequestResponse)
 import Data.Aeson (FromJSON(..), ToJSON(..), (.:?), (.=), withObject)
 import Data.Aeson.Types (Parser)
@@ -54,7 +54,7 @@ emptyEmbeddingParams :: EmbeddingParams
 emptyEmbeddingParams = EmbeddingParams Nothing Nothing Nothing
 
 parseEmbeddingParams :: Maybe Text -> Either Text EmbeddingParams
-parseEmbeddingParams = parseExtraArgs "Embeddings" emptyEmbeddingParams
+parseEmbeddingParams = parseParamsJson "Embeddings" emptyEmbeddingParams
 
 runEmbeddings :: Provider -> Text -> Maybe Text -> EmbeddingParams -> Text -> Bool -> IO (Either Text EmbeddingResult)
 runEmbeddings provider apiKey modelOverride params inputText useBeta = do

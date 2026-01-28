@@ -2,7 +2,7 @@ module Oasis.Client.OpenAI.Param
   ( ChatParams(..)
   , emptyChatParams
   , parseChatParams
-  , parseExtraArgs
+  , parseParamsJson
   , parseExtraBodyText
   , decodeExtraBodyValue
   , extraBodyFromEnableThinking
@@ -95,16 +95,16 @@ emptyChatParams = ChatParams
   False
 
 parseChatParams :: Maybe Text -> Either Text ChatParams
-parseChatParams = parseExtraArgs "Chat" emptyChatParams
+parseChatParams = parseParamsJson "Chat" emptyChatParams
 
-parseExtraArgs :: FromJSON a => Text -> a -> Maybe Text -> Either Text a
-parseExtraArgs label emptyValue = \case
+parseParamsJson :: FromJSON a => Text -> a -> Maybe Text -> Either Text a
+parseParamsJson label emptyValue = \case
   Nothing -> Right emptyValue
   Just raw
     | T.null (T.strip raw) -> Right emptyValue
     | otherwise ->
         case Aeson.eitherDecode (BL.fromStrict (TE.encodeUtf8 raw)) of
-          Left err -> Left (label <> ": Invalid --extra-args JSON: " <> toText err)
+          Left err -> Left (label <> ": Invalid --params JSON: " <> toText err)
           Right params -> Right params
 
 applyChatParams :: ChatParams -> ChatCompletionRequest -> ChatCompletionRequest
