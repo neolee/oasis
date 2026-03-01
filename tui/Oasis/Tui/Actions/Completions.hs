@@ -36,10 +36,11 @@ import Oasis.Tui.Actions.Common
   , withMessageListHooks
   )
 import Oasis.Tui.Render.Output
-  ( mdConcat
+  ( Output
   , mdCodeSection
   , mdJsonSection
   , mdTextSection
+  , outputConcat
   , requestSections
   , renderErrorOutput
   )
@@ -89,7 +90,7 @@ runPartialModeAction =
                         ("Partial-mode runner failed.", renderErrorOutput reqCtx err)
                       Right RequestResponse{responseJson, response} ->
                         let assistantText = fromMaybe "No assistant message returned." (response >>= extractAssistantContent)
-                            output = mdConcat
+                            output = outputConcat
                               ( requestSections reqCtx
                                 <> [ mdJsonSection "Response" responseJson
                                    , mdCodeSection "Assistant" "text" assistantText
@@ -130,7 +131,7 @@ runPrefixCompletionAction =
                         ("Prefix-completion runner failed.", renderErrorOutput reqCtx err)
                       Right RequestResponse{responseJson, response} ->
                         let assistantText = fromMaybe "No assistant message returned." (response >>= extractAssistantContent)
-                            output = mdConcat
+                            output = outputConcat
                               ( requestSections reqCtx
                                 <> [ mdJsonSection "Response" responseJson
                                    , mdCodeSection "Assistant" "text" assistantText
@@ -169,7 +170,7 @@ runFimCompletionAction =
                               case response of
                                 Just CompletionResponse{choices = (CompletionChoice{text}:_)} -> text
                                 _ -> "No completion choices returned."
-                            output = mdConcat
+                            output = outputConcat
                               ( requestSections reqCtx
                                 <> [ mdJsonSection "Response" responseJson
                                    , mdCodeSection "Completion" "text" completionText

@@ -14,6 +14,7 @@ import qualified Brick.Widgets.Edit as E
 import qualified Data.Text as T
 import Oasis.Tui.Keymap (keyMain, keyModel, keyProvider, keyRunner, keyHistory, tipsFor)
 import Oasis.Tui.Render.Markdown (renderMarkdown)
+import Oasis.Tui.Render.Output (OutputBlock(..), Output)
 import Oasis.Tui.Render.MessageList (renderMessageList)
 import Oasis.Tui.State (AppState(..), Name(..), ParamField(..), DebugRequestInfo(..))
 import Oasis.Tui.Registry (runnerRequiresPrompt)
@@ -134,7 +135,7 @@ drawUI st =
                   ]
                   <> runnerPromptLines st
                   <> [ padTop (Pad 1) hBorder
-                     , viewport MainViewport Both (renderMarkdown MainViewport (outputText st))
+                     , viewport MainViewport Both (renderOutputContent MainViewport (outputContent st))
                      ]
                 )
 
@@ -322,3 +323,13 @@ focusBorder isActive =
   if isActive
     then withAttr (attrName "focusBorder") . overrideAttr borderAttr (attrName "focusBorder")
     else id
+-- | Render an 'OutputBlock': Markdown blocks go through 'renderMarkdown';
+-- plain-text blocks are rendered verbatim, line by line.
+renderOutputBlock :: (Ord n, Show n) => n -> OutputBlock -> Widget n
+renderOutputBlock vpName (MdBlock t) = renderMarkdown vpName t
+renderOutputBlock _ (PlainBlock t)
+  | T.null (T.strip t) = txt " "
+  | otherwise          = vBox (map (\l -> if T.null l then txt " " else txt l) (T.lines t))
+
+renderOutputContent :: (Ord n, Show n) => n -> Output -> Widget n
+renderOutputContent vpName = vBox . map (renderOutputBlock vpName)

@@ -14,7 +14,6 @@ import Data.Aeson (Value, decode, eitherDecode)
 import Data.Time (getZonedTime, formatTime, defaultTimeLocale)
 import Oasis.Client.OpenAI
   ( buildChatUrl
-  , encodeRequestJsonWithFlatExtra
   , renderClientError
   )
 import Oasis.Client.OpenAI.Types
@@ -41,7 +40,7 @@ import Oasis.Tui.Actions.Common
   , jsonRequestHeaders
   , decodeJsonText
   )
-import Oasis.Tui.Render.Output (mdJsonSection, mdTextSection, mdConcat)
+import Oasis.Tui.Render.Output (Output, mdJsonSection, mdTextSection, outputConcat)
 import Oasis.Tui.State (AppState(..), Name(..), TuiEvent(..), DebugRequestInfo(..))
 import Oasis.Types
   ( Provider
@@ -74,7 +73,6 @@ runToolCallingAction =
           tools = toolCallingTools
           messages0 = toolCallingMessages
           reqBody0 = buildToolCallingRequest modelId params messages0 tools (Just True)
-          reqJsonPreview0 = encodeRequestJsonWithFlatExtra reqBody0
           reqJsonDebug0 = encodeJsonText reqBody0
           endpoint = buildChatUrl (selectBaseUrl provider useBeta)
           info0 = buildDebugInfo providerName modelId endpoint (jsonRequestHeaders apiKey)
@@ -148,22 +146,22 @@ renderToolCallingResult = \case
   Left err -> ToolCallingCompleted "Tool-calling runner failed." (mdTextSection "Error" err)
   Right result ->
     let output = case result of
-          ToolCallingNoToolCall content -> mdConcat
+          ToolCallingNoToolCall content -> outputConcat
             [ mdTextSection "First Response" content
             , mdTextSection "Tool Result" "No tool call returned."
             , mdTextSection "Final Assistant" "Skipped because no tool call was returned."
             ]
-          ToolCallingToolError toolCallJson terr -> mdConcat
+          ToolCallingToolError toolCallJson terr -> outputConcat
             [ mdJsonSection "First Response (Tool Call)" toolCallJson
             , mdTextSection "Tool Result" ("Error: " <> terr)
             , mdTextSection "Final Assistant" "Skipped due to tool error."
             ]
-          ToolCallingSecondError toolCallJson toolMsgText err -> mdConcat
+          ToolCallingSecondError toolCallJson toolMsgText err -> outputConcat
             [ mdJsonSection "First Response (Tool Call)" toolCallJson
             , mdTextSection "Tool Result" toolMsgText
             , mdTextSection "Final Assistant" ("Error: " <> err)
             ]
-          ToolCallingSuccess toolCallJson toolMsgText content -> mdConcat
+          ToolCallingSuccess toolCallJson toolMsgText content -> outputConcat
             [ mdJsonSection "First Response (Tool Call)" toolCallJson
             , mdTextSection "Tool Result" toolMsgText
             , mdTextSection "Final Assistant" content
@@ -233,16 +231,15 @@ buildToolCallingRequestHook st info progressRef reqIndexRef = RequestHook
   }
 
 data ToolCallingProgress = ToolCallingProgress
-  { firstSection :: Maybe Text
-  , toolSection :: Maybe Text
-  , finalSection :: Maybe Text
+  { firstSection :: Maybe Output
+  , toolSection :: Maybe Output
+  , finalSection :: Maybe Output
   }
 
 emptyToolCallingProgress :: ToolCallingProgress
 emptyToolCallingProgress = ToolCallingProgress Nothing Nothing Nothing
 
-renderToolCallingProgress :: IORef ToolCallingProgress -> IO Text
+renderToolCallingProgress :: IORef ToolCallingProgress -> IO Output
 renderToolCallingProgress ref = do
   ToolCallingProgress{firstSection, toolSection, finalSection} <- readIORef ref
-  let pieces = catMaybes [firstSection, toolSection, finalSection]
-  pure (mdConcat pieces)
+  pure (outputConcat (catMaybes [firstSection, toolSection, finalSection]))

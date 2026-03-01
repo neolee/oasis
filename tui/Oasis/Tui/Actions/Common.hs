@@ -70,7 +70,7 @@ startRunner :: Text -> EventM Name AppState ()
 startRunner msg =
   modify (\s -> s
     { statusText = msg
-    , outputText = ""
+    , outputContent = []
     , runnerStarted = True
     })
 

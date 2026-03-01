@@ -18,7 +18,6 @@ import qualified Data.IORef as IORef
 import Data.Aeson (Value, eitherDecodeStrict)
 import Oasis.Client.OpenAI
   ( buildChatUrl
-  , encodeRequestJsonWithFlatExtra
   , renderClientError
   )
 import Oasis.Client.OpenAI.Hooks (emptyClientHooks)
@@ -54,10 +53,13 @@ import Oasis.Tui.Actions.Common
   )
 import Oasis.Tui.Render.Output
   ( RequestContext(..)
+  , OutputBlock(..)
+  , Output
   , mdCodeSection
   , mdJsonSection
   , mdTextSection
-  , mdConcat
+  , plainTextSection
+  , outputConcat
   , requestSections
   , renderErrorOutput
   )
@@ -100,7 +102,6 @@ runBasicAction prompt =
         modelId = resolveModelId provider modelOverride
         baseUrl = selectBaseUrl provider useBeta
         reqBody = buildBasicRequest modelId params prompt
-        reqJsonPreview = encodeChatRequestText reqBody
         reqJsonDebug = encodeJsonText reqBody
         info = buildDebugInfo providerName modelId (buildChatUrl baseUrl) (jsonRequestHeaders apiKey)
         handler bodyText = do
@@ -121,7 +122,7 @@ runBasicAction prompt =
                         ("Basic runner failed.", renderErrorOutput reqCtx err)
                       Right RequestResponse{responseJson, response} ->
                         let assistantContent = response >>= extractAssistantContent
-                            output = mdConcat
+                            output = outputConcat
                               ( requestSections reqCtx
                                 <> catMaybes
                                     [ Just (mdJsonSection "Response" responseJson)
@@ -143,7 +144,6 @@ runHooksAction prompt =
         modelId = resolveModelId provider modelOverride
         baseUrl = selectBaseUrl provider useBeta
         reqBody = buildHooksRequest modelId params prompt
-        reqJsonPreview = encodeChatRequestText reqBody
         reqJsonDebug = encodeJsonText reqBody
         info = buildDebugInfo providerName modelId (buildChatUrl baseUrl) (jsonRequestHeaders apiKey)
         handler bodyText = do
@@ -157,10 +157,11 @@ runHooksAction prompt =
                     ChatCompletionRequest{messages} -> messages
                   reqCtx = buildChatRequestContext (buildChatUrl baseUrl) reqBody'
                   hooks' = withMessageListHooks chan reqMessages emptyClientHooks
+                  logOutput t = writeBChan chan (StructuredStreaming [PlainBlock t])
                   logger = HooksLogger
-                    { onRequestLog = logRequestWith (writeBChan chan . StructuredStreaming)
-                    , onResponseLog = logResponseWith (writeBChan chan . StructuredStreaming)
-                    , onErrorLog = writeBChan chan . StructuredStreaming . renderClientError
+                    { onRequestLog = logRequestWith logOutput
+                    , onResponseLog = logResponseWith logOutput
+                    , onErrorLog = logOutput . renderClientError
                     }
               result <- runHooksRequestWithLogger logger provider apiKey reqBody' useBeta
               let (statusMsg, outputMsg) =
@@ -168,9 +169,9 @@ runHooksAction prompt =
                       Left err ->
                         ("Hooks runner failed.", renderErrorOutput reqCtx err)
                       Right HooksResult{hookLogText, responseJsonText, requestJsonText} ->
-                        let output = mdConcat
+                        let output = outputConcat
                               ( requestSections reqCtx
-                                <> [ mdTextSection "Hook Log" hookLogText
+                                <> [ plainTextSection "Hook Log" hookLogText
                                    , mdCodeSection "Response JSON (truncated)" "json" responseJsonText
                                    ]
                               )
@@ -195,7 +196,6 @@ runStructuredAction responseFormat runnerLabel =
         modelId = resolveModelId provider modelOverride
         reqMessages = structuredMessages
         reqBody = buildStructuredRequest modelId params reqMessages responseFormat
-        reqJsonPreview = encodeChatRequestText reqBody
         reqJsonDebug = encodeJsonText reqBody
         info = buildDebugInfo providerName modelId (buildChatUrl (selectBaseUrl provider useBeta)) (sseRequestHeaders apiKey)
         handler bodyText = do
@@ -218,8 +218,8 @@ runStructuredAction responseFormat runnerLabel =
               let (statusMsg, outputMsg) =
                     case result of
                       Left err ->
-                        let output = mdConcat
-                              [ mdCodeSection "Raw Stream" "text" ""
+                        let output = outputConcat
+                              [ plainTextSection "Raw Stream" ""
                               , mdTextSection "Parsed JSON" ("Error: " <> err)
                               ]
                         in (runnerLabel <> " runner failed.", output)
@@ -228,8 +228,8 @@ runStructuredAction responseFormat runnerLabel =
                               case parsedJson of
                                 Left perr -> mdTextSection "Parsed JSON" ("Invalid JSON: " <> perr)
                                 Right pretty -> mdCodeSection "Parsed JSON" "json" pretty
-                            output = mdConcat
-                              [ mdCodeSection "Raw Stream" "text" rawText
+                            output = outputConcat
+                              [ plainTextSection "Raw Stream" rawText
                               , parsedSection
                               ]
                         in (runnerLabel <> " runner completed.", output)
@@ -258,7 +258,6 @@ runChatAction messages =
           providerName = fromMaybe "-" (selectedProvider st)
           modelId = resolveModelId provider modelOverride
           reqBody = setChatStream True (buildChatRequest modelId params messages)
-          reqJsonPreview = encodeChatRequestText reqBody
           reqJsonDebug = encodeJsonText reqBody
           info = buildDebugInfo providerName modelId (buildChatUrl (selectBaseUrl provider useBeta)) (sseRequestHeaders apiKey)
           runStream body = do
@@ -277,9 +276,6 @@ runChatAction messages =
       if debugEnabled st
         then runWithDebug info reqJsonDebug handler
         else runInBackground st (runStream reqBody)
-
-encodeChatRequestText :: ChatCompletionRequest -> Text
-encodeChatRequestText = encodeRequestJsonWithFlatExtra
 
 data ChatRenderState = ChatRenderState
   { printedThinking :: Bool
@@ -306,13 +302,12 @@ handleChatStreamEvent chan stateRef event = do
           writeBChan chan (ChatStreaming (prefix <> t))
           IORef.writeIORef stateRef (ChatRenderState printedThinking True)
 
-streamingOutput :: Text -> Text
+streamingOutput :: Text -> Output
 streamingOutput rawText =
-  mdConcat
-    [ mdCodeSection "Raw Stream" "text" rawText
+  outputConcat
+    [ plainTextSection "Raw Stream" rawText
     , mdTextSection "Parsed JSON" "Streaming..."
     ]
-
 
 logRequestWith :: (Text -> IO ()) -> Request -> IO ()
 logRequestWith appendLog req = do

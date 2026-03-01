@@ -40,9 +40,10 @@ import Oasis.Tui.Actions.Common
   )
 import Oasis.Tui.Render.Output
   ( RequestContext(..)
+  , Output
   , mdJsonSection
   , mdTextSection
-  , mdConcat
+  , outputConcat
   , requestSections
   , renderErrorOutput
   )
@@ -80,7 +81,7 @@ runResponsesAction inputText =
                         ("Responses runner failed.", renderErrorOutput reqCtx err)
                       Right RequestResponse{responseJson, response} ->
                         let assistantContent = response >>= extractResponsesAssistantContent
-                            output = mdConcat
+                            output = outputConcat
                               ( requestSections reqCtx
                                 <> catMaybes
                                     [ Just (mdJsonSection "Response" responseJson)
@@ -106,7 +107,7 @@ runModelsAction =
                   Left err ->
                     ("Models runner failed.", renderErrorOutput reqCtx err)
                   Right rr ->
-                    let output = mdConcat
+                    let output = outputConcat
                           ( requestSections reqCtx
                             <> [mdJsonSection "Response" (responseJson rr)]
                           )
@@ -134,7 +135,7 @@ runEmbeddingsAction inputText =
             let (statusMsg, outputMsg) =
                   case result of
                     Left err ->
-                      let output = mdConcat
+                      let output = outputConcat
                             ( requestSections reqCtx
                               <> [ mdTextSection "Actual Model" modelId
                                  , mdTextSection "Error" err
@@ -143,7 +144,7 @@ runEmbeddingsAction inputText =
                       in ("Embeddings runner failed.", output)
                     Right RequestResponse{responseJson, response} ->
                       let summaryText = maybe "No embeddings returned." embeddingSummary response
-                          output = mdConcat
+                          output = outputConcat
                             ( requestSections reqCtx
                               <> [ mdTextSection "Actual Model" modelId ]
                               <> [ mdJsonSection "Response" responseJson

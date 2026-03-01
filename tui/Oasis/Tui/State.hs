@@ -6,7 +6,7 @@ module Oasis.Tui.State
   , DebugRequestInfo(..)
   , DebugRequestHandler
   , mkState
-  , defaultOutputText
+  , defaultOutput
   ) where
 
 import Relude
@@ -15,12 +15,13 @@ import Brick.Widgets.Edit (Editor, editor)
 import qualified Brick.Widgets.List as L
 import qualified Data.Vector as V
 import Oasis.Client.OpenAI.Param (ChatParams, emptyChatParams)
+import Oasis.Tui.Render.Output (OutputBlock(..), Output)
 import Oasis.Types (Config, Message)
 
 data TuiEvent
   = BasicCompleted
       { eventStatus :: Text
-      , eventOutput :: Text
+      , eventOutput :: Output
       }
   | DebugRequestOpen
       { eventDebugInfo :: DebugRequestInfo
@@ -40,45 +41,45 @@ data TuiEvent
     }
   | ResponsesCompleted
       { eventStatus :: Text
-      , eventOutput :: Text
+      , eventOutput :: Output
       }
   | ModelsCompleted
     { eventStatus :: Text
-    , eventOutput :: Text
+    , eventOutput :: Output
     }
   | EmbeddingsCompleted
     { eventStatus :: Text
-    , eventOutput :: Text
+    , eventOutput :: Output
     }
   | HooksCompleted
     { eventStatus :: Text
-    , eventOutput :: Text
+    , eventOutput :: Output
     }
   | StructuredCompleted
     { eventStatus :: Text
-    , eventOutput :: Text
+    , eventOutput :: Output
     }
   | StructuredStreaming
-    { eventOutput :: Text
+    { eventOutput :: Output
     }
   | ToolCallingCompleted
     { eventStatus :: Text
-    , eventOutput :: Text
+    , eventOutput :: Output
     }
     | ToolCallingOutput
-      { eventOutput :: Text
+      { eventOutput :: Output
       }
   | PartialModeCompleted
     { eventStatus :: Text
-    , eventOutput :: Text
+    , eventOutput :: Output
     }
   | PrefixCompletionCompleted
     { eventStatus :: Text
-    , eventOutput :: Text
+    , eventOutput :: Output
     }
   | FimCompletionCompleted
     { eventStatus :: Text
-    , eventOutput :: Text
+    , eventOutput :: Output
     }
 
 
@@ -167,7 +168,7 @@ data AppState = AppState
   , paramMaxCompletionTokensEditor :: Editor Text Name
   , paramStopEditor :: Editor Text Name
   , paramExtraBodyEditor :: Editor Text Name
-  , outputText :: Text
+  , outputContent :: Output
   , statusText :: Text
   }
 
@@ -180,8 +181,8 @@ data DebugRequestInfo = DebugRequestInfo
 
 type DebugRequestHandler = Text -> Either Text (IO TuiEvent)
 
-mkState :: BChan TuiEvent -> Config -> [Text] -> [Text] -> [Text] -> Text -> Text -> AppState
-mkState chan cfg providers models runners outputText statusText =
+mkState :: BChan TuiEvent -> Config -> [Text] -> [Text] -> [Text] -> Output -> Text -> AppState
+mkState chan cfg providers models runners outputContent statusText =
   AppState
     { config = cfg
     , eventChan = chan
@@ -235,12 +236,12 @@ mkState chan cfg providers models runners outputText statusText =
     , paramMaxCompletionTokensEditor = editor ParamMaxCompletionTokensEditor (Just 1) ""
     , paramStopEditor = editor ParamStopEditor (Just 1) ""
     , paramExtraBodyEditor = editor ParamExtraBodyEditor (Just 4) ""
-    , outputText
+    , outputContent
     , statusText
     }
 
 defaultPrompt :: Text
 defaultPrompt = "I'm Neo and how are you?"
 
-defaultOutputText :: Text
-defaultOutputText = "Select provider, model and runner, the output will appear here."
+defaultOutput :: Output
+defaultOutput = [MdBlock "Select provider, model and runner, the output will appear here."]

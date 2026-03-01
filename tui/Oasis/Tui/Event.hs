@@ -57,13 +57,13 @@ appEvent (AppEvent evt) =
     MessageListSynced{eventMessages} ->
       modify (\s -> applyMessages eventMessages (L.listSelected (verboseMessageList s)) s)
     ToolCallingOutput{eventOutput} ->
-      modify (\s -> s { outputText = eventOutput })
+      modify (\s -> s { outputContent = eventOutput })
     StructuredStreaming{eventOutput} ->
-      modify (\s -> s { outputText = eventOutput })
+      modify (\s -> s { outputContent = eventOutput })
     _ ->
       modify (\s -> s
         { statusText = eventStatus evt
-        , outputText = eventOutput evt
+        , outputContent = eventOutput evt
         , promptDialogOpen = False
         , paramDialogOpen = False
         , activeList = MainViewport
