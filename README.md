@@ -405,7 +405,7 @@ stack exec oasis-tui
 Some terminals render emoji with different widths than Vty’s default table. Use the width-table tool to generate a terminal-specific width map and load it via Vty’s user config:
 
 ```
-stack run vty-width-table -- -u
+stack exec vty-width-table -- -u
 ```
 
 This command:
