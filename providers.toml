@@ -80,11 +80,11 @@ reasoner_model_id = "qwen3.5-35b-a3b-mlx-lm"
 [providers.omlx]
 description = "oMLX"
 api_key_name = "OMLX_API_KEY"
-base_url = "http://localhost:8000/v1"
+base_url = "http://127.0.0.1:8000/v1"
 beta_base_url = ""
-chat_model_id = "Qwen3.5-35B-A3B-mlx-lm-mxfp4"
-coder_model_id = "Qwen3.5-27B-Text-heretic-mxfp4-mlx"
-reasoner_model_id = "Qwen3.5-27B-Text-heretic-mxfp4-mlx"
+chat_model_id = "qwen-35b"
+coder_model_id = "qwen-27b"
+reasoner_model_id = "qwen-27b"
 
 [defaults]
 provider = "aliyun_qwen"
