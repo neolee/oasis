@@ -16,9 +16,9 @@ description = "Qwen"
 api_key_name = "ALIYUN_API_KEY"
 base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 beta_base_url = "https://dashscope.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1"
-chat_model_id = "qwen3.5-plus"
-coder_model_id = "qwen3.5-plus"
-reasoner_model_id = "qwen3.5-plus"
+chat_model_id = "qwen3.6-plus"
+coder_model_id = "qwen3.6-plus"
+reasoner_model_id = "qwen3.6-plus"
 embedding_model_id = "text-embedding-v3"
 
 [providers.moonshot]
