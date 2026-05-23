@@ -1,0 +1,8 @@
+version = 1
+
+[project]
+name = "oasis"
+
+[[rules.command]]
+match.argv_prefix = ["stack", "exec"]
+inject.groups = ["llm", "local_llm", "misc"]
